@@ -14,3 +14,5 @@ No ignores or broad exceptions were introduced. Review upstream migration or a n
 `cargo xtask inventory --output DIR` records the host-resolved packages and copies top-level license/notice files. The M4 inventory contains 210 packages, including workspace crates. It is an inventory, not a complete notice audit: inspect embedded fonts/assets, native linking and license-file declarations, and assemble corresponding source before distribution. System macOS frameworks are runtime prerequisites, not bundled project code. Windows/Linux inventories must come from their configured native builds. No RAW library is enabled.
 
 The package README explicitly carries these limitations. Dependency metadata currently includes local manifest paths for developer traceability; sanitize these before any external distribution.
+
+Hosted confirmation: the dependency job in [run 35460353189](https://github.com/Willyham/lightwell/actions/runs/35460353189/job/105942978737) reproduced exactly these two advisory failures, with licenses and sources passing. This is now a blocking CI job; it is not configured with continue-on-error.

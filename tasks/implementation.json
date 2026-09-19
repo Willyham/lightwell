@@ -1910,7 +1910,8 @@
       ],
       "extra_context": [
         "S0 implementation; no editing tools.",
-        "CI activation authorized after scaffold commit 05937b7. Follow docs/engineering/ci-plan.md; hosted execution and remaining task acceptance are distinct. First run: https://github.com/Willyham/lightwell/actions/runs/35460222072."
+        "CI activation authorized after scaffold commit 05937b7. Follow docs/engineering/ci-plan.md; hosted execution and remaining task acceptance are distinct. First run: https://github.com/Willyham/lightwell/actions/runs/35460222072.",
+        "Hosted verification: run 35460353189 passes macOS/Windows build-package and fixture jobs; run 35460833672 fixes Linux X11 runtime and passes all Linux Xvfb/llvmpipe smoke scenarios. Dependency audit still fails on two known maintenance advisories; full task prerequisites/desktop acceptance are not complete. See docs/engineering/ci-results.md."
       ],
       "context_links": [
         {
@@ -1955,7 +1956,8 @@
       ],
       "extra_context": [
         "S0 implementation; no editing tools.",
-        "CI activation authorized after scaffold commit 05937b7. Follow docs/engineering/ci-plan.md; hosted execution and remaining task acceptance are distinct. First run: https://github.com/Willyham/lightwell/actions/runs/35460222072."
+        "CI activation authorized after scaffold commit 05937b7. Follow docs/engineering/ci-plan.md; hosted execution and remaining task acceptance are distinct. First run: https://github.com/Willyham/lightwell/actions/runs/35460222072.",
+        "Hosted verification: run 35460353189 passes macOS/Windows build-package and fixture jobs; run 35460833672 fixes Linux X11 runtime and passes all Linux Xvfb/llvmpipe smoke scenarios. Dependency audit still fails on two known maintenance advisories; full task prerequisites/desktop acceptance are not complete. See docs/engineering/ci-results.md."
       ],
       "context_links": [
         {
