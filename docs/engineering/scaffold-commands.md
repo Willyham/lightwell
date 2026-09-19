@@ -56,3 +56,9 @@ The host package was built at `artifacts/maintained-package-2/lightwell-developm
 The runner also verifies a missing executable produces exit 1 and `status: failed`, without a fabricated screenshot. New smoke results record binary and lockfile hashes. Renderer readback proves content; native picker/focus/desktop observations remain separate. Ordinary viewing creates no catalog, config or source-adjacent files. Diagnostics hardening, typed errors, native accessibility, full lifecycle/resource measurements and Windows/Linux sessions remain required before completing S0.
 
 Latest package: `artifacts/maintained-package-3/lightwell-development.zip`. Its replacement smoke passed in `artifacts/package smoke 3` with binary/lockfile hashes recorded. This includes the 16-request limit and friendly error messages. No Windows machine is currently available, as confirmed by the owner.
+
+## Hosted CI activation
+
+The scaffold is now pushed. The first GitHub run exposed Windows code-page decoding of UTF-8 Markdown; tooling now reads/writes UTF-8 explicitly and xtask enables Python UTF-8 mode. `cargo xtask fixtures` invokes the corpus checker after installing the pinned fixture requirements.
+
+CI now includes dedicated fixture and blocking dependency-audit jobs. The audit intentionally remains failing while the documented maintenance findings are unresolved. Ubuntu also runs the three renderer smoke scenarios under Xvfb/software Vulkan; this is headless functional evidence, never native Linux desktop or GPU-performance acceptance. Native picker checks remain separate. Job results must be recorded after execution, not inferred from this configuration.

@@ -1419,7 +1419,8 @@
       ],
       "extra_context": [
         "S0 implementation; no editing tools.",
-        "Pinned cargo-deny 0.20.2 license/source checks pass for configured three-target graph. Advisory scan reports unmaintained paste 1.0.15 and ttf-parser 0.25.1; no ignores added. Embedded asset/native notice review remains outstanding. See docs/engineering/dependency-review.md."
+        "Pinned cargo-deny 0.20.2 license/source checks pass for configured three-target graph. Advisory scan reports unmaintained paste 1.0.15 and ttf-parser 0.25.1; no ignores added. Embedded asset/native notice review remains outstanding. See docs/engineering/dependency-review.md.",
+        "CI activation authorized after scaffold commit 05937b7. Follow docs/engineering/ci-plan.md; hosted execution and remaining task acceptance are distinct. First run: https://github.com/Willyham/lightwell/actions/runs/35460222072."
       ],
       "context_links": [
         {
@@ -1908,7 +1909,8 @@
         "TASK-041"
       ],
       "extra_context": [
-        "S0 implementation; no editing tools."
+        "S0 implementation; no editing tools.",
+        "CI activation authorized after scaffold commit 05937b7. Follow docs/engineering/ci-plan.md; hosted execution and remaining task acceptance are distinct. First run: https://github.com/Willyham/lightwell/actions/runs/35460222072."
       ],
       "context_links": [
         {
@@ -1952,7 +1954,8 @@
         "TASK-052"
       ],
       "extra_context": [
-        "S0 implementation; no editing tools."
+        "S0 implementation; no editing tools.",
+        "CI activation authorized after scaffold commit 05937b7. Follow docs/engineering/ci-plan.md; hosted execution and remaining task acceptance are distinct. First run: https://github.com/Willyham/lightwell/actions/runs/35460222072."
       ],
       "context_links": [
         {

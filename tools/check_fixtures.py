@@ -17,7 +17,7 @@ COLORS = {'R': (220, 35, 45), 'G': (35, 190, 65), 'B': (40, 70, 220), 'Y': (235,
 
 
 def main():
-    manifest = json.loads((FIXTURES / 'manifest.json').read_text())
+    manifest = json.loads((FIXTURES / 'manifest.json').read_text(encoding="utf-8"))
     for item in manifest['entries']:
         path = FIXTURES / item['file']
         assert hashlib.sha256(path.read_bytes()).hexdigest() == item['sha256'], path

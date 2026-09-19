@@ -68,7 +68,7 @@ def main():
         entries.append({'file': name, 'expected': expected})
     for entry in entries:
         entry['sha256'] = hashlib.sha256((args.output / entry['file']).read_bytes()).hexdigest()
-    (args.output / 'manifest.json').write_text(json.dumps({'generator': 'Pillow 12.2.0', 'entries': entries}, indent=2)+'\n')
+    (args.output / 'manifest.json').write_text(json.dumps({'generator': 'Pillow 12.2.0', 'entries': entries}, indent=2)+'\n', encoding="utf-8")
     if args.large:
         output = ROOT / 'fixtures/generated'
         output.mkdir(parents=True, exist_ok=True)
@@ -77,7 +77,7 @@ def main():
             path = output / f'{w*h//1000000}mp.jpg'
             pattern(w, h).save(path, quality=95, subsampling=0)
             large.append({'file': path.name, 'width': w, 'height': h, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()})
-        (output / 'manifest.json').write_text(json.dumps(large, indent=2)+'\n')
+        (output / 'manifest.json').write_text(json.dumps(large, indent=2)+'\n', encoding="utf-8")
     print(f'Generated {len(entries)} fixtures in {args.output}')
 
 

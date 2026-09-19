@@ -78,10 +78,10 @@ def check_plan(plan, schema):
 
 
 def main():
-    schema = json.loads((ROOT / 'tools/task-plan.schema.json').read_text())
+    schema = json.loads((ROOT / 'tools/task-plan.schema.json').read_text(encoding="utf-8"))
     plans = []
     for name in ['product-decisions', 'implementation']:
-        plan = json.loads((ROOT / f'tasks/{name}.json').read_text())
+        plan = json.loads((ROOT / f'tasks/{name}.json').read_text(encoding="utf-8"))
         plans.append(check_plan(plan, schema))
         print(f'PASS {name}: {len(plan["tasks"])} tasks, {len(plan["execution_waves"])} waves')
     product, implementation = plans
@@ -93,7 +93,7 @@ def main():
     files += list((ROOT / 'docs').rglob('*.md')) + list((ROOT / 'fixtures').rglob('*.md'))
     count = 0
     for file in files:
-        text = re.sub(r'```.*?```', '', file.read_text(), flags=re.S)
+        text = re.sub(r'```.*?```', '', file.read_text(encoding="utf-8"), flags=re.S)
         for raw in re.findall(r'\[[^\]\n]*\]\(([^)]+)\)', text):
             target = raw.split(' "', 1)[0].strip('<>')
             url = urlsplit(target)

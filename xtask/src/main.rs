@@ -12,6 +12,7 @@ fn main() -> ExitCode {
     };
     for (program, prefix) in candidates {
         match Command::new(program)
+            .env("PYTHONUTF8", "1")
             .args(*prefix)
             .arg(root.join("tools/dev.py"))
             .args(&args)

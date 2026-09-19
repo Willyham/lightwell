@@ -6,6 +6,7 @@ permissions:
   contents: read
 jobs:
   native-build:
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -24,6 +25,18 @@ jobs:
         run: cargo xtask build --release
       - name: Local development artifact and notices
         run: cargo xtask package --output artifacts/package
+      - name: Headless Linux renderer smoke (software Vulkan, not native acceptance)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y xvfb mesa-vulkan-drivers
+          python3 -m venv .venv
+          .venv/bin/python -m pip install -r tools/fixture-requirements.txt
+          for scenario in empty load replacement; do
+            xvfb-run -a .venv/bin/python tools/dev.py smoke --scenario "$scenario" --output "artifacts/headless-$scenario"
+          done
+        env:
+          WGPU_BACKEND: vulkan
+          WINIT_UNIX_BACKEND: x11
       - name: Retain development artifact
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -32,3 +45,27 @@ jobs:
           path: artifacts/
           if-no-files-found: warn
           retention-days: 7
+
+  fixtures:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Pinned fixture environment
+        run: |
+          python3 -m venv .venv
+          .venv/bin/python -m pip install -r tools/fixture-requirements.txt
+      - name: Verify fixture hashes, content and regeneration
+        run: .venv/bin/python tools/dev.py fixtures
+
+  dependencies:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Pinned toolchain and audit tool
+        run: |
+          rustup toolchain install 1.94.0 --profile minimal
+          cargo install --locked --version 0.20.2 --root .tools/cargo-deny cargo-deny
+      - name: License, source and advisory policy
+        run: cargo xtask audit

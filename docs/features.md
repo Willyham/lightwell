@@ -17,7 +17,7 @@ Status vocabulary: **planned now** = S0 bootstrap scope; **planned next** = reta
 | Pinned tooling, setup/Doctor and command runner | Implemented locally | S0 developer workflow |
 | Formatting, linting, dependency and documentation checks | Implemented; audit findings open | S0 local/CI parity |
 | Structured logs, state/readiness and actual-render screenshots | Initial evidence implemented; hardening pending | S0 agent verification; [tooling contract](engineering/development.md) |
-| Process-level smoke tests and retained CI evidence | Native macOS smoke verified; CI not executed | S0; unsupported GUI checks remain explicit |
+| Process-level smoke tests and retained CI evidence | Native macOS smoke verified; first hosted CI running | S0; unsupported GUI checks remain explicit |
 | One-image catalog and JPEG import | Planned next | M1; [spec](specs/single-image.md) |
 | Non-destructive geometry recipe and persistence | Planned next | M1 |
 | 90° rotation and horizontal flip | Planned next | M1 |

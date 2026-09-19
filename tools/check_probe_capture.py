@@ -35,5 +35,5 @@ if __name__ == '__main__':
     parser.add_argument('capture',type=Path)
     args=parser.parse_args()
     result=check(args.capture)
-    args.capture.with_suffix('.pixels.json').write_text(json.dumps(result,indent=2)+'\n')
+    args.capture.with_suffix('.pixels.json').write_text(json.dumps(result,indent=2)+'\n', encoding="utf-8")
     print(json.dumps(result))

@@ -33,6 +33,6 @@ unchanged = hashlib.sha256(fixture.read_bytes()).hexdigest() == source_hash
 if not unchanged:
     status = 'failed'
 result = {'candidate':args.candidate, 'status':status, 'exit_code':code, 'elapsed_seconds':time.monotonic()-start, 'fixture':fixture.name, 'fixture_sha256':source_hash, 'source_unchanged':unchanged, 'capture_provenance':'window-renderer-readback' if capture.exists() else None, 'pixel_verification':'pending' if capture.exists() else 'unavailable', 'native_dialog_resize_verification':'not-performed', 'command':command}
-(output/'result.json').write_text(json.dumps(result,indent=2)+'\n')
+(output/'result.json').write_text(json.dumps(result,indent=2)+'\n', encoding="utf-8")
 print(json.dumps(result,indent=2))
 raise SystemExit(0 if status=='captured' else 1)

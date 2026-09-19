@@ -83,8 +83,8 @@ def smoke(output,scenario,binary=None):
             process=subprocess.run(command,cwd=ROOT,stdout=log,stderr=log,timeout=35)
         result['exit_code']=process.returncode
         if process.returncode:raise ValueError(f'Application exit {process.returncode}')
-        app=json.loads((evidence/'result.json').read_text())
-        events=[json.loads(line) for line in (evidence/'events.jsonl').read_text().splitlines()]
+        app=json.loads((evidence/'result.json').read_text(encoding="utf-8"))
+        events=[json.loads(line) for line in (evidence/'events.jsonl').read_text(encoding="utf-8").splitlines()]
         assert events[0]['event']=='startup' and events[-1]['event']=='shutdown','Missing lifecycle events'
         assert len(app['frames'])==max(1,len(sources)),'Missing/stale frames'
         for index,frame in enumerate(app['frames']):
@@ -108,8 +108,8 @@ def smoke(output,scenario,binary=None):
         result['backend']=app['frames'][-1]['state']['backend']
     except (OSError,ValueError,AssertionError,subprocess.TimeoutExpired) as error:
         result['error']=str(error)
-    (output/'result.json').write_text(json.dumps(result,indent=2)+'\n')
-    (output/'reproduce.md').write_text(f'# Smoke run\n\nScenario: {scenario}. Status: {result["status"]}.\n\nInvocation (argument array):\n\n```json\n{json.dumps(command,indent=2)}\n```\n\nRenderer readback; native dialog/focus is a separate test. Sources are synthetic.\n')
+    (output/'result.json').write_text(json.dumps(result,indent=2)+'\n', encoding="utf-8")
+    (output/'reproduce.md').write_text(f'# Smoke run\n\nScenario: {scenario}. Status: {result["status"]}.\n\nInvocation (argument array):\n\n```json\n{json.dumps(command,indent=2)}\n```\n\nRenderer readback; native dialog/focus is a separate test. Sources are synthetic.\n', encoding="utf-8")
     print(json.dumps(result,indent=2))
     return 0 if result['status']=='passed' else 1
 
@@ -120,7 +120,7 @@ def inventory(output):
     active={node['id'] for node in data['resolve']['nodes']}
     packages=[{'name':p['name'],'version':p['version'],'license':p['license'],'manifest':p['manifest_path']} for p in data['packages'] if p['id'] in active]
     output.mkdir(parents=True,exist_ok=True)
-    (output/'dependencies.json').write_text(json.dumps({'target':host,'packages':packages,'review_status':'inventory only; compatibility/advisory audit pending'},indent=2)+'\n')
+    (output/'dependencies.json').write_text(json.dumps({'target':host,'packages':packages,'review_status':'inventory only; compatibility/advisory audit pending'},indent=2)+'\n', encoding="utf-8")
     notices=output/'licenses';notices.mkdir(exist_ok=True)
     for package in packages:
         source=Path(package['manifest']).parent
@@ -145,7 +145,7 @@ def package(output):
     else:shutil.copy2(binary,target/binary.name)
     shutil.copy2(ROOT/'LICENSE',target/'LICENSE')
     inventory(target/'notices')
-    (target/'README.txt').write_text('Unsigned local development artifact. License/advisory audit and cross-platform verification are not complete. See project docs/engineering/platforms.md for runtime requirements.\n')
+    (target/'README.txt').write_text('Unsigned local development artifact. License/advisory audit and cross-platform verification are not complete. See project docs/engineering/platforms.md for runtime requirements.\n', encoding="utf-8")
     if sys.platform.startswith('linux'):
         archive=shutil.make_archive(str(output/'lightwell-development'),'gztar',output,'Lightwell')
     else:
@@ -154,14 +154,14 @@ def package(output):
             for path in sorted(target.rglob('*')):
                 bundle.write(path,path.relative_to(output))
     digest=hashlib.sha256(Path(archive).read_bytes()).hexdigest()
-    (output/'checksums.txt').write_text(f'{digest}  {Path(archive).name}\n')
+    (output/'checksums.txt').write_text(f'{digest}  {Path(archive).name}\n', encoding="utf-8")
     print(archive)
 
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     sub=parser.add_subparsers(dest='op',required=True)
-    for name in ['doctor','fmt','lint','test','check','audit']:sub.add_parser(name)
+    for name in ['doctor','fmt','lint','test','check','audit','fixtures']:sub.add_parser(name)
     p=sub.add_parser('build');p.add_argument('--release',action='store_true')
     p=sub.add_parser('develop');p.add_argument('arguments',nargs=argparse.REMAINDER)
     p=sub.add_parser('smoke');p.add_argument('--output',type=Path,required=True);p.add_argument('--scenario',choices=['empty','load','replacement'],default='load');p.add_argument('--binary')
@@ -171,6 +171,8 @@ def main():
         run("cargo","run","--locked","--package","lightwell-app","--",*sys.argv[2:]);return 0
     args=parser.parse_args()
     if args.op=='doctor':return doctor()
+    if args.op=='fixtures':
+        run(sys.executable,'tools/check_fixtures.py');return 0
     if args.op=='audit':
         checker=ROOT/f'.tools/cargo-deny/bin/cargo-deny{EXE}'
         if not checker.is_file():raise ValueError('Install cargo-deny 0.20.2 into .tools/cargo-deny; see scaffold-commands.md')
