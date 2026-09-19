@@ -32,3 +32,5 @@ The [Rust Apple target documentation](https://doc.rust-lang.org/rustc/platform-s
 ## Windows test availability
 
 The owner confirmed on 2026-09-19 that no Windows 11 x64 machine is currently available. Native Windows launch/load acceptance remains pending; a hosted CI compilation or another operating system's smoke run cannot substitute. Continue independent local scaffold work without treating this as an unresolved product decision.
+
+Linux X11 runtime requires `libxkbcommon-x11-0` in addition to the development libraries. Hosted renderer startup exposed the missing runtime library; `libxkbcommon-dev` alone did not supply it. Headless smoke installs Xvfb and Mesa Vulkan drivers separately from native desktop prerequisites.

@@ -38,7 +38,7 @@ Structured evidence is initial developer tooling, not completion of TASK-044/048
 
 Packaging assembles unsigned host development artifacts plus license inventory and copied notices. Inventory lists resolved host dependency licenses but is not a license/advisory audit; bundled assets/native runtime review remains required. No public signing/notarization, deployment, upload or store submission has occurred.
 
-The checked-in CI workflow runs locked checks/build/package on macOS, Windows and Ubuntu and retains artifacts for seven days. It has **not been executed** in this session. Hosted compile runners are not the required native desktop launch/load checks. Windows 2022 CI build is not Windows 11 user-session evidence. S0 remains open until the accepted platform matrix and remaining local hardening/performance tasks pass.
+The checked-in CI workflow runs locked checks/build/package on macOS, Windows and Ubuntu and retains artifacts for seven days. Its first hosted executions are underway; see [CI activation](ci-plan.md). Hosted compile runners are not the required native desktop launch/load checks. Windows 2022 CI build is not Windows 11 user-session evidence. S0 remains open until the accepted platform matrix and remaining local hardening/performance tasks pass.
 
 ## Dependency policy and latest evidence
 

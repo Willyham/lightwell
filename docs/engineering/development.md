@@ -1,6 +1,6 @@
 # Development, builds and agent verification
 
-Status: **planned application tooling contract; repository checks and experimental probe commands implemented**. See [contributing](../../CONTRIBUTING.md) and [probe results](s0-probe-results.md) for working commands. The operation table below remains the future maintained-app contract. Scope: bootstrap S0, then reuse the same workflow for M1. Interpret the owner's request for “lighting” as **linting** in this developer-tooling context.
+Status: **maintained tooling implemented; acceptance hardening in progress**. See [contributing](../../CONTRIBUTING.md) and [scaffold commands](scaffold-commands.md) for working commands. The operation table below defines the maintained-app contract. Scope: bootstrap S0, then reuse the same workflow for M1. Interpret the owner's request for “lighting” as **linting** in this developer-tooling context.
 
 ## Repository and toolchain
 

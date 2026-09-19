@@ -28,7 +28,7 @@ jobs:
       - name: Headless Linux renderer smoke (software Vulkan, not native acceptance)
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get install -y xvfb mesa-vulkan-drivers
+          sudo apt-get install -y xvfb mesa-vulkan-drivers libxkbcommon-x11-0
           python3 -m venv .venv
           .venv/bin/python -m pip install -r tools/fixture-requirements.txt
           for scenario in empty load replacement; do
