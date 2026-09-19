@@ -3,7 +3,7 @@
   "plan_id": "product-decisions",
   "title": "Lightwell v0 product decisions",
   "objective": "Resolve and record product choices separately from engineering, prioritizing the minimal S0 image-loading skeleton and then the M1 non-destructive editor.",
-  "context_summary": "Planning-only update, 2026-09-19. User now requires the first end-to-end build to be a cross-platform skeleton that loads an image with no editing tools. Previously agreed crop, export, persistence, live agents and Locate remain M1 follow-on requirements. TASK-001 preserves the ongoing interview; TASK-023 through TASK-034 track distinct choices and state when they are needed. Dependency-free ready decision tasks can be interviewed independently; future choices do not block S0. Implementation gates TASK-035 and TASK-064 check the specified answers and completion status via file links. No software has been implemented. Current owner instruction (2026-09-19) defers manual Windows/Linux verification and license reviews; existing platform and GPL decisions remain recorded. M1 choices are still awaiting answers. Architecture reaffirmed 2026-09-19: D19–D21 accept complete API coverage, a small shared core/module host and external loading regardless of built-in packaging. Optionality and performance splitting require evidence; TASK-033/034 retain only the unresolved use-case/lifecycle and performance choices. This update implements no software; the existing S0 viewer is tracked in the implementation plan. Owner subsequently adopted TASK-026–030 recommendations and supplied workflow priorities; those decision tasks are complete. History clarification 2026-09-19: the owner requires persistent navigable action history for every edit, with preview and restore at any point. TASK-028/030 remain completed; new TASK-070 resolves the remaining restore/navigation presentation policy before M1 gate TASK-064. On 2026-09-20 the owner answered “Append a restore action and retain all history (Recommended)”, completing TASK-070. Restore appends a semantic action; undo/redo navigation and new edits never delete retained historical states.",
+  "context_summary": "Planning-only update, 2026-09-19. User now requires the first end-to-end build to be a cross-platform skeleton that loads an image with no editing tools. Previously agreed crop, export, persistence, live agents and Locate remain M1 follow-on requirements. TASK-001 preserves the ongoing interview; TASK-023 through TASK-034 track distinct choices and state when they are needed. Dependency-free ready decision tasks can be interviewed independently; future choices do not block S0. Implementation gates TASK-035 and TASK-064 check the specified answers and completion status via file links. No software has been implemented. Current owner instruction (2026-09-19) defers manual Windows/Linux verification and license reviews; existing platform and GPL decisions remain recorded. M1 choices are still awaiting answers. Architecture reaffirmed 2026-09-19: D19–D21 accept complete API coverage, a small shared core/module host and external loading regardless of built-in packaging. Optionality and performance splitting require evidence; TASK-033/034 retain only the unresolved use-case/lifecycle and performance choices. This update implements no software; the existing S0 viewer is tracked in the implementation plan. Owner subsequently adopted TASK-026–030 recommendations and supplied workflow priorities; those decision tasks are complete. History clarification 2026-09-19: the owner requires persistent navigable action history for every edit, with preview and restore at any point. TASK-028/030 remain completed; new TASK-070 resolves the remaining restore/navigation presentation policy before M1 gate TASK-064. On 2026-09-20 the owner answered “Append a restore action and retain all history (Recommended)”, completing TASK-070. Restore appends a semantic action; undo/redo navigation and new edits never delete retained historical states. Research reference 2026-09-20: docs/research/lightroom/README.md will inform later tool/performance choices; research TASK-072 in the implementation plan settles no owner decisions and adds no S0/M1 prerequisite.",
   "tasks": [
     {
       "id": "TASK-001",
@@ -545,6 +545,12 @@
           "label": "Recovery roadmap",
           "target": "docs/specs/source-recovery.md",
           "relevance": "Separates manual Locate from later storage research."
+        },
+        {
+          "kind": "file",
+          "label": "Lightroom Classic technical research scope",
+          "target": "docs/research/lightroom/research-plan.md",
+          "relevance": "Evidence gathering for later RAW/tool/performance choices; not an accepted product or algorithm decision."
         }
       ],
       "acceptance_criteria": [
@@ -702,6 +708,12 @@
           "label": "Programmable operations and module host",
           "target": "docs/design/modules-and-api.md",
           "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+        },
+        {
+          "kind": "file",
+          "label": "Lightroom Classic technical research scope",
+          "target": "docs/research/lightroom/research-plan.md",
+          "relevance": "Evidence gathering for later RAW/tool/performance choices; not an accepted product or algorithm decision."
         }
       ],
       "acceptance_criteria": [

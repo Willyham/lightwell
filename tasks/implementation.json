@@ -3,7 +3,7 @@
   "plan_id": "implementation",
   "title": "Lightwell v0 implementation: cross-platform image-loading skeleton, then editor",
   "objective": "Deliver S0: a native macOS/Windows/Linux skeleton that opens and displays a JPEG, with repeatable setup, lint/build workflows, structured logs, real-render screenshots, agent smoke tests and platform packages. Only after S0, build the retained M1 catalog/geometry/persistent-history-preview-restore/export/live-MCP/manual-Locate editor. Apply the accepted programmable module-host boundaries in M1 and scope the later external-loader proof from measured activation costs.",
-  "context_summary": "Planning only; no app, tooling, VM, build or benchmark was executed. Latest user instruction supersedes the full editor as the first end-to-end build. S0 excludes editing tools, catalogs, export and production IPC/MCP; early agent verification uses a development launch/state/capture harness sharing the real open-image service. Mac M4 is the primary development machine, but S0 completion requires the accepted three-platform launch/load matrix. Rust/Iced/wgpu remains provisional pending narrow probes and product constraints. TASK-002 through TASK-022 retain IDs; TASK-004 and TASK-007 through TASK-022 are M1 follow-on work. TASK-035 through TASK-063 detail S0, with TASK-060 optional and off the completion gate. TASK-064 bridges to M1. Product choices are in tasks/product-decisions.json; explicit local gates verify external decisions before completing. Commands remain empty until real tooling exists. Execution started 2026-09-19: independent fixture and repository-convention work; external S0 gate answers remain outstanding. Latest owner override (2026-09-19): defer manual Windows/Linux acceptance and manual license review tasks; finish local scaffold hardening and M4 evidence. Architecture planning update 2026-09-19: accepted D19\u2013D21 require all operations to be programmable and built-in/external tools to use core history/change services. M1 tasks now explicitly establish this boundary and verify full operation coverage. TASK-067 follows the verified M1 handoff to measure optional-module activation and scope the required external-loader proof; it is not on the S0/M1 gate. No application code or task completion is authorized by this update. Historical provisional stack notes above are superseded by the recorded Rust/Iced selection and existing S0 viewer; current task statuses remain authoritative. History coverage review 2026-09-19: persistent navigable per-edit history is a core M1 requirement. TASK-007/008/009/011 establish its types, transactions, rendering and service; TASK-071 adds the history UI, consumed by TASK-015 and verification gates. Product TASK-070 resolves restore/navigation policy before TASK-064. No implementation statuses are completed by this planning update. Product TASK-070 was subsequently completed on 2026-09-20 by explicit owner acceptance of appending Restore actions while retaining all history. M1 gate and implementation statuses remain pending.",
+  "context_summary": "Planning only; no app, tooling, VM, build or benchmark was executed. Latest user instruction supersedes the full editor as the first end-to-end build. S0 excludes editing tools, catalogs, export and production IPC/MCP; early agent verification uses a development launch/state/capture harness sharing the real open-image service. Mac M4 is the primary development machine, but S0 completion requires the accepted three-platform launch/load matrix. Rust/Iced/wgpu remains provisional pending narrow probes and product constraints. TASK-002 through TASK-022 retain IDs; TASK-004 and TASK-007 through TASK-022 are M1 follow-on work. TASK-035 through TASK-063 detail S0, with TASK-060 optional and off the completion gate. TASK-064 bridges to M1. Product choices are in tasks/product-decisions.json; explicit local gates verify external decisions before completing. Commands remain empty until real tooling exists. Execution started 2026-09-19: independent fixture and repository-convention work; external S0 gate answers remain outstanding. Latest owner override (2026-09-19): defer manual Windows/Linux acceptance and manual license review tasks; finish local scaffold hardening and M4 evidence. Architecture planning update 2026-09-19: accepted D19–D21 require all operations to be programmable and built-in/external tools to use core history/change services. M1 tasks now explicitly establish this boundary and verify full operation coverage. TASK-067 follows the verified M1 handoff to measure optional-module activation and scope the required external-loader proof; it is not on the S0/M1 gate. No application code or task completion is authorized by this update. Historical provisional stack notes above are superseded by the recorded Rust/Iced selection and existing S0 viewer; current task statuses remain authoritative. History coverage review 2026-09-19: persistent navigable per-edit history is a core M1 requirement. TASK-007/008/009/011 establish its types, transactions, rendering and service; TASK-071 adds the history UI, consumed by TASK-015 and verification gates. Product TASK-070 resolves restore/navigation policy before TASK-064. No implementation statuses are completed by this planning update. Product TASK-070 was subsequently completed on 2026-09-20 by explicit owner acceptance of appending Restore actions while retaining all history. M1 gate and implementation statuses remain pending. Research request 2026-09-20: TASK-072 builds a sourced Lightroom Classic technical knowledge base only; it is independent of S0/M1 implementation gates.",
   "tasks": [
     {
       "id": "TASK-002",
@@ -328,7 +328,7 @@
           "kind": "file",
           "label": "Programmable operations and module host",
           "target": "docs/design/modules-and-api.md",
-          "relevance": "Records accepted D19\u2013D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
         },
         {
           "kind": "file",
@@ -391,7 +391,7 @@
           "kind": "file",
           "label": "Programmable operations and module host",
           "target": "docs/design/modules-and-api.md",
-          "relevance": "Records accepted D19\u2013D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
         },
         {
           "kind": "file",
@@ -461,7 +461,7 @@
           "kind": "file",
           "label": "Programmable operations and module host",
           "target": "docs/design/modules-and-api.md",
-          "relevance": "Records accepted D19\u2013D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
         },
         {
           "kind": "file",
@@ -565,7 +565,7 @@
           "kind": "file",
           "label": "Programmable operations and module host",
           "target": "docs/design/modules-and-api.md",
-          "relevance": "Records accepted D19\u2013D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
         },
         {
           "kind": "file",
@@ -673,7 +673,7 @@
           "kind": "file",
           "label": "Programmable operations and module host",
           "target": "docs/design/modules-and-api.md",
-          "relevance": "Records accepted D19\u2013D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
         },
         {
           "kind": "file",
@@ -737,7 +737,7 @@
           "kind": "file",
           "label": "Programmable operations and module host",
           "target": "docs/design/modules-and-api.md",
-          "relevance": "Records accepted D19\u2013D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
         },
         {
           "kind": "file",
@@ -852,7 +852,7 @@
           "kind": "file",
           "label": "Programmable operations and module host",
           "target": "docs/design/modules-and-api.md",
-          "relevance": "Records accepted D19\u2013D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
         },
         {
           "kind": "file",
@@ -877,7 +877,7 @@
           "Use controlled interruption/failure injection for persistence and export.",
           "Inspect differences and distinguish JPEG encoding variation from geometry/color errors.",
           "Inspect every registered operation and UI action for a documented API route; exercise valid, invalid and stale-revision cases appropriate to that action.",
-          "Execute Original \u2192 Crop \u2192 Flip \u2192 Rotate \u2192 Straighten \u2192 Reset; preview each point, restore Crop and Original, undo/redo, make a new edit and reopen; compare all saved states and source hashes."
+          "Execute Original → Crop → Flip → Rotate → Straighten → Reset; preview each point, restore Crop and Original, undo/redo, make a new edit and reopen; compare all saved states and source hashes."
         ],
         "commands": [],
         "expected_results": [
@@ -1175,7 +1175,7 @@
           "kind": "file",
           "label": "Programmable operations and module host",
           "target": "docs/design/modules-and-api.md",
-          "relevance": "Records accepted D19\u2013D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
         },
         {
           "kind": "file",
@@ -1899,7 +1899,7 @@
       "extra_context": [
         "S0 implementation; no editing tools.",
         "Implementation, native Open/Cancel and shared failure path verified. Current packaged native selection remains unverified: automated panel Open stays disabled for valid synthetic JPEGs; no-filter experiment failed and was reverted. Owner confirmation requested. Earlier probe success is retained but not substituted.",
-        "2026-09-19: owner explicitly confirmed \u201cI can open a JPEG manually.\u201d Native selection is accepted as owner-observed evidence, separate from automated OS-window shortcut/cancel/resize/close and exact-package renderer/state/log evidence. Earlier automation blocker is resolved by this report; no claim of automated picker-selection success."
+        "2026-09-19: owner explicitly confirmed “I can open a JPEG manually.” Native selection is accepted as owner-observed evidence, separate from automated OS-window shortcut/cancel/resize/close and exact-package renderer/state/log evidence. Earlier automation blocker is resolved by this report; no claim of automated picker-selection success."
       ],
       "context_links": [
         {
@@ -2411,7 +2411,7 @@
       "extra_context": [
         "S0 implementation; no editing tools.",
         "Current local package smoke passes; native shortcut/cancel/resize/close observed. Native picker selection remains blocked in automation (Open disabled), awaiting owner manual result; no fresh permission is needed.",
-        "2026-09-19: owner explicitly confirmed \u201cI can open a JPEG manually.\u201d Native selection is accepted as owner-observed evidence, separate from automated OS-window shortcut/cancel/resize/close and exact-package renderer/state/log evidence. Earlier automation blocker is resolved by this report; no claim of automated picker-selection success."
+        "2026-09-19: owner explicitly confirmed “I can open a JPEG manually.” Native selection is accepted as owner-observed evidence, separate from automated OS-window shortcut/cancel/resize/close and exact-package renderer/state/log evidence. Earlier automation blocker is resolved by this report; no claim of automated picker-selection success."
       ],
       "context_links": [
         {
@@ -2802,7 +2802,7 @@
           "kind": "file",
           "label": "Programmable operations and module host",
           "target": "docs/design/modules-and-api.md",
-          "relevance": "Records accepted D19\u2013D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
         },
         {
           "kind": "file",
@@ -2823,8 +2823,8 @@
         "Reconcile the retained editor/source-recovery/architecture specs with S0 evidence and define the remaining geometry/color experiment outputs for TASK-004.",
         "Preserve the agreed crop, zoom, metadata, live MCP and manual Locate scope; do not turn future RAW/storage/plugin decisions into prerequisites.",
         "Record referenced product decisions and validate the revised editor dependencies before starting M1 implementation.",
-        "Apply accepted D19\u2013D21 to the M1 contract: complete operation coverage, built-in feature registration/validation/rendering and host-owned recipe/history services. Distinguish linked modules from external loading; leave masks, clone/tonal tools and the loader outside M1.",
-        "Verify external product TASK-070 is completed with the restore/navigation decision recorded; TASK-028/030 completion alone does not settle the later clarification. Inspect this extra external input explicitly; the existing repository checker only enforces TASK-026\u2013030.",
+        "Apply accepted D19–D21 to the M1 contract: complete operation coverage, built-in feature registration/validation/rendering and host-owned recipe/history services. Distinguish linked modules from external loading; leave masks, clone/tonal tools and the loader outside M1.",
+        "Verify external product TASK-070 is completed with the restore/navigation decision recorded; TASK-028/030 completion alone does not settle the later clarification. Inspect this extra external input explicitly; the existing repository checker only enforces TASK-026–030.",
         "Finalize persistent per-action history as a core dependency of every editing tool, including stable snapshots, arbitrary-entry preview/restore, retained old states, monotonic revisions and TASK-071 UI acceptance."
       ],
       "test_strategy": {
@@ -2933,7 +2933,7 @@
           "kind": "file",
           "label": "Programmable operations and module host",
           "target": "docs/design/modules-and-api.md",
-          "relevance": "Records accepted D19\u2013D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
         },
         {
           "kind": "file",
@@ -3091,6 +3091,43 @@
           "History is a usable visible editor feature with correct arbitrary-entry preview/restore; committed state changes only through an explicit successful mutation."
         ]
       }
+    },
+    {
+      "id": "TASK-072",
+      "description": "Research and document Lightroom Classic storage, rendering, performance and editing-tool behavior in a sourced knowledge base.",
+      "status": "in_progress",
+      "dependencies": [],
+      "extra_context": [
+        "User explicitly requested online research and documentation, not implementation of Lightroom features.",
+        "Separate documented product behavior from conceptual algorithms and unpublished internals; preserve current milestone scope."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "Lightroom research plan",
+          "target": "docs/research/lightroom/research-plan.md",
+          "relevance": "Defines scope, evidence policy, acceptance and unknowns."
+        }
+      ],
+      "acceptance_criteria": [
+        "Provide a navigable Markdown knowledge base with source register covering storage/history, rendering/color, previews/performance, tool semantics and SDK boundaries.",
+        "Explain Contrast, Clarity and Texture distinctly; label exact proprietary algorithms and performance internals that remain unknown.",
+        "Record version-sensitive evidence and Lightwell proposals without changing accepted feature scope or marking app features implemented.",
+        "Validate both active task graphs and repository documentation checks."
+      ],
+      "test_strategy": {
+        "approach": "inspection",
+        "steps": [
+          "Read primary sources and inspect citations against chapter claims.",
+          "Check local links, source inventory, uncertainty labels and preservation of existing task states."
+        ],
+        "commands": [
+          "cargo xtask check"
+        ],
+        "expected_results": [
+          "A sourced, internally linked research reference; no application changes or unmeasured performance claims."
+        ]
+      }
     }
   ],
   "execution_waves": [
@@ -3101,7 +3138,8 @@
         "TASK-035",
         "TASK-037",
         "TASK-068",
-        "TASK-069"
+        "TASK-069",
+        "TASK-072"
       ]
     },
     {
