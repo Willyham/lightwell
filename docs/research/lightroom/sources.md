@@ -1,0 +1,62 @@
+# Source register
+
+[Knowledge base index](README.md)
+
+All sources below were checked online on **2026-09-20**. Dates describe the source, not the retrieval. This register is an annotated bibliography, not a claim that every linked API or feature was tested. Adobe pages often combine new sections with older text; the chapters record material conflicts. Summaries are deliberately concise; follow the original for figures, demonstrations and full procedures.
+
+Evidence labels: **D** = documented product behavior; **H** = historical engineering evidence; **C** = conceptual explanation; **P** = Lightwell proposal; **U** = unknown. Mirrored SDK documentation is identified explicitly; no forum speculation is used as algorithm evidence.
+
+| ID | Source | Provenance / date | What it establishes and its limits |
+| --- | --- | --- | --- |
+| S01 | [Catalog basics](https://helpx.adobe.com/lightroom-classic/desktop/manage-catalogs-and-files/lightroom-catalog-basics.html) | Adobe Help; 2023-08-17 | Catalog records and non-destructive processing. |
+| S02 | [Metadata and XMP](https://helpx.adobe.com/lightroom-classic/desktop/organize-photos-in-lightroom-classic/metadata-basics-actions.html) | Adobe Help; displayed 2025-06-17, includes later v15 note | Catalog versus embedded metadata; write scheduling. Mixed-age content. |
+| S03 | [XMP and ACR sidecars](https://helpx.adobe.com/lightroom-classic/desktop/organize-photos-in-lightroom-classic/create-xmp-acr-files.html) | Adobe Help; 2025-10-27 | v15.0 heavy-edit sidecars and file lifecycle. |
+| S04 | [Catalog FAQ](https://helpx.adobe.com/lightroom-classic/desktop/technical-support/workflow-issues/catalog-issues/catalog-faq-lightroom.html) | Adobe Help; 2025-02-13 | lrcat-data, upgrades and backup contents. Not a database schema. |
+| S05 | [Catalog backups](https://helpx.adobe.com/lightroom-classic/desktop/manage-catalogs-and-files/back-catalog.html) | Adobe Help; 2025-02-13 | Separate photo backups; restore. Opening wording oversimplifies auxiliary files. |
+| S06 | [Manage photos and virtual copies](https://helpx.adobe.com/lightroom-classic/desktop/manage-catalogs-and-files/photos.html) | Adobe Help; retrieved current page | Virtual copies, DNG conversion, Render to DNG. |
+| S07 | [Develop module options](https://helpx.adobe.com/lightroom-classic/desktop/process-and-develop-photos/develop-module-options.html) | Adobe Help; 2024-07-29 | Process versions, snapshots/history, proxy preference. Contains stale PV2012-current wording. |
+| S08 | [Develop module tools](https://helpx.adobe.com/lightroom-classic/desktop/process-and-develop-photos/develop-module-tools.html) | Adobe Help; retrieved current page | Undo/reset, history preview, Copy/Sync and interactive controls. |
+| S09 | [Optimize performance](https://helpx.adobe.com/lightroom-classic/desktop/technical-support/performance-guidelines/optimize-performance-lightroom.html) | Adobe Help; displayed 2025-06-17 | Preview types, Camera Raw cache and workflow order. Hardware advice mixes eras. |
+| S10 | [Smart Previews](https://helpx.adobe.com/lightroom-classic/desktop/viewing-photos/lightroom-smart-previews.html) | Adobe Help; 2025-06-17 | Lossy DNG proxies and offline editing; not a full tool-support matrix. |
+| S11 | [Create and manage catalogs](https://helpx.adobe.com/lightroom-classic/desktop/manage-catalogs-and-files/create-catalogs.html) | Adobe Help; retrieved current page | Preview limits, purge exceptions and raw capture-time writes. |
+| S12 | [GPU FAQ](https://helpx.adobe.com/lightroom-classic/desktop/technical-support/technical-issues/gpu-issues/lightroom-gpu-faq.html) | Adobe Help; 2023-06-13 | Display/process/export capabilities; use newer sources for later features. |
+| S13 | [GPU preview generation](https://helpx.adobe.com/lightroom-classic/desktop/kb/gpu-preview-generation.html) | Adobe Help; 2025-08-13 | v14.5 preview-generation control and Auto criteria. |
+| S14 | [Color management](https://helpx.adobe.com/lightroom-classic/desktop/workspace/color-management.html) | Adobe Help; 2021-04-27 | Monitor/output profiles and module color spaces; SDR-era explanation. |
+| S15 | [Color FAQ](https://helpx.adobe.com/lightroom-classic/desktop/technical-support/technical-issues/miscellaneous-issues/color-faq.html) | Adobe Help; 2024-04-17 | Embedded camera preview versus Adobe rendering; Camera Matching. |
+| S16 | [Image tone and color](https://helpx.adobe.com/lightroom-classic/desktop/process-and-develop-photos/image-tone-color.html) | Adobe Help; retrieved current page | Basic controls, white balance, profiles and curves. Behavioral rather than algorithmic specification. |
+| S17 | [Tone-control adjustment procedure](https://helpx.adobe.com/lightroom-classic/desktop/help/tone-control-adjustment.html) | Adobe Help; PV3–5 scope | Image-adaptive tone controls and suggested adjustment sequence. Numbering text is inconsistent; use S07 for history. |
+| S18 | [Introducing the Texture Control](https://blog.adobe.com/en/publish/2019/05/14/from-the-acr-team-introducing-the-texture-control) | Max Wendt, Adobe lead engineer; 2019-05-14 | Frequency-based Texture explanation and comparison with Clarity; no kernel. |
+| S19 | [Local Laplacian Filters](https://jankautz.com/publications/LocalLaplacianFiltersSIG11_lowres.pdf) | Paris, Hasinoff and Kautz; SIGGRAPH 2011; author-hosted PDF | Original edge-aware multiscale filtering method; not current Adobe source code. |
+| S20 | [Halide image-processing pipelines](https://people.csail.mit.edu/jrk/halide-pldi13.pdf) | Ragan-Kelley et al.; PLDI 2013; author-hosted PDF | Historical Lightroom/Clarity connection and scheduling research; not a modern Lightroom benchmark. |
+| S21 | [UCL research impact case study](https://impact.ref.ac.uk/casestudies/CaseStudy.aspx?Id=29898) | UCL institutional research submission; REF 2014 | First-party account of adoption of local Laplacian filtering by Adobe. |
+| S22 | [Introducing Color Grading](https://blog.adobe.com/en/publish/2020/10/20/introducing-color-grading) | Max Wendt, Adobe engineering; 2020-10-20 | Tonal tinting, overlap, balance and split-toning compatibility. |
+| S23 | [Retouch photos](https://helpx.adobe.com/lightroom-classic/desktop/process-and-develop-photos/retouch-photos.html) | Adobe Help; 2025-10-27 | Sharpening, manual denoise, lens correction and effects; contains legacy sections. |
+| S24 | [Denoise Demystified](https://blog.adobe.com/en/publish/2023/04/18/denoise-demystified) | Eric Chan, Adobe engineering; 2023-04-18 | Joint demosaic/denoise and training approach; initial DNG workflow is historical. |
+| S25 | [Enhance image quality](https://helpx.adobe.com/lightroom-classic/desktop/process-and-develop-photos/enhance-details.html) | Adobe Help; 2026-05-01 | Tool eligibility and integration; Neural Engine note superseded by S35. |
+| S26 | [Super Resolution](https://blog.adobe.com/en/publish/2021/03/10/from-the-acr-team-super-resolution) | Eric Chan, Adobe engineering; 2021-03-10 | Learned upsampling, training patches and GPU processing; launch-era workflow. |
+| S27 | [Masking](https://helpx.adobe.com/lightroom-classic/desktop/process-and-develop-photos/masking.html) | Adobe Help; 2026-08-07 | Selection families, components, operations and AI mask updates. |
+| S28 | [Guided Upright](https://helpx.adobe.com/lightroom-classic/desktop/process-and-develop-photos/guided-upright-perspective-correction.html) | Adobe Help; 2024-07-29 | Perspective fitting, lens-profile dependency, crop and sync semantics. |
+| S29 | [Lens Blur](https://helpx.adobe.com/lightroom-classic/desktop/process-and-develop-photos/lens-blur.html) | Adobe Help; 2025-10-10 | Depth estimation, focus range, bokeh and brush refinement. |
+| S30 | [Remove tool](https://helpx.adobe.com/lightroom-classic/desktop/process-and-develop-photos/remove-tool.html) | Adobe Help; 2025-10-27 | Generative Remove and offline tool distinction. |
+| S31 | [HDR editing and output](https://helpx.adobe.com/lightroom-classic/desktop/process-and-develop-photos/hdr-output.html) | Adobe Help; 2025-10-27 | Display headroom, supported views and HDR/SDR distinction. |
+| S32 | [Export files](https://helpx.adobe.com/lightroom-classic/desktop/export-photos/export-files-disk-or-cd.html) | Adobe Help; retrieved current page | Color conversion, dimensions, output sharpening and Original export. |
+| S33 | [HDR photo merge](https://helpx.adobe.com/lightroom-classic/desktop/process-and-develop-photos/hdr-photo-merge.html) | Adobe Help; 2024-07-29 | Bracket alignment, deghosting and derived DNG. |
+| S34 | [Lightroom Classic developer portal](https://developer.adobe.com/lightroom-classic) | Adobe Developer; retrieved current page | Official Lua extension scope; linked SDK console did not expose downloadable content to this research tool. |
+| S35 | [Lightroom Classic release notes](https://helpx.adobe.com/lightroom-classic/desktop/introduction-to-lightroom-classic/release-notes.html) | Adobe Help; 2026-08-04; through v15.5 | Version chronology; newer Neural Engine and rendered-DNG evidence. |
+| S36 | [June 2025 feature summary](https://helpx.adobe.com/lightroom-classic/desktop/help/whats-new/2025-4.html) | Adobe Help; 2025-07-15; v14.4 | Enhance panel integration, deferred XMP writing and AI edit status. |
+| S37 | [Lightroom Classic v13 reference notes](https://jkost.com/blog/wp-content/uploads/2024/02/2024_LrC_v13_Shortcuts.pdf) | Julieanne Kost, Adobe evangelist; 2024; author-hosted PDF | First-person technical teaching: physical Dehaze model and biased Vibrance. |
+| S38 | [Removing window reflections](https://blog.adobe.com/en/publish/2024/12/12/removing-window-reflections-adobe-camera-raw) | Marc Levoy, Eric Kee and Adam Pikielny, Adobe; 2024-12-12 | ACR launch engineering account; uncropped input, synthesis/training and limitations. Classic arrival is S36. |
+| S39 | [Basic editing techniques](https://www.adobe.com/learn/lightroom-classic/web/basic-photography-editing-techniques) | Adobe Learn, Ben Willmore; retrieved current page | Basic Contrast/Exposure behavior and practical editing intent. |
+| S40 | [SQLite users](https://www.sqlite.org/famous.html) | SQLite project; retrieved current page | Primary database-vendor confirmation of Lightroom SQLite use; no Adobe schema contract. |
+| S41 | [LrDevelopController reference](https://lrc.mcor.dev/modules/LrDevelopController.html) | Adobe SDK reference, third-party mirror; retrieved 2026-09-20 | Primary-authored documentation reproduced by a mirror; pin official SDK before implementation. |
+| S42 | [LrPhoto reference](https://lrc.mcor.dev/modules/LrPhoto.html) | Adobe SDK reference, third-party mirror; retrieved 2026-09-20 | Photo develop settings, presets and metadata APIs; mirror freshness not independently established. |
+| S43 | [LrCatalog reference](https://lrc.mcor.dev/modules/LrCatalog.html) | Adobe SDK reference, third-party mirror; retrieved 2026-09-20 | Catalog access and transaction contexts; not direct SQL permission. |
+| S44 | [Color Mixer](https://helpx.adobe.com/lightroom-classic/desktop/process-and-develop-photos/color-mixer.html) | Adobe Help; 2025-10-27 | HSL, targeted adjustment and Point Color range controls. |
+
+## Retrieval limits and excluded evidence
+
+The original Adobe “Magic or Local Laplacian Filters?” post is referenced by UCL but was not recovered here; the adoption claim uses UCL's own account and the coauthored Halide paper. Large author-hosted research PDFs failed retrieval; the smaller 2011 author-hosted PDF was readable. The 2014 Fast Local Laplacian Filters paper is a follow-up lead, not a source of current Adobe implementation claims.
+
+The official SDK portal was readable, but its linked console and a legacy SDK-guide CDN URL did not yield their contents. S41–S43 reproduce Adobe reference material on a third-party host; exact installed-SDK behavior remains to be checked. No proprietary source code, catalog schema dump or Lightroom installation was inspected. No vendor performance claim was independently benchmarked.
+
+No entire source article or example photo is copied into this repository. Equations marked conceptual are explanatory models, not reverse-engineered Adobe implementations.

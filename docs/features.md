@@ -64,4 +64,6 @@ Status vocabulary: **planned now** = S0 bootstrap scope; **planned next** = reta
 
 Track [product decisions](../tasks/product-decisions.json) and [implementation](../tasks/implementation.json) separately; [task sequencing](task-planning.md) defines gates and history. Completing research or a prototype does not move a production feature to implemented. Later milestones get their own Markdown specifications and task plans when selected.
 
+Research reference: [Lightroom Classic technical knowledge base](research/lightroom/README.md) (TASK-072, 2026-09-20). This documents external behavior and possible experiments; all feature statuses above remain unchanged. The [darktable companion](research/darktable/README.md) adds pinned source research and algorithm explanations without changing those statuses.
+
 Current local hardening and measured limitations: [S0 hardening results](engineering/s0-hardening-results.md). The owner confirmed manual native JPEG opening; refreshed hosted evidence remains open; manual Windows/Linux checks and manual license reviews are deferred.

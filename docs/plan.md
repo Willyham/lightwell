@@ -6,6 +6,8 @@ Status: **S0 implementation in progress**. Rust/Iced is selected in the [stack d
 
 ## Recommendation
 
+The [Lightroom Classic technical knowledge base](research/lightroom/README.md), researched 2026-09-20, records reference behavior, public algorithm evidence and open questions. Its Lightwell implications are proposals; it does not change S0/M1 scope. The companion [darktable knowledge base](research/darktable/README.md) traces actual implementations at release 5.6.1, including a comparison with Lightroom; its implications are also proposals.
+
 Start with a native Rust application, a UI-independent command and image engine, SQLite for catalog metadata and edit recipes, and a custom GPU-rendered desktop interface. Trial **Iced + wgpu** first, with **egui + wgpu** as a small comparison prototype. Keep **Qt Quick** as the mature alternative if the Rust UI candidates fail essential desktop requirements. The S0 trial now selects Rust/Iced; later catalog/editor choices remain proposals. [Research and sources](research/technical-options.md#desktop-interface-options).
 
 Use an existing JPEG decoder initially. Preserve decoder boundaries for PNG and RAW. Trial **LibRaw** for the owner's **Nikon Z6 and Fujifilm X100VI**, while treating high-quality RAW development as separate engineering. Use **Little CMS** for ICC color conversion. Prefer existing libraries; profile and compare alternatives before a targeted fork or new RAW library. Custom decoding remains an option if measured performance or support gaps justify it. [Image dependencies](research/technical-options.md#image-processing-and-raw).

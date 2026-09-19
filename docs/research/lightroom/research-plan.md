@@ -1,6 +1,6 @@
 # Lightroom Classic technical research plan
 
-Status: research in progress. Requested 2026-09-20. This is a documentation investigation, not authorization to implement photo tools or change Lightwell's milestones.
+Status: research completed 2026-09-20. Requested 2026-09-20. This is a documentation investigation, not authorization to implement photo tools or change Lightwell's milestones.
 
 ## Scope and method
 
@@ -23,3 +23,17 @@ Use Adobe product documentation, first-person Adobe engineering explanations, pu
 ## Unresolved questions
 
 Adobe's exact filter coefficients, adaptive tone functions, processing graph, cache contents/keys, scheduling and GPU kernels may remain unpublished. Capture research gaps and proposed reproducible experiments rather than inventing these details. This research does not run Lightroom, inspect private catalogs, benchmark hardware or audit licensing.
+
+## Completion and verification
+
+Delivered 13 Markdown files, including the index, ten subject/reference chapters, source register and this plan. The source register contains 44 cited sources. The chapters distinguish documented behavior, historical evidence, conceptual equations, Lightwell proposals and unknowns. No application code or Lightroom benchmarks were produced.
+
+Verification on 2026-09-20:
+
+- At research completion, both then-active task plan validators passed (14 product tasks / 1 wave; the former monolithic 58-task implementation plan / 23 waves). That implementation plan was subsequently split by milestone without changing TASK-072's completed status.
+- Current graph/link inspection covers product, S0, M1, extension and Lightroom-research plans; each has exact derived waves, globally unique task IDs and valid task file links.
+- Local Markdown inspection: five research section anchors and all 44 citation IDs passed; the final repository check verified 225 local links.
+- `git diff --check`: passed.
+- `cargo xtask check`: passed repository/schema/DAG checks, dependency-policy checks, formatting, lint and 26 tests (one existing helper ignored). The first attempt encountered a concurrent S0 task-status inconsistency; that separate update resolved it before the successful rerun. No GUI or Lightroom performance acceptance is implied.
+
+The source review checked key version-sensitive claims against current Adobe pages and retained retrieval limitations in [sources](sources.md). These checks validate the research artifact and its internal navigation, not Adobe's undisclosed algorithms.

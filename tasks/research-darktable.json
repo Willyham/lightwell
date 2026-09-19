@@ -1,0 +1,74 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "research-darktable",
+  "title": "darktable technical research",
+  "objective": "Build a source-grounded darktable technical knowledge base as a companion to the Lightroom research.",
+  "context_summary": "darktable research. Renumbered locally in dependency order on 2026-09-20 at the owner's request. Statuses and completed evidence are preserved; the exact previous plan is archived. TASK IDs have meaning only inside this file. The current editor sequence is history foundation, transforms, tool modules and crop; milestones are described by named outcomes in the roadmap. This research changes no application capability or accepted product decision.",
+  "tasks": [
+    {
+      "id": "TASK-001",
+      "description": "Research darktable storage, processing, performance, tools and extensibility using pinned upstream source and official documentation.",
+      "status": "completed",
+      "dependencies": [],
+      "extra_context": [
+        "Pin source to an identified released commit; separate release behavior from master and manual drift.",
+        "Preserve existing Lightwell decisions; record implications and experiments as proposals.",
+        "Completed 2026-09-20: 15 Markdown documents, 81 annotated source entries across 65 pinned repository files plus five official manual pages. Source baseline: darktable 5.6.1, commit 03179f8e080aa9cedebfe14b098b7ba88940a292.",
+        "Research navigation, all pinned source anchors, whitespace checks and all ten active individual task graphs validate. The latest cargo xtask check stops on a concurrent roadmap-migration link to removed tasks/implementation-m1.json, following an earlier obsolete global-ID check. See research-plan.md for scope and check disposition. No application implementation or darktable runtime benchmark performed."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "darktable research plan",
+          "target": "docs/research/darktable/research-plan.md",
+          "relevance": "Scope, evidence rules and acceptance."
+        },
+        {
+          "kind": "url",
+          "label": "Upstream darktable repository",
+          "target": "https://github.com/darktable-org/darktable",
+          "relevance": "User-supplied primary source."
+        },
+        {
+          "kind": "file",
+          "label": "Lightroom reference",
+          "target": "docs/research/lightroom/README.md",
+          "relevance": "Companion research scope and evidence conventions."
+        },
+        {
+          "kind": "file",
+          "label": "Completed darktable knowledge base",
+          "target": "docs/research/darktable/README.md",
+          "relevance": "Navigable research results, tool equations, source map, comparison and limitations."
+        }
+      ],
+      "acceptance_criteria": [
+        "Publish a navigable sourced knowledge base covering non-destructive data, pixelpipe/color, previews/performance, representative tool algorithms, RAW/masks/geometry and automation.",
+        "Provide immutable source references and source-confirmed explanations for key algorithm and lifecycle claims.",
+        "Label unmeasured behavior, version differences, unknowns and Lightwell proposals; preserve existing implementation scope.",
+        "Validate task plans, local links and repository checks, with unrelated failures recorded."
+      ],
+      "test_strategy": {
+        "approach": "inspection",
+        "steps": [
+          "Inspect source and official documentation; verify citations and revision anchors.",
+          "Check local navigation, task graph, source inventory and scope preservation."
+        ],
+        "commands": [
+          "cargo xtask check"
+        ],
+        "expected_results": [
+          "A reproducible technical reference with no unverified runtime benchmark claims or application changes."
+        ]
+      }
+    }
+  ],
+  "execution_waves": [
+    {
+      "wave": 1,
+      "task_ids": [
+        "TASK-001"
+      ]
+    }
+  ]
+}

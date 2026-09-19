@@ -8,6 +8,8 @@ Run `cargo xtask develop`, or `cargo xtask check` for repository, formatting, li
 
 - [Project plan](docs/plan.md): recommendation, scope, milestones, and completion gates.
 - [Technical research](docs/research/technical-options.md): primary sources, alternatives, and unresolved risks.
+- [Lightroom Classic knowledge base](docs/research/lightroom/README.md): sourced technical research on recipes, rendering, performance and editing tools.
+- [darktable knowledge base](docs/research/darktable/README.md): source-level explanations of history, pixelpipe, tool algorithms, GPU/cache behavior and automation.
 - [Architecture](docs/design/architecture.md): catalog, image engine, commands, and extension boundaries.
 - [First build: image-loading skeleton](docs/specs/bootstrap.md): cross-platform launch, Open image and Fit display, with no editing tools.
 - [Development and agent verification](docs/engineering/development.md): setup, linting, builds, logs, screenshots, smoke checks and packaging.

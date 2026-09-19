@@ -3095,11 +3095,12 @@
     {
       "id": "TASK-072",
       "description": "Research and document Lightroom Classic storage, rendering, performance and editing-tool behavior in a sourced knowledge base.",
-      "status": "in_progress",
+      "status": "completed",
       "dependencies": [],
       "extra_context": [
         "User explicitly requested online research and documentation, not implementation of Lightroom features.",
-        "Separate documented product behavior from conceptual algorithms and unpublished internals; preserve current milestone scope."
+        "Separate documented product behavior from conceptual algorithms and unpublished internals; preserve current milestone scope.",
+        "Completed 2026-09-20: 13 Markdown files and 44 cited sources. Both task validators, local links, research anchors, citation IDs and cargo xtask check passed (26 tests; one existing helper ignored). An initial concurrent S0 task-status mismatch was resolved by that separate update before the successful rerun. See research-plan.md for verification scope."
       ],
       "context_links": [
         {
@@ -3107,13 +3108,19 @@
           "label": "Lightroom research plan",
           "target": "docs/research/lightroom/research-plan.md",
           "relevance": "Defines scope, evidence policy, acceptance and unknowns."
+        },
+        {
+          "kind": "file",
+          "label": "Lightroom knowledge base",
+          "target": "docs/research/lightroom/README.md",
+          "relevance": "Completed sourced chapters, comparison tables, algorithm explanations, limitations and proposed experiments."
         }
       ],
       "acceptance_criteria": [
         "Provide a navigable Markdown knowledge base with source register covering storage/history, rendering/color, previews/performance, tool semantics and SDK boundaries.",
         "Explain Contrast, Clarity and Texture distinctly; label exact proprietary algorithms and performance internals that remain unknown.",
         "Record version-sensitive evidence and Lightwell proposals without changing accepted feature scope or marking app features implemented.",
-        "Validate both active task graphs and repository documentation checks."
+        "Run every active task validator and documentation checks; record any unrelated repository-wide blockers separately from research-artifact results."
       ],
       "test_strategy": {
         "approach": "inspection",

@@ -2,6 +2,8 @@
 
 Status: research and recommendations, checked 2026-09-19. No comparative benchmarks have been run. Upstream capabilities are distinguished below from our engineering judgments. Pin and recheck concrete dependency versions during M0; moving documentation can describe unreleased code.
 
+Related reference: the [Lightroom Classic technical knowledge base](lightroom/README.md), researched 2026-09-20, covers non-destructive storage, processing, previews/performance, tool semantics and public engineering evidence. It separates documented behavior from conceptual algorithms and potential Lightwell experiments. The [darktable companion](darktable/README.md), pinned to release 5.6.1, adds inspectable algorithms, pixelpipe/cache contracts, module and automation boundaries, and [comparative implications](darktable/lightwell-implications.md).
+
 ## Desktop interface options
 
 “Native” has three separate meanings: an OS executable, OS-provided widgets, and direct GPU rendering. A native executable with custom GPU controls satisfies the proposed direction without requiring three separate widget implementations. None of the frameworks below guarantees attractive design or fast photo processing by itself.
