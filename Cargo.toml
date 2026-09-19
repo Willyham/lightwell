@@ -1,0 +1,21 @@
+[workspace]
+members = ["crates/lightwell-core", "crates/lightwell-app", "xtask"]
+exclude = ["probes/s0"]
+resolver = "3"
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+rust-version = "1.94"
+publish = false
+
+[workspace.dependencies]
+image = { version = "=0.25.9", default-features = false, features = ["jpeg", "png"] }
+moxcms = { version = "=0.7.11", default-features = false }
+iced = { version = "=0.14.0", default-features = false, features = ["wgpu", "image-without-codecs", "sysinfo", "tokio", "x11", "wayland"] }
+rfd = { version = "=0.15.4", default-features = false, features = ["xdg-portal", "async-std"] }
+serde_json = "=1.0.149"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"

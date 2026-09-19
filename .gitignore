@@ -1,0 +1,16 @@
+# Build, package and per-run evidence (at any workspace/probe depth).
+**/target/
+/artifacts/
+/dist/
+/.venv/
+**/__pycache__/
+*.py[cod]
+# Local originals and diagnostic inputs never belong in source control.
+/private/
+/fixtures/generated/
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+/.tools/

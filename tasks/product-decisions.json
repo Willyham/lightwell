@@ -1,0 +1,656 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "product-decisions",
+  "title": "Lightwell v0 product decisions",
+  "objective": "Resolve and record product choices separately from engineering, prioritizing the minimal S0 image-loading skeleton and then the M1 non-destructive editor.",
+  "context_summary": "Planning-only update, 2026-09-19. User now requires the first end-to-end build to be a cross-platform skeleton that loads an image with no editing tools. Previously agreed crop, export, persistence, live agents and Locate remain M1 follow-on requirements. TASK-001 preserves the ongoing interview; TASK-023 through TASK-034 track distinct choices and state when they are needed. Dependency-free ready decision tasks can be interviewed independently; future choices do not block S0. Implementation gates TASK-035 and TASK-064 check the specified answers and completion status via file links. No software has been implemented.",
+  "tasks": [
+    {
+      "id": "TASK-001",
+      "description": "Maintain the owner decision interview and record the consequences of each answer.",
+      "status": "in_progress",
+      "dependencies": [],
+      "extra_context": [
+        "Existing interview remains in progress. The latest owner instruction inserts S0: a cross-platform image-loading skeleton without editing tools, before M1.",
+        "TASK-023 through TASK-034 now track concrete unresolved decisions separately. This coordination task is not a prerequisite of every implementation task.",
+        "Preserve all agreed crop, metadata, agent and source-recovery behavior for M1; do not re-ask it as if unresolved."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "Owner interview",
+          "target": "docs/decisions.md",
+          "relevance": "Separates confirmed requirements from unresolved product choices."
+        },
+        {
+          "kind": "file",
+          "label": "Project direction",
+          "target": "docs/plan.md",
+          "relevance": "Defines the proposed milestone boundaries."
+        },
+        {
+          "kind": "file",
+          "label": "First-image behavior",
+          "target": "docs/specs/single-image.md",
+          "relevance": "Contains proposed geometry, ownership and export policies."
+        }
+      ],
+      "acceptance_criteria": [
+        "Maintain a decision index separating accepted requirements, proposals, open questions and superseded sequencing.",
+        "Use short, concrete interview rounds and link each answer to its affected specification and implementation task.",
+        "Resolve each necessary decision before its dependent implementation gate, while leaving future choices outside the S0 critical path.",
+        "Document scope changes without claiming that any application feature was implemented."
+      ],
+      "test_strategy": {
+        "approach": "manual",
+        "steps": [
+          "Conduct short rounds using the interview, showing concrete tradeoffs.",
+          "Inspect plan/spec/task consistency against the actual answers."
+        ],
+        "commands": [],
+        "expected_results": [
+          "Document scope changes without claiming that any application feature was implemented."
+        ]
+      }
+    },
+    {
+      "id": "TASK-023",
+      "description": "Define the S0 operating-system, architecture and verification matrix.",
+      "status": "completed",
+      "dependencies": [],
+      "extra_context": [
+        "Needed for S0 gate TASK-035.",
+        "2026-09-19: concrete S0 defaults sent to owner during scaffold execution; awaiting response, not an accepted decision.",
+        "Owner accepted macOS Apple Silicon, Windows x64 and Linux x64, with unsigned development packages. Minimum OS/runtime assumptions and Linux window-system coverage still need resolution; native test routes/evidence remain explicit. See docs/decisions.md scaffold platform interview.",
+        "Owner authorized engineering to choose and document provisional minimum OS versions and Linux desktop configuration from framework requirements (\"Yes fine for now\"). No further owner baseline question needed; finish technical matrix/test-route documentation before completing this task.",
+        "Delegated baseline selection recorded in docs/engineering/platforms.md: macOS 14+ arm64, Windows 11 24H2+ x64, Ubuntu 24.04 x64 GNOME Wayland and X11; unsigned development archives. M4 route available, Windows/Linux routes explicitly outstanding. Decision complete; verification is not."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "Owner decisions",
+          "target": "docs/decisions.md",
+          "relevance": "Distinguishes accepted scope from open questions."
+        },
+        {
+          "kind": "file",
+          "label": "Planning and gate rules",
+          "target": "docs/task-planning.md",
+          "relevance": "Defines separate plans, milestone boundaries and external decision gates."
+        },
+        {
+          "kind": "file",
+          "label": "S0 skeleton contract",
+          "target": "docs/specs/bootstrap.md",
+          "relevance": "Defines the load-only scope and three-platform acceptance."
+        },
+        {
+          "kind": "file",
+          "label": "S0 platform matrix",
+          "target": "docs/engineering/platforms.md",
+          "relevance": "Concrete baselines, artifacts, native requirements and available/missing test routes."
+        }
+      ],
+      "acceptance_criteria": [
+        "Record the first OS/architecture combinations, minimum OS/runtime assumptions and whether Linux support initially covers X11, Wayland or both.",
+        "Identify an available test route for each target: native desktop, suitable guest or an explicitly outstanding hardware/session requirement. Record actual M4 configuration when available.",
+        "Distinguish native, emulated, virtual-GPU and software-rendered evidence; decide the initial artifact formats and development-only unsigned distribution scope.",
+        "Publish an accepted S0 platform matrix with no unspecified target silently counted as supported."
+      ],
+      "test_strategy": {
+        "approach": "manual",
+        "steps": [
+          "Review the proposed macOS arm64, Windows x64 and Linux x64 matrix with the owner; distinguish Linux ARM VM convenience from the intended shipped artifact.",
+          "Record what is testable now versus what needs another machine/session; do not install a VM or buy infrastructure during this decision task."
+        ],
+        "commands": [],
+        "expected_results": [
+          "Publish an accepted S0 platform matrix with no unspecified target silently counted as supported."
+        ]
+      }
+    },
+    {
+      "id": "TASK-024",
+      "description": "Select the project license and document the open-source dependency policy.",
+      "status": "completed",
+      "dependencies": [],
+      "extra_context": [
+        "Needed for S0 gate TASK-035; review configured dependencies again in TASK-041.",
+        "2026-09-19: concrete S0 defaults sent to owner during scaffold execution; awaiting response, not an accepted decision.",
+        "Owner selected recommended GPL-3.0-or-later in one-at-a-time scaffold interview. Policy/responsibilities recorded in docs/decisions.md; TASK-005 applies license and TASK-041 audits configured dependencies. Earlier prototype-only deferral proposal superseded."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "Owner decisions",
+          "target": "docs/decisions.md",
+          "relevance": "Distinguishes accepted scope from open questions."
+        },
+        {
+          "kind": "file",
+          "label": "Planning and gate rules",
+          "target": "docs/task-planning.md",
+          "relevance": "Defines separate plans, milestone boundaries and external decision gates."
+        },
+        {
+          "kind": "file",
+          "label": "Technical options",
+          "target": "docs/research/technical-options.md",
+          "relevance": "Records provisional stack alternatives and primary sources."
+        }
+      ],
+      "acceptance_criteria": [
+        "Record the exact project SPDX license or an explicit owner-approved prototype-only deferral with the condition for settling it.",
+        "Clarify that open-source project/runtime dependencies and extensions are the goal while native Windows/macOS SDK/toolchain requirements are documented separately.",
+        "State the policy for bundled assets/fonts, native libraries, optional features and extension integrations; no proprietary hosted service is required to develop or test the app.",
+        "Record the accepted policy and dependency-review responsibilities without implying that a license recommendation was already applied."
+      ],
+      "test_strategy": {
+        "approach": "manual",
+        "steps": [
+          "Present GPL-3.0-or-later and the specific alternatives only if their tradeoffs matter to the owner; use the existing sourced license research.",
+          "Inspect the proposed dependency configuration and identify questions requiring review before bundling/distribution."
+        ],
+        "commands": [
+          "python3 tools/check_repository.py"
+        ],
+        "expected_results": [
+          "Record the accepted policy and dependency-review responsibilities without implying that a license recommendation was already applied."
+        ]
+      }
+    },
+    {
+      "id": "TASK-025",
+      "description": "Set the minimal skeleton layout and loading/error behavior.",
+      "status": "completed",
+      "dependencies": [],
+      "extra_context": [
+        "Needed for S0 gate TASK-035; does not decide the future Library/Edit layout.",
+        "2026-09-19: concrete S0 defaults sent to owner during scaffold execution; awaiting response, not an accepted decision.",
+        "Owner accepted dark background, one Open image button, automatic Fit, brief loading/error messages and retention of previous photo after failed replacement. Input/profile contract still requires resolution; experimental exact-profile allowlist is not implicitly accepted.",
+        "Owner accepted standard sRGB/greyscale JPEG, automatic orientation correction and explicit unsupported-profile errors; broader color support later. Together with accepted shell behavior this completes the product decision, not implementation. Exact-profile probe allowlist is insufficient for general standard-sRGB support."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "Owner decisions",
+          "target": "docs/decisions.md",
+          "relevance": "Distinguishes accepted scope from open questions."
+        },
+        {
+          "kind": "file",
+          "label": "Planning and gate rules",
+          "target": "docs/task-planning.md",
+          "relevance": "Defines separate plans, milestone boundaries and external decision gates."
+        },
+        {
+          "kind": "file",
+          "label": "S0 skeleton contract",
+          "target": "docs/specs/bootstrap.md",
+          "relevance": "Defines the load-only scope and three-platform acceptance."
+        }
+      ],
+      "acceptance_criteria": [
+        "Confirm a small empty state, Open image action, centered Fit photo surface and concise loading/error feedback, with no editing panels.",
+        "Record basic visual direction, window sizing/focus expectations and the proposed behavior of retaining the previous image on a failed replacement open.",
+        "Accept a clear initial JPEG/profile subset and explicit unsupported-input behavior; opening is transient and does not create a catalog.",
+        "Record enough product direction for the skeleton without requiring a complete design system or later editing decisions."
+      ],
+      "test_strategy": {
+        "approach": "manual",
+        "steps": [
+          "Walk through empty, loading, success, cancellation and invalid-file states using the skeleton spec.",
+          "Review a minimal sketch or prototype if needed and record any owner changes as explicit S0 requirements."
+        ],
+        "commands": [
+          "python3 tools/check_repository.py"
+        ],
+        "expected_results": [
+          "Record enough product direction for the skeleton without requiring a complete design system or later editing decisions."
+        ]
+      }
+    },
+    {
+      "id": "TASK-026",
+      "description": "Choose the M1 workspace layout and essential keyboard/navigation behavior.",
+      "status": "ready",
+      "dependencies": [],
+      "extra_context": [
+        "Needed before M1 gate TASK-064; not required by S0."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "Owner decisions",
+          "target": "docs/decisions.md",
+          "relevance": "Distinguishes accepted scope from open questions."
+        },
+        {
+          "kind": "file",
+          "label": "Planning and gate rules",
+          "target": "docs/task-planning.md",
+          "relevance": "Defines separate plans, milestone boundaries and external decision gates."
+        },
+        {
+          "kind": "file",
+          "label": "M1 editor specification",
+          "target": "docs/specs/single-image.md",
+          "relevance": "Preserves subsequent editing, persistence and automation scope."
+        }
+      ],
+      "acceptance_criteria": [
+        "Resolve the pending one-workspace versus separate Library/Edit question while keeping the M1 one-image scope small.",
+        "Choose the essential shortcuts and panel visibility/focus rules; retain agreed zoom/pan/percentage/Fit scope.",
+        "Record two or three concrete Lightroom workflow frustrations and map them to immediate or later priorities.",
+        "Update M1 layout/navigation decisions without pulling a full grid or unselected workflow feature into S0."
+      ],
+      "test_strategy": {
+        "approach": "manual",
+        "steps": [
+          "Continue the existing unanswered workspace/friction questions rather than interpreting silence as acceptance.",
+          "Walk through opening, inspecting and editing one image with mouse and keyboard."
+        ],
+        "commands": [],
+        "expected_results": [
+          "Update M1 layout/navigation decisions without pulling a full grid or unselected workflow feature into S0."
+        ]
+      }
+    },
+    {
+      "id": "TASK-027",
+      "description": "Resolve remaining geometry semantics and crop-control details.",
+      "status": "ready",
+      "dependencies": [],
+      "extra_context": [
+        "Needed before M1 gate TASK-064; proportional Option scaling and composition-preserving straightening are already agreed."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "Owner decisions",
+          "target": "docs/decisions.md",
+          "relevance": "Distinguishes accepted scope from open questions."
+        },
+        {
+          "kind": "file",
+          "label": "Planning and gate rules",
+          "target": "docs/task-planning.md",
+          "relevance": "Defines separate plans, milestone boundaries and external decision gates."
+        },
+        {
+          "kind": "file",
+          "label": "M1 editor specification",
+          "target": "docs/specs/single-image.md",
+          "relevance": "Preserves subsequent editing, persistence and automation scope."
+        }
+      ],
+      "acceptance_criteria": [
+        "Resolve whether horizontal flip mirrors the viewed composition and carries the crop; show an example after rotation/straightening.",
+        "Define quarter-turn behavior for an existing crop and lock, essential aspect-ratio presets and whether custom ratios/numeric edges are needed in M1.",
+        "Choose the pan-versus-crop gesture and any required shortcuts or angle limits without reopening agreed centered Option behavior.",
+        "Record concrete before/after geometry examples for the reference experiment TASK-004."
+      ],
+      "test_strategy": {
+        "approach": "manual",
+        "steps": [
+          "Use off-center subject examples with flip, quarter-turn, straightening and fixed/free aspect ratios.",
+          "Compare the answered rules with the single-image spec; leave precise fitting math to the engineering experiment."
+        ],
+        "commands": [],
+        "expected_results": [
+          "Record concrete before/after geometry examples for the reference experiment TASK-004."
+        ]
+      }
+    },
+    {
+      "id": "TASK-028",
+      "description": "Confirm M1 edit commit, undo and recovery expectations.",
+      "status": "ready",
+      "dependencies": [],
+      "extra_context": [
+        "Needed before M1 gate TASK-064; catalog backup/sidecar expansion is TASK-031."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "Owner decisions",
+          "target": "docs/decisions.md",
+          "relevance": "Distinguishes accepted scope from open questions."
+        },
+        {
+          "kind": "file",
+          "label": "Planning and gate rules",
+          "target": "docs/task-planning.md",
+          "relevance": "Defines separate plans, milestone boundaries and external decision gates."
+        },
+        {
+          "kind": "file",
+          "label": "M1 editor specification",
+          "target": "docs/specs/single-image.md",
+          "relevance": "Preserves subsequent editing, persistence and automation scope."
+        },
+        {
+          "kind": "file",
+          "label": "Source recovery",
+          "target": "docs/specs/source-recovery.md",
+          "relevance": "Details identity, relinking and proposed ambiguity handling."
+        }
+      ],
+      "acceptance_criteria": [
+        "Resolve proposed Apply/Cancel versus gesture commit granularity, autosave feedback and undo history after restart.",
+        "Confirm whether unapplied drafts need restart persistence; distinguish committed saved state from unsaved draft state.",
+        "Walk through moved/changed originals and manual Locate ambiguity, preserving the accepted reference-import and manual-only recovery scope.",
+        "Document behavior for failed saves, replacement sources and duplicate matches in terms the user can predict."
+      ],
+      "test_strategy": {
+        "approach": "manual",
+        "steps": [
+          "Walk through edit, undo, reopen, failed save and manual Locate examples.",
+          "Retain the already agreed manual Locate scope; consult the recovery specification for remaining edge-case proposals."
+        ],
+        "commands": [],
+        "expected_results": [
+          "Document behavior for failed saves, replacement sources and duplicate matches in terms the user can predict."
+        ]
+      }
+    },
+    {
+      "id": "TASK-029",
+      "description": "Set the remaining M1 JPEG export defaults and supported metadata behavior.",
+      "status": "ready",
+      "dependencies": [],
+      "extra_context": [
+        "Needed before M1 gate TASK-064; default stripping and Keep metadata are already agreed."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "Owner decisions",
+          "target": "docs/decisions.md",
+          "relevance": "Distinguishes accepted scope from open questions."
+        },
+        {
+          "kind": "file",
+          "label": "Planning and gate rules",
+          "target": "docs/task-planning.md",
+          "relevance": "Defines separate plans, milestone boundaries and external decision gates."
+        },
+        {
+          "kind": "file",
+          "label": "M1 editor specification",
+          "target": "docs/specs/single-image.md",
+          "relevance": "Preserves subsequent editing, persistence and automation scope."
+        }
+      ],
+      "acceptance_criteria": [
+        "Decide simple JPEG quality and destination/name behavior for the initial export workflow.",
+        "Accept a documented supported-field policy for Keep metadata, including GPS and descriptive fields, while keeping structural orientation/dimensions correct.",
+        "Set behavior for existing destinations and source aliases, and confirm there are no resize presets or batch exports in this slice unless scope changes explicitly.",
+        "Update the export spec while preserving default metadata stripping and equivalent UI/API behavior."
+      ],
+      "test_strategy": {
+        "approach": "manual",
+        "steps": [
+          "Show one standard export and one Keep metadata example; make the limitations of unsupported private tags explicit.",
+          "Review existing-file and accidentally-selected-original scenarios."
+        ],
+        "commands": [],
+        "expected_results": [
+          "Update the export spec while preserving default metadata stripping and equivalent UI/API behavior."
+        ]
+      }
+    },
+    {
+      "id": "TASK-030",
+      "description": "Resolve M1 human-agent conflict and history presentation.",
+      "status": "ready",
+      "dependencies": [],
+      "extra_context": [
+        "Needed before M1 gate TASK-064; live GUI/agent editing is already required."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "Owner decisions",
+          "target": "docs/decisions.md",
+          "relevance": "Distinguishes accepted scope from open questions."
+        },
+        {
+          "kind": "file",
+          "label": "Planning and gate rules",
+          "target": "docs/task-planning.md",
+          "relevance": "Defines separate plans, milestone boundaries and external decision gates."
+        },
+        {
+          "kind": "file",
+          "label": "Agent contract",
+          "target": "docs/design/architecture.md",
+          "relevance": "Contains current live coordination proposals.",
+          "locator": "Agent contract"
+        }
+      ],
+      "acceptance_criteria": [
+        "Agree what the user sees when an agent commits during an active human crop draft, including how to discard or reapply the draft.",
+        "Confirm shared undo/history visibility and attribution for human and agent changes.",
+        "Review proposed single-owner/headless ownership and job cancellation boundaries without requiring a network service or built-in chat.",
+        "Record conflict/reconnect examples that the GUI, CLI and MCP acceptance tests must share."
+      ],
+      "test_strategy": {
+        "approach": "manual",
+        "steps": [
+          "Walk through agent edit during a draft, stale revision, disconnect and undo of an agent edit.",
+          "Keep protocol and IPC implementation details separate from owner-visible behavior."
+        ],
+        "commands": [],
+        "expected_results": [
+          "Record conflict/reconnect examples that the GUI, CLI and MCP acceptance tests must share."
+        ]
+      }
+    },
+    {
+      "id": "TASK-031",
+      "description": "Research storage workflows and decide later catalog portability and backup behavior.",
+      "status": "ready",
+      "dependencies": [],
+      "extra_context": [
+        "Later product work; does not gate S0 or initial manual Locate."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "Owner decisions",
+          "target": "docs/decisions.md",
+          "relevance": "Distinguishes accepted scope from open questions."
+        },
+        {
+          "kind": "file",
+          "label": "Planning and gate rules",
+          "target": "docs/task-planning.md",
+          "relevance": "Defines separate plans, milestone boundaries and external decision gates."
+        },
+        {
+          "kind": "file",
+          "label": "Recovery roadmap",
+          "target": "docs/specs/source-recovery.md",
+          "relevance": "Separates manual Locate from later storage research."
+        }
+      ],
+      "acceptance_criteria": [
+        "Document the owner local-edit/external-drive workflow plus a small set of other photographer workflows before choosing sync behavior.",
+        "Compare sidecars, consistent catalog backups, folder relinking and multiple source locations with explicit failure/recovery examples.",
+        "Select the next storage feature and state what remains deferred; do not treat a catalog as a backup of originals.",
+        "Produce a scoped follow-up design rather than adding a sync engine to the initial editor."
+      ],
+      "test_strategy": {
+        "approach": "manual",
+        "steps": [
+          "Interview about local, removable-drive and NAS use with offline/moved-file examples.",
+          "Review candidate approaches against original preservation and the recovery spec."
+        ],
+        "commands": [],
+        "expected_results": [
+          "Produce a scoped follow-up design rather than adding a sync engine to the initial editor."
+        ]
+      }
+    },
+    {
+      "id": "TASK-032",
+      "description": "Prioritize RAW work and define camera-specific quality expectations.",
+      "status": "ready",
+      "dependencies": [],
+      "extra_context": [
+        "Later milestone planning; no RAW dependency for S0 or M1 JPEG."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "Owner decisions",
+          "target": "docs/decisions.md",
+          "relevance": "Distinguishes accepted scope from open questions."
+        },
+        {
+          "kind": "file",
+          "label": "Planning and gate rules",
+          "target": "docs/task-planning.md",
+          "relevance": "Defines separate plans, milestone boundaries and external decision gates."
+        },
+        {
+          "kind": "file",
+          "label": "Technical options",
+          "target": "docs/research/technical-options.md",
+          "relevance": "Records provisional stack alternatives and primary sources."
+        }
+      ],
+      "acceptance_criteria": [
+        "Record real Nikon Z6 and Fujifilm X100VI recording modes and a privately stored sample manifest when available.",
+        "Decide whether RAW should precede the full tonal-tool suite and how important camera JPEG/film-simulation matching is.",
+        "Define baseline appearance/detail requirements and clarify whether lens correction, denoise or sharpening are essential to the first RAW slice.",
+        "Keep library reuse as the default and require measured support/performance evidence before a custom decoder proposal."
+      ],
+      "test_strategy": {
+        "approach": "manual",
+        "steps": [
+          "Discuss representative camera outputs and day-to-day use rather than infer modes from the model names.",
+          "Update milestone priority and fixture requirements without claiming any decoder benchmark has run."
+        ],
+        "commands": [],
+        "expected_results": [
+          "Keep library reuse as the default and require measured support/performance evidence before a custom decoder proposal."
+        ]
+      }
+    },
+    {
+      "id": "TASK-033",
+      "description": "Choose the first useful extension and customization use case.",
+      "status": "ready",
+      "dependencies": [],
+      "extra_context": [
+        "Later product work; no dynamic plugin system in S0/M1."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "Owner decisions",
+          "target": "docs/decisions.md",
+          "relevance": "Distinguishes accepted scope from open questions."
+        },
+        {
+          "kind": "file",
+          "label": "Planning and gate rules",
+          "target": "docs/task-planning.md",
+          "relevance": "Defines separate plans, milestone boundaries and external decision gates."
+        },
+        {
+          "kind": "file",
+          "label": "Extension path",
+          "target": "docs/design/architecture.md",
+          "relevance": "Documents deferred extension boundaries.",
+          "locator": "Extension path"
+        }
+      ],
+      "acceptance_criteria": [
+        "Select one concrete extension the owner/community would use: preset, workflow automation, custom panel, decoder or processing tool.",
+        "Define its inputs/outputs, necessary permissions and customization/reset behavior.",
+        "Choose the smallest host boundary that supports the use case and defer a marketplace/general plugin runtime until justified.",
+        "Record a scoped extension proof and success criterion, maintaining the open-source direction."
+      ],
+      "test_strategy": {
+        "approach": "manual",
+        "steps": [
+          "Walk through installing or authoring the selected extension and disabling it safely.",
+          "Check the example against the common-command and original-preservation constraints."
+        ],
+        "commands": [],
+        "expected_results": [
+          "Record a scoped extension proof and success criterion, maintaining the open-source direction."
+        ]
+      }
+    },
+    {
+      "id": "TASK-034",
+      "description": "Prioritize performance workloads and settle user-visible responsiveness goals.",
+      "status": "ready",
+      "dependencies": [],
+      "extra_context": [
+        "S0 records measurements; accepted long-term budgets and catalog workloads are needed before scaling work."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "Owner decisions",
+          "target": "docs/decisions.md",
+          "relevance": "Distinguishes accepted scope from open questions."
+        },
+        {
+          "kind": "file",
+          "label": "Planning and gate rules",
+          "target": "docs/task-planning.md",
+          "relevance": "Defines separate plans, milestone boundaries and external decision gates."
+        },
+        {
+          "kind": "file",
+          "label": "Performance plan",
+          "target": "docs/specs/performance.md",
+          "relevance": "Contains provisional workloads and budgets."
+        }
+      ],
+      "acceptance_criteria": [
+        "Record actual M4 memory/display/storage conditions and representative image sizes/photo counts when available.",
+        "Rank startup, image switching, interaction, import, export and indexing pain using real owner examples.",
+        "Separate S0 measurements from later catalog/RAW/geometry budgets and document which provisional targets become accepted.",
+        "Publish a workload/priority record with no invented machine specifications or unmeasured performance claims."
+      ],
+      "test_strategy": {
+        "approach": "manual",
+        "steps": [
+          "Review the provisional performance table with the owner using actual workload examples.",
+          "Reconcile performance preferences with the recorded Lightroom frustrations and future milestone priority."
+        ],
+        "commands": [],
+        "expected_results": [
+          "Publish a workload/priority record with no invented machine specifications or unmeasured performance claims."
+        ]
+      }
+    }
+  ],
+  "execution_waves": [
+    {
+      "wave": 1,
+      "task_ids": [
+        "TASK-001",
+        "TASK-023",
+        "TASK-024",
+        "TASK-025",
+        "TASK-026",
+        "TASK-027",
+        "TASK-028",
+        "TASK-029",
+        "TASK-030",
+        "TASK-031",
+        "TASK-032",
+        "TASK-033",
+        "TASK-034"
+      ]
+    }
+  ]
+}

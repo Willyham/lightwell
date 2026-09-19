@@ -1,0 +1,21 @@
+[graph]
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+    "x86_64-unknown-linux-gnu",
+]
+
+[licenses]
+allow = [
+    "GPL-3.0-or-later", "MIT", "Apache-2.0", "BSL-1.0", "BSD-2-Clause", "BSD-3-Clause",
+    "ISC", "Zlib", "0BSD", "CC0-1.0", "Unlicense", "Unicode-3.0",
+]
+confidence-threshold = 0.8
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

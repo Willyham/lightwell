@@ -1,0 +1,226 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://codex.local/create-tasks/task-plan.schema.json",
+  "title": "Create Tasks plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "plan_id",
+    "title",
+    "objective",
+    "context_summary",
+    "tasks",
+    "execution_waves"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "plan_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "objective": {
+      "type": "string",
+      "minLength": 1
+    },
+    "context_summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tasks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/task"
+      }
+    },
+    "execution_waves": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/executionWave"
+      }
+    }
+  },
+  "$defs": {
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "description",
+        "status",
+        "dependencies",
+        "extra_context",
+        "context_links",
+        "acceptance_criteria",
+        "test_strategy"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^TASK-[0-9]{3,}$"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "ready",
+            "in_progress",
+            "blocked",
+            "completed",
+            "cancelled"
+          ]
+        },
+        "dependencies": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^TASK-[0-9]{3,}$"
+          }
+        },
+        "extra_context": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "context_links": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/contextLink"
+          }
+        },
+        "acceptance_criteria": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "test_strategy": {
+          "$ref": "#/$defs/testStrategy"
+        }
+      }
+    },
+    "contextLink": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "label",
+        "target",
+        "relevance"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "conversation",
+            "file",
+            "url",
+            "symbol",
+            "task",
+            "other"
+          ]
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1
+        },
+        "locator": {
+          "type": "string"
+        },
+        "relevance": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "testStrategy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approach",
+        "steps",
+        "commands",
+        "expected_results"
+      ],
+      "properties": {
+        "approach": {
+          "enum": [
+            "unit",
+            "integration",
+            "end-to-end",
+            "manual",
+            "inspection",
+            "mixed",
+            "none"
+          ]
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "commands": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "expected_results": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "executionWave": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "wave",
+        "task_ids"
+      ],
+      "properties": {
+        "wave": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "task_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^TASK-[0-9]{3,}$"
+          }
+        }
+      }
+    }
+  }
+}
