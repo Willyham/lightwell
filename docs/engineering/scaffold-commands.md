@@ -6,7 +6,7 @@ For a fresh checkout and end-to-end evidence inspection, follow the [bootstrap p
 
 ## Commands available now
 
-Run from the repository root with pinned Rust 1.94.0 and Python 3.10+:
+Run from the repository root with pinned Rust 1.94.0:
 
 ```sh
 cargo xtask doctor
@@ -22,9 +22,9 @@ cargo xtask inventory --output artifacts/new-inventory
 cargo xtask package --output artifacts/new-package
 ```
 
-Smoke scenarios are `empty`, `load`, `replacement`, `invalid`, `repeated`, `alternating`, `large24` and `large60`; generate large fixtures with `python3 tools/generate_fixtures.py --large` before the last two.
+Smoke scenarios are `empty`, `load`, `replacement`, `invalid`, `repeated`, `alternating`, `large24` and `large60`; generate large fixtures with `cargo xtask generate-fixtures` into a new `fixtures/generated` directory before the last two.
 
-Smoke additionally requires Pillow 12.2.0 from [fixture requirements](../../tools/fixture-requirements.txt), and a native graphical session. Use a fresh output directory each time; refusing existing directories prevents stale evidence. `fmt`, `lint`, `test` and `build` are individually callable through xtask. `check` runs plan/link checks, formatting, Clippy and tests; it explicitly does not imply graphical or dependency-audit acceptance. Doctor reports missing tools without installing them. Setup installation commands remain explicit in [development](development.md).
+Smoke requires a native graphical session; image checks are built into Rust xtask. Use a fresh output directory each time; refusing existing directories prevents stale evidence. `fmt`, `lint`, `test` and `build` are individually callable through xtask. `check` runs plan/link checks, formatting, Clippy and tests; it explicitly does not imply graphical or dependency-audit acceptance. Doctor reports missing tools without installing them. Setup installation commands remain explicit in [development](development.md).
 
 The application accepts `--data-root DIRECTORY` for isolated diagnostic/config/cache paths, `--open PATH`, `--window-size WIDTH HEIGHT` (logical dimensions 320..4096), and `--evidence-dir NEW_DIRECTORY`. Repeat `--open` only in evidence mode to run a bounded development sequence. Normal mode shows native Open with Cmd+O on macOS and Ctrl+O on Windows/Linux; no data/catalog writes are needed. Source paths stay native OS paths. No working public editing API or MCP is implied.
 
@@ -65,8 +65,6 @@ Latest package: `artifacts/maintained-package-3/lightwell-development.zip`. Its 
 
 ## Hosted CI activation
 
-The scaffold is now pushed. The first GitHub run exposed Windows code-page decoding of UTF-8 Markdown; tooling now reads/writes UTF-8 explicitly and xtask enables Python UTF-8 mode. `cargo xtask fixtures` invokes the corpus checker after installing the pinned fixture requirements.
-
 CI now includes dedicated fixture and blocking dependency-audit jobs. The audit was initially failing on the maintenance findings; the later reviewed policy permits only the two expiring exceptions. Ubuntu also runs the three renderer smoke scenarios under Xvfb/software Vulkan; this is headless functional evidence, never native Linux desktop or GPU-performance acceptance. Native picker checks remain separate. Job results must be recorded after execution, not inferred from this configuration.
 
 Hosted results are recorded in [CI results](ci-results.md). Linux empty/load/replacement smoke passed under Xvfb with llvmpipe Vulkan after adding the X11 runtime library. All three OS builds/packages have executed successfully. The initial blocking dependency job reproduced the two known maintenance findings; the subsequent reviewed policy is described above.
@@ -78,3 +76,5 @@ Hosted results are recorded in [CI results](ci-results.md). Linux empty/load/rep
 The current package is `artifacts/hardening-package-5/lightwell-development.zip`. Eight native Metal scenarios, actual timeout/abrupt-exit/diagnostic-failure checks, and a pixel-validated 24/60 MP baseline passed. [Results and reproduction](s0-hardening-results.md) record hashes, timing/memory, earlier superseded blank captures and owner-confirmed manual picker success and automated-selection limitations. Existing automated dependency policy is unchanged; manual license reviews are deferred.
 
 `develop` now uses the optimized release profile by default; its first compilation may take longer. Use `develop --debug` for an unoptimized debugger session. Plain `cargo run` remains unoptimized. JPEG diagnostics include worker stage timings and startup records include `debug_assertions` (an assertion setting, not a general proof of optimization). See the [real JPEG investigation](jpeg-performance.md).
+
+All maintained commands now run in Rust. [Rust tooling commands and verification](rust-tooling.md) include fixture generation, capture inspection, native failure checks and measurement.

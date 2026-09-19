@@ -4,7 +4,7 @@ This is the maintained S0 load-only viewer: one Open action and automatic Fit. T
 
 ## Set up a checkout
 
-Install Git, Python 3.10+ and Rust through rustup. Use the [platform prerequisites](platforms.md): macOS needs Xcode Command Line Tools; Windows needs MSVC C++ Build Tools and Windows SDK; Ubuntu 24.04 needs `build-essential pkg-config libx11-dev libxkbcommon-dev libwayland-dev libvulkan-dev`, plus runtime `libxkbcommon-x11-0`, a graphics driver and a working desktop portal for the picker. No command below silently installs system tools.
+Install Git and Rust through rustup. Use the [platform prerequisites](platforms.md): macOS needs Xcode Command Line Tools; Windows needs MSVC C++ Build Tools and Windows SDK; Ubuntu 24.04 needs `build-essential pkg-config libx11-dev libxkbcommon-dev libwayland-dev libvulkan-dev`, plus runtime `libxkbcommon-x11-0`, a graphics driver and a working desktop portal for the picker. No command below silently installs system tools.
 
 From a fresh checkout:
 
@@ -16,24 +16,22 @@ cargo xtask build --release
 cargo xtask develop --open fixtures/s0/orientation-6.jpg
 ```
 
-Doctor does not prove an available desktop/GPU. `develop` uses release optimization; `develop --debug` explicitly selects the slower debugger build. The initial Cargo dependency fetch and compilation require network/time. On Windows the runner selects Python; direct Python examples may use `py -3` instead of `python3`.
+Doctor does not prove an available desktop/GPU. `develop` uses release optimization; `develop --debug` explicitly selects the slower debugger build. The initial Cargo dependency fetch and compilation require network/time.
 
 ## Capture and inspect a real render
 
-Create a Python environment for Pillow 12.2.0:
+Use the same Rust runner on every platform:
 
 ```sh
-python3 -m venv .venv
-.venv/bin/python -m pip install -r tools/fixture-requirements.txt
-.venv/bin/python tools/dev.py smoke --scenario load --output artifacts/playbook-load
-.venv/bin/python tools/dev.py smoke --scenario replacement --output artifacts/playbook-replacement
+cargo xtask smoke --scenario load --output artifacts/playbook-load
+cargo xtask smoke --scenario replacement --output artifacts/playbook-replacement
 ```
 
-On Windows replace `.venv/bin/python` with `.venv/Scripts/python.exe`. Use new output directory names on every run. The release binary must already exist. A native graphical session is required; unsupported display access is not a pass. The replacement scenario loads a valid photo then malformed input and checks that the previous photo remains visible.
+Use new output directory names on every run. The release binary must already exist. A native graphical session is required; unsupported display access is not a pass. The replacement scenario loads a valid photo then malformed input and checks that the previous photo remains visible.
 
 Inspect `artifacts/playbook-load/result.json` for `status: passed`, binary/lock/source hashes and platform identity; read `app/events.jsonl`, `app/state.json` and `app/result.json`. Open the `app/frame-*.png` files and correlate each frame's generation and dimensions with the recorded state. These PNGs are actual renderer readbacks, not OS desktop screenshots. Blank/stale frames fail pixel checks. `reproduce.md` and `subprocess.log` preserve exact arguments and failure output. A failed run returns nonzero; absence of a PNG is not success. Evidence is bounded by application/process deadlines.
 
-Other scenarios are `empty`, `invalid`, `repeated`, `alternating`, `large24`, `large60`. Before the large cases run `.venv/bin/python tools/generate_fixtures.py --large`. Only synthetic fixtures belong in hosted artifacts. Keep personal photos in ignored `fixtures/jpg/` or `private/`; never force-add originals or local diagnostics.
+Other scenarios are `empty`, `invalid`, `repeated`, `alternating`, `large24`, `large60`. Before the large cases run `cargo xtask generate-fixtures` (requires a new `fixtures/generated` directory; preserve earlier benchmark inputs elsewhere before replacing disposable generated workloads). Only synthetic fixtures belong in hosted artifacts. Keep personal photos in ignored `fixtures/jpg/` or `private/`; never force-add originals or local diagnostics.
 
 ## Package and verify the actual executable
 
@@ -46,7 +44,7 @@ The output contains an unsigned ZIP on macOS/Windows or `.tar.gz` on Linux, `che
 Run smoke against the packaged executable using `--binary`:
 
 ```sh
-.venv/bin/python tools/dev.py smoke --binary artifacts/playbook-package/Lightwell/Lightwell.app/Contents/MacOS/lightwell --scenario replacement --output artifacts/playbook-packaged
+cargo xtask smoke --binary artifacts/playbook-package/Lightwell/Lightwell.app/Contents/MacOS/lightwell --scenario replacement --output artifacts/playbook-packaged
 ```
 
 Linux uses `artifacts/playbook-package/Lightwell/lightwell`; Windows uses `artifacts/playbook-package/Lightwell/lightwell.exe`. After unpacking, launch the same executable without evidence arguments for ordinary use. macOS bundles are unsigned and not notarized; use the normal system approval flow if downloaded software is quarantined. No toolchain is needed to run the package, but platform runtime/graphics prerequisites still apply. Do not disable OS security globally.

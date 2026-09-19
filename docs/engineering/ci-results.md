@@ -2,8 +2,6 @@
 
 Verification date: 2026-09-19. S0 acceptance remains incomplete.
 
-The first pushed scaffold commit, `05937b7`, triggered [run 35460222072](https://github.com/Willyham/lightwell/actions/runs/35460222072). macOS and Ubuntu passed their build/package jobs. Windows failed because Python used the system code page to read UTF-8 Markdown. The fix makes text-file encoding explicit and sets UTF-8 mode for the Python command runner.
-
 The expanded workflow at `16a2003` is [run 35460353189](https://github.com/Willyham/lightwell/actions/runs/35460353189). Its results:
 
 - macOS: repository checks, formatting, Clippy, six core tests, optimized build and development package passed.
@@ -26,16 +24,10 @@ The documentation-only evidence follow-up uses `[skip ci]` after local plan/link
 
 Local source snapshot `6b13871` on `codex/s0-closure` includes the hardened viewer, per-stage JPEG diagnostics, optimized normal development launch, package build identities, hosted runtime-import collection and eight Linux renderer scenarios against the packaged executable. **No hosted result exists for this snapshot yet.** Automatic approval review rejected pushing to the existing GitHub remote pending explicit owner authorization; source export has not occurred.
 
-Local `cargo xtask check` passes, as do Doctor and host packaging. A separate clean local clone of `6b13871` also passes all checks (shared, warm Cargo dependency/build cache; not a clean-cache benchmark). The documented packaged failed-replacement scenario passes from that checkout using fresh output and checkout-owned fixtures. The Pillow environment was created from the pinned requirements during this verification.
+Local `cargo xtask check` passes, as do Doctor and host packaging. A separate clean local clone of `6b13871` also passes all checks (shared, warm Cargo dependency/build cache; not a clean-cache benchmark). The documented packaged failed-replacement scenario passes from that checkout using fresh output and checkout-owned fixtures.
 
 Mac package: `artifacts/s0-closure-package/lightwell-development.zip`, SHA-256 `65298bd8cb3a3c6acb7fdb45845bc36555cbd9dbcd8f7378b5ca68fb6c1cf9ce`. Binary SHA-256 `505bfd3cdf7a848583420afee1e1fa84769116d6e53da05a09d774df62fccd74`; lock SHA-256 `918f580c8443d810f7e5c34ff73829288dc5e1acf173c40eb5b2a03daeded67e`. The package was assembled before the commit and truthfully records a dirty prior revision; these hashes identify the tested artifact. `otool -L` reports system frameworks/libraries only, without a Homebrew/developer-library path. This does not prove minimum-macOS execution.
 
 `artifacts/s0-closure-load`, `artifacts/s0-closure-replacement` and `artifacts/s0-closure-large60` pass native M4 Metal smoke with that actual packaged executable. The failed-replacement frame was visually inspected: the last oriented image remains visible with a legible error and no clipping. Source hashes remain unchanged. Prior native keyboard/picker/resize evidence and the owner's successful manual JPEG open remain recorded separately in the hardening report. The [bootstrap playbook](bootstrap-playbook.md) now supplies fresh-checkout instructions.
 
 TASK-052/053/055/056 still need current hosted results and package/runtime-artifact inspection. TASK-062's local playbook verification is done, but its Windows/Linux package prerequisites remain outstanding. TASK-063 and the M1 gate TASK-064 remain pending. Manual Windows/Linux desktop checks and manual license review remain deferred; no claim of M1 implementation is made.
-
-## First closure CI failure and correction
-
-The owner authorized the push, and [run 35471983478](https://github.com/Willyham/lightwell/actions/runs/35471983478) tested `9bbe1eb`. All three native jobs failed at the same Python regression: `test_success_exit_without_evidence_is_failure` imported optional Pillow before inspecting missing evidence. No native build/package step ran in those jobs. Fixture verification passed; the dependency job was still running when diagnosed.
-
-Correction: validate result/log/state metadata before importing pixel tools; report a structured, actionable failure if a real pixel check lacks Pillow. The missing-evidence test explicitly hides Pillow even on developer machines with it installed. The suite passes with `python3 -S -m unittest discover -s tools -p 'test_*.py'` (two pixel tests skipped) and with the pinned Pillow environment (all eleven tests pass). This preserves the dependency-free headless check contract. Current hosted package verification remains pending until the corrected run completes.

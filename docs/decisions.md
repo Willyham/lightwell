@@ -163,3 +163,13 @@ TASK-026's personal-frustration input is now answered. Workspace adoption, geome
 The owner answered **“Adopt these recommendations and choose routine details”** to the explicit TASK-026–030 proposal: one workspace; flip/rotate carry the visible crop; Apply/Cancel with persistent committed undo; JPEG quality 90 with no overwrites; preserve human drafts and show conflict when an agent commits. The separately answered Lightroom-frustration input completes the personal-workflow criterion. Product TASK-026–030 are now complete.
 
 The [accepted M1 decisions](design/m1-decisions.md) record routine shortcuts, focus behavior, crop presets/custom ratio, Space-drag pan, ±45° fine straightening, nonpersistent drafts, verified manual Locate/duplicate handling, export naming/metadata principle and shared attributed history/reconnect behavior. Exact geometry algorithms, color/metadata feasibility and numerical tolerances remain engineering work in TASK-004. S0 and TASK-064 remain gates; this acceptance implements no editing tools. Earlier open/proposed interview entries are historical and superseded by this record.
+
+## Development tooling — Rust
+
+Owner decision: implement all project development tooling in Rust, using the existing xtask entry point. Use the same Rust commands for local development and CI. An independent Go client for external API testing is a possible later addition, not a current prerequisite. TASK-069 implements this decision.
+
+## M1 history as a core editor feature — 2026-09-19
+
+The owner clarified that undo/redo alone is insufficient: every committed edit, crop, flip and other image action must enter a shared historical log, with preview and restore at any point. This is an accepted M1 requirement for the host and every tool; later tools inherit it when introduced. Original and complete intermediate recipes must remain inspectable after reopening and further editing. Transient pointer movements and viewport changes remain outside image-edit history.
+
+The [coverage review and history contract](specs/edit-history.md) identify missing explicit tasks for history browsing, arbitrary-entry preview/restore, retention outside the shortcut redo path and API/UI verification. Existing core tasks are strengthened and TASK-071 adds the history interface. TASK-028/030 keep their accepted decision history. The subsequent owner answer on 2026-09-20 explicitly accepts appending an explicit Restore action and retaining all later actions, completing product TASK-070. Undo/redo navigates saved entries without deleting them; a new edit clears shortcut redo availability while retaining historical access. TASK-064 must verify TASK-070 before completing. This updates plans only; no editor functionality is implemented.

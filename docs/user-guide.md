@@ -19,8 +19,8 @@ Developers can run repeatable synthetic fixture scenarios and inspect logs, stat
 1. Create or open a local catalog. Import references photos already on disk.
 2. Import a JPEG and select it for editing. Supported orientation and color metadata are interpreted before display.
 3. Open Crop and adjust its sides/corners freely or choose a locked aspect ratio. Hold Option to scale proportionally about the center. Straightening preserves your composition with only necessary trimming. Use pan, a zoom percentage or Fit to inspect the image. Apply saves a geometry recipe; Cancel discards the draft.
-4. Rotate or flip as needed. Undo/redo changes the recipe without altering the original photo.
-5. Close and reopen the catalog to continue from saved edits.
+4. Rotate or flip as needed. Every committed edit appears in the shared History log. Select Original or any earlier entry to preview it, return to the current image, or explicitly restore that saved state. Undo/redo uses the same history without altering the original photo. Restore appends a new action and keeps all later history. Undoing Restore returns to the preceding state; historical states remain available after further editing. See [the history plan](specs/edit-history.md).
+5. Close and reopen the catalog to continue from saved edits and revisit the persistent history, including preview and restore of earlier saved states.
 6. Export a new JPEG to share or use in other software. Optional metadata is stripped by default; enable Keep metadata to preserve supported source information. Color and orientation remain correct in either mode. The catalog retains the editable recipe.
 7. If the original was moved or renamed, use Locate original to select and verify the file. This reconnects the existing photo and edits rather than reimporting it as a new asset.
 
@@ -57,3 +57,5 @@ These editor limitations apply to M1; S0 has the smaller image-loading scope abo
 The viewer keeps the previous image until a replacement is decoded and ready to render. An invalid replacement leaves the previous image visible. Tab focuses Open, and Return/Space activates it; Cmd+O on macOS or Ctrl+O elsewhere opens the picker. The application remains Fit-only.
 
 Native Metal checks now cover 24/60 MP fixtures and alternating orientations. The owner confirmed manual native JPEG opening; automated picker selection remains limited; see [verification results](engineering/s0-hardening-results.md). Windows/Linux manual verification and license review are deferred. No editing, catalog, export or live MCP has been implemented by this work.
+
+Development setup uses the pinned Rust toolchain and platform prerequisites; See the [bootstrap playbook](engineering/bootstrap-playbook.md).

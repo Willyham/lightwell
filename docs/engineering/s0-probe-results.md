@@ -7,21 +7,21 @@ Status: **experimental, not the maintained S0 application**. Repository/fixture 
 From the repository root, with Rust 1.94.0 and platform development tools installed:
 
 ```sh
-python3 tools/check_repository.py
-python3 tools/check_fixtures.py
+cargo xtask check-repository
+cargo xtask fixtures
 cargo test --manifest-path probes/s0/Cargo.toml --locked --lib
 cargo fmt --manifest-path probes/s0/Cargo.toml -- --check
 cargo clippy --manifest-path probes/s0/Cargo.toml --locked --all-targets --features iced-ui,egui-ui -- -D warnings
 cargo build --manifest-path probes/s0/Cargo.toml --locked --release --features iced-ui,egui-ui
-python3 tools/run_ui_probe.py iced --output artifacts/iced-new-run
-python3 tools/check_probe_capture.py artifacts/iced-new-run/window.png
-python3 tools/run_ui_probe.py egui --output artifacts/egui-new-run
-python3 tools/check_probe_capture.py artifacts/egui-new-run/window.png
+cargo xtask probe --candidate iced --output artifacts/iced-new-run
+cargo xtask check-capture --image artifacts/iced-new-run/window.png
+cargo xtask probe --candidate egui --output artifacts/egui-new-run
+cargo xtask check-capture --image artifacts/egui-new-run/window.png
 ```
 
-Use a fresh output directory for every capture. The probe runner kills a non-completing process at 30 seconds and retains logs/results. Rendering uses a native window and renderer readback, not an offscreen substitute or OS-compositor screenshot. It does not prove file-dialog, focus, resizing, or package behavior. Pillow 12.2.0 is needed for fixture/pixel checks; see the [fixture setup](../../fixtures/README.md). Cargo needs network on initial dependency fetch; `--offline` was used for the recorded checks after fetch. To use the pinned compiler when another default is installed, run Cargo from `probes/s0` or use `cargo +1.94.0`.
+Use a fresh output directory for every capture. The probe runner kills a non-completing process at 30 seconds and retains logs/results. Rendering uses a native window and renderer readback, not an offscreen substitute or OS-compositor screenshot. It does not prove file-dialog, focus, resizing, or package behavior. See the [fixture setup](../../fixtures/README.md) for Rust verification commands. Cargo needs network on initial dependency fetch; `--offline` was used for the recorded checks after fetch. To use the pinned compiler when another default is installed, run Cargo from `probes/s0` or use `cargo +1.94.0`.
 
-An interactive trial accepts an optional JPEG path and optional capture PNG path. Without a capture path it remains open; without arguments it shows the empty state. These binaries live under `probes/s0/target/release/`. They are experiments, not user installation commands or the later command API. On Windows the binary suffix is `.exe`; the current Python UI runner is host-tested on macOS only and needs that adaptation before a Windows claim.
+An interactive trial accepts an optional JPEG path and optional capture PNG path. Without a capture path it remains open; without arguments it shows the empty state. These binaries live under `probes/s0/target/release/`. They are experiments, not user installation commands or the later command API. On Windows the binary suffix is `.exe`; native probe evidence is from macOS; Windows execution remains unverified.
 
 ## Configuration and limits
 
@@ -39,7 +39,7 @@ The API choices were checked against the primary [Iced screenshot contract](http
 
 Host: macOS 26.5.2 arm64, M4 Pro, 14 CPU / 20 GPU cores, 48 GB unified memory. Captures are 1920×1280 physical pixels for a 960×640 logical window, scale 2, hardware Metal adapter `Apple M4 Pro`. Display profile and storage conditions were not established, so no professional color or cold-storage-performance claim is made.
 
-- Fixture checker: 16 small fixtures, exact regeneration with installed Pillow 12.2.0 / JPEG API 6.2, SHA-256 validation, metadata/dimensions and all eight independent corner-orientation expectations. Large 24/60 MP images are generated in ignored storage. Checked-in small corpus: approximately 468 KiB.
+- Fixture checker: 16 small fixtures, SHA-256 validation, metadata/dimensions and all eight independent corner-orientation expectations. Large 24/60 MP images are generated in ignored storage. Checked-in small corpus: approximately 468 KiB.
 - Rust tests: supported subset, all orientations with per-channel tolerance 5, invalid/truncated/oversized/CMYK/profile/missing errors, exact source preservation, and newest-request behavior.
 - Repository checks: both schemas/DAGs, task status prerequisites, derived waves, globally unique IDs, local file links and external completion gates. Negative checks rejected cycles, unknown keys, premature completion and stale waves. Markdown anchors are not yet validated.
 - Both optimized UIs built on macOS arm64. Iced's capture/shutdown took 1.148 seconds; corrected egui took 0.721 seconds. These are single whole-process observations including PNG write and shutdown, **not** comparable startup benchmarks or p95 measurements.
@@ -80,4 +80,4 @@ Product TASK-023/024/025 and implementation TASK-035 are now complete. See the [
 
 The JPEG probe now directly pins moxcms 0.7.11 (already present transitively via image; BSD-3-Clause) for bounded ICC parsing. This **supersedes the earlier exact-profile allowlist**. Accepted embedded profiles are RGB matrix/TRC input/display/colorspace profiles with XYZ PCS, standard sRGB D50 colorants/white point within 0.0005, and standard sRGB transfer values within 0.0005 linear-light units at every possible 8-bit source code. LUT transforms, other gamuts, conflicting CICP primaries/transfer, unsupported classes, malformed profiles and non-RGB tagged inputs are rejected. ICC parsing limits are 1 MiB profile, 4096 TRC entries and 4096 CLUT bytes. Untagged greyscale remains accepted. Header labels, manufacturers and timestamps do not establish color support. Broader LUT/greyscale ICC conversion remains excluded.
 
-Tests pass against the original Little CMS/Pillow sRGB fixture and an independently serialized moxcms sRGB profile, including benign header changes; Adobe RGB, altered gamma and malformed profiles are rejected. All five Rust tests and strict Clippy checks pass. This is a conservative numeric-recognition policy with explicit tolerances; it does not claim all profiles named sRGB are supported or professional display accuracy. Earlier renderer captures and timing measurements remain evidence from the initial probe configuration; this follow-up is parser/unit evidence, not a new native verification run.
+Tests pass against the original Little CMS sRGB fixture and an independently serialized moxcms sRGB profile, including benign header changes; Adobe RGB, altered gamma and malformed profiles are rejected. All five Rust tests and strict Clippy checks pass. This is a conservative numeric-recognition policy with explicit tolerances; it does not claim all profiles named sRGB are supported or professional display accuracy. Earlier renderer captures and timing measurements remain evidence from the initial probe configuration; this follow-up is parser/unit evidence, not a new native verification run.

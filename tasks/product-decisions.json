@@ -3,7 +3,7 @@
   "plan_id": "product-decisions",
   "title": "Lightwell v0 product decisions",
   "objective": "Resolve and record product choices separately from engineering, prioritizing the minimal S0 image-loading skeleton and then the M1 non-destructive editor.",
-  "context_summary": "Planning-only update, 2026-09-19. User now requires the first end-to-end build to be a cross-platform skeleton that loads an image with no editing tools. Previously agreed crop, export, persistence, live agents and Locate remain M1 follow-on requirements. TASK-001 preserves the ongoing interview; TASK-023 through TASK-034 track distinct choices and state when they are needed. Dependency-free ready decision tasks can be interviewed independently; future choices do not block S0. Implementation gates TASK-035 and TASK-064 check the specified answers and completion status via file links. No software has been implemented. Current owner instruction (2026-09-19) defers manual Windows/Linux verification and license reviews; existing platform and GPL decisions remain recorded. M1 choices are still awaiting answers. Architecture reaffirmed 2026-09-19: D19–D21 accept complete API coverage, a small shared core/module host and external loading regardless of built-in packaging. Optionality and performance splitting require evidence; TASK-033/034 retain only the unresolved use-case/lifecycle and performance choices. This update implements no software; the existing S0 viewer is tracked in the implementation plan. Owner subsequently adopted TASK-026–030 recommendations and supplied workflow priorities; those decision tasks are complete.",
+  "context_summary": "Planning-only update, 2026-09-19. User now requires the first end-to-end build to be a cross-platform skeleton that loads an image with no editing tools. Previously agreed crop, export, persistence, live agents and Locate remain M1 follow-on requirements. TASK-001 preserves the ongoing interview; TASK-023 through TASK-034 track distinct choices and state when they are needed. Dependency-free ready decision tasks can be interviewed independently; future choices do not block S0. Implementation gates TASK-035 and TASK-064 check the specified answers and completion status via file links. No software has been implemented. Current owner instruction (2026-09-19) defers manual Windows/Linux verification and license reviews; existing platform and GPL decisions remain recorded. M1 choices are still awaiting answers. Architecture reaffirmed 2026-09-19: D19–D21 accept complete API coverage, a small shared core/module host and external loading regardless of built-in packaging. Optionality and performance splitting require evidence; TASK-033/034 retain only the unresolved use-case/lifecycle and performance choices. This update implements no software; the existing S0 viewer is tracked in the implementation plan. Owner subsequently adopted TASK-026–030 recommendations and supplied workflow priorities; those decision tasks are complete. History clarification 2026-09-19: the owner requires persistent navigable action history for every edit, with preview and restore at any point. TASK-028/030 remain completed; new TASK-070 resolves the remaining restore/navigation presentation policy before M1 gate TASK-064. On 2026-09-20 the owner answered “Append a restore action and retain all history (Recommended)”, completing TASK-070. Restore appends a semantic action; undo/redo navigation and new edits never delete retained historical states.",
   "tasks": [
     {
       "id": "TASK-001",
@@ -162,7 +162,7 @@
           "Inspect the proposed dependency configuration and identify questions requiring review before bundling/distribution."
         ],
         "commands": [
-          "python3 tools/check_repository.py"
+          "cargo xtask check-repository"
         ],
         "expected_results": [
           "Record the accepted policy and dependency-review responsibilities without implying that a license recommendation was already applied."
@@ -213,7 +213,7 @@
           "Review a minimal sketch or prototype if needed and record any owner changes as explicit S0 requirements."
         ],
         "commands": [
-          "python3 tools/check_repository.py"
+          "cargo xtask check-repository"
         ],
         "expected_results": [
           "Record enough product direction for the skeleton without requiring a complete design system or later editing decisions."
@@ -337,7 +337,8 @@
       "extra_context": [
         "Needed before M1 gate TASK-064; catalog backup/sidecar expansion is TASK-031.",
         "Recommendations presented in hardening session; awaiting owner adoption or individual answers. Do not infer accepted product behavior from the engineering execution request.",
-        "2026-09-19: owner explicitly adopted the recommendations and delegated routine details. Accepted outcomes are recorded in docs/design/m1-decisions.md and synchronized with editor/recovery specs. TASK-026 personal workflow input was separately answered. Earlier awaiting-answer notes are historical."
+        "2026-09-19: owner explicitly adopted the recommendations and delegated routine details. Accepted outcomes are recorded in docs/design/m1-decisions.md and synchronized with editor/recovery specs. TASK-026 personal workflow input was separately answered. Earlier awaiting-answer notes are historical.",
+        "2026-09-19 history clarification: core action log plus arbitrary-entry preview/restore is required. Earlier decisions remain accepted; TASK-070 tracks the remaining restore/navigation policy without rewriting this completed task."
       ],
       "context_links": [
         {
@@ -369,6 +370,12 @@
           "label": "Accepted M1 decisions",
           "target": "docs/design/m1-decisions.md",
           "relevance": "Owner-adopted behavior and delegated routine defaults; implementation remains gated."
+        },
+        {
+          "kind": "file",
+          "label": "Core edit history",
+          "target": "docs/specs/edit-history.md",
+          "relevance": "Defines durable per-action log, immutable historical state, arbitrary-entry preview/restore, retention, conflicts and acceptance."
         }
       ],
       "acceptance_criteria": [
@@ -452,7 +459,8 @@
         "Needed before M1 gate TASK-064; live GUI/agent editing is already required.",
         "Recommendations presented in hardening session; awaiting owner adoption or individual answers. Do not infer accepted product behavior from the engineering execution request.",
         "D19 requires every M1 operation to be programmable, including session/view state and settings when present. This task resolves conflict presentation, not whether agents receive complete feature access.",
-        "2026-09-19: owner explicitly adopted the recommendations and delegated routine details. Accepted outcomes are recorded in docs/design/m1-decisions.md and synchronized with editor/recovery specs. TASK-026 personal workflow input was separately answered. Earlier awaiting-answer notes are historical."
+        "2026-09-19: owner explicitly adopted the recommendations and delegated routine details. Accepted outcomes are recorded in docs/design/m1-decisions.md and synchronized with editor/recovery specs. TASK-026 personal workflow input was separately answered. Earlier awaiting-answer notes are historical.",
+        "2026-09-19 history clarification: core action log plus arbitrary-entry preview/restore is required. Earlier decisions remain accepted; TASK-070 tracks the remaining restore/navigation policy without rewriting this completed task."
       ],
       "context_links": [
         {
@@ -485,6 +493,12 @@
           "label": "Accepted M1 decisions",
           "target": "docs/design/m1-decisions.md",
           "relevance": "Owner-adopted behavior and delegated routine defaults; implementation remains gated."
+        },
+        {
+          "kind": "file",
+          "label": "Core edit history",
+          "target": "docs/specs/edit-history.md",
+          "relevance": "Defines durable per-action log, immutable historical state, arbitrary-entry preview/restore, retention, conflicts and acceptance."
         }
       ],
       "acceptance_criteria": [
@@ -708,6 +722,48 @@
           "Publish a workload/priority record with no invented machine specifications or unmeasured performance claims."
         ]
       }
+    },
+    {
+      "id": "TASK-070",
+      "description": "Resolve M1 restore and undo/redo navigation presentation while retaining the complete edit log.",
+      "status": "completed",
+      "dependencies": [],
+      "extra_context": [
+        "Owner already requires every committed edit in persistent core history, with preview/restore at any point. This task does not reopen that requirement or the completed TASK-028/030 decisions.",
+        "2026-09-20 owner answer: append a Restore action and retain all history. docs/specs/edit-history.md records the accepted policy and routine navigation rules: undo-parent links, persisted redo path and current-state markers; new edits clear shortcut redo without deleting history.",
+        "Required external input to implementation TASK-064, verified by inspection; current repository checker automatically covers TASK-026–030 only."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "Core edit history",
+          "target": "docs/specs/edit-history.md",
+          "relevance": "Defines durable per-action log, immutable historical state, arbitrary-entry preview/restore, retention, conflicts and acceptance."
+        },
+        {
+          "kind": "file",
+          "label": "History decision record",
+          "target": "docs/decisions.md",
+          "locator": "M1 history as a core editor feature — 2026-09-19",
+          "relevance": "Records accepted scope and the outstanding restore/navigation recommendation."
+        }
+      ],
+      "acceptance_criteria": [
+        "Record the owner choice for restoring an earlier point, preserving the already-required availability of all historical states.",
+        "Document Original → Crop → Flip → Straighten → restore Crop → undo/redo → new edit, including current-state markers, any navigation records, shortcut redo invalidation and retention after restart. Repeated undo must traverse actions rather than oscillate on undo entries.",
+        "Synchronize history/editor/architecture specifications and implementation criteria; TASK-064 cannot complete with this choice unanswered."
+      ],
+      "test_strategy": {
+        "approach": "inspection",
+        "steps": [
+          "Walk the concrete sequence with the owner choice and distinguish accepted behavior from recommendations.",
+          "Verify old entries remain selectable and reconstructable and no branch deletion is implied by shortcut redo invalidation."
+        ],
+        "commands": [],
+        "expected_results": [
+          "A recorded decision supplies unambiguous restore/navigation behavior without weakening persistent historical access."
+        ]
+      }
     }
   ],
   "execution_waves": [
@@ -726,7 +782,8 @@
         "TASK-031",
         "TASK-032",
         "TASK-033",
-        "TASK-034"
+        "TASK-034",
+        "TASK-070"
       ]
     }
   ]

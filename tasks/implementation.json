@@ -2,8 +2,8 @@
   "schema_version": "1.0",
   "plan_id": "implementation",
   "title": "Lightwell v0 implementation: cross-platform image-loading skeleton, then editor",
-  "objective": "Deliver S0: a native macOS/Windows/Linux skeleton that opens and displays a JPEG, with repeatable setup, lint/build workflows, structured logs, real-render screenshots, agent smoke tests and platform packages. Only after S0, build the retained M1 catalog/geometry/undo/export/live-MCP/manual-Locate editor. Apply the accepted programmable module-host boundaries in M1 and scope the later external-loader proof from measured activation costs.",
-  "context_summary": "Planning only; no app, tooling, VM, build or benchmark was executed. Latest user instruction supersedes the full editor as the first end-to-end build. S0 excludes editing tools, catalogs, export and production IPC/MCP; early agent verification uses a development launch/state/capture harness sharing the real open-image service. Mac M4 is the primary development machine, but S0 completion requires the accepted three-platform launch/load matrix. Rust/Iced/wgpu remains provisional pending narrow probes and product constraints. TASK-002 through TASK-022 retain IDs; TASK-004 and TASK-007 through TASK-022 are M1 follow-on work. TASK-035 through TASK-063 detail S0, with TASK-060 optional and off the completion gate. TASK-064 bridges to M1. Product choices are in tasks/product-decisions.json; explicit local gates verify external decisions before completing. Commands remain empty until real tooling exists. Execution started 2026-09-19: independent fixture and repository-convention work; external S0 gate answers remain outstanding. Latest owner override (2026-09-19): defer manual Windows/Linux acceptance and manual license review tasks; finish local scaffold hardening and M4 evidence. Architecture planning update 2026-09-19: accepted D19–D21 require all operations to be programmable and built-in/external tools to use core history/change services. M1 tasks now explicitly establish this boundary and verify full operation coverage. TASK-067 follows the verified M1 handoff to measure optional-module activation and scope the required external-loader proof; it is not on the S0/M1 gate. No application code or task completion is authorized by this update. Historical provisional stack notes above are superseded by the recorded Rust/Iced selection and existing S0 viewer; current task statuses remain authoritative.",
+  "objective": "Deliver S0: a native macOS/Windows/Linux skeleton that opens and displays a JPEG, with repeatable setup, lint/build workflows, structured logs, real-render screenshots, agent smoke tests and platform packages. Only after S0, build the retained M1 catalog/geometry/persistent-history-preview-restore/export/live-MCP/manual-Locate editor. Apply the accepted programmable module-host boundaries in M1 and scope the later external-loader proof from measured activation costs.",
+  "context_summary": "Planning only; no app, tooling, VM, build or benchmark was executed. Latest user instruction supersedes the full editor as the first end-to-end build. S0 excludes editing tools, catalogs, export and production IPC/MCP; early agent verification uses a development launch/state/capture harness sharing the real open-image service. Mac M4 is the primary development machine, but S0 completion requires the accepted three-platform launch/load matrix. Rust/Iced/wgpu remains provisional pending narrow probes and product constraints. TASK-002 through TASK-022 retain IDs; TASK-004 and TASK-007 through TASK-022 are M1 follow-on work. TASK-035 through TASK-063 detail S0, with TASK-060 optional and off the completion gate. TASK-064 bridges to M1. Product choices are in tasks/product-decisions.json; explicit local gates verify external decisions before completing. Commands remain empty until real tooling exists. Execution started 2026-09-19: independent fixture and repository-convention work; external S0 gate answers remain outstanding. Latest owner override (2026-09-19): defer manual Windows/Linux acceptance and manual license review tasks; finish local scaffold hardening and M4 evidence. Architecture planning update 2026-09-19: accepted D19\u2013D21 require all operations to be programmable and built-in/external tools to use core history/change services. M1 tasks now explicitly establish this boundary and verify full operation coverage. TASK-067 follows the verified M1 handoff to measure optional-module activation and scope the required external-loader proof; it is not on the S0/M1 gate. No application code or task completion is authorized by this update. Historical provisional stack notes above are superseded by the recorded Rust/Iced selection and existing S0 viewer; current task statuses remain authoritative. History coverage review 2026-09-19: persistent navigable per-edit history is a core M1 requirement. TASK-007/008/009/011 establish its types, transactions, rendering and service; TASK-071 adds the history UI, consumed by TASK-015 and verification gates. Product TASK-070 resolves restore/navigation policy before TASK-064. No implementation statuses are completed by this planning update. Product TASK-070 was subsequently completed on 2026-09-20 by explicit owner acceptance of appending Restore actions while retaining all history. M1 gate and implementation statuses remain pending.",
   "tasks": [
     {
       "id": "TASK-002",
@@ -49,8 +49,8 @@
           "Reproduce synthetic examples and verify their metadata independently where feasible."
         ],
         "commands": [
-          "python3 tools/check_repository.py",
-          "python3 tools/check_fixtures.py"
+          "cargo xtask check-repository",
+          "cargo xtask fixtures"
         ],
         "expected_results": [
           "Each acceptance scenario has a traceable fixture or a documented later owner-supplied sample requirement."
@@ -328,7 +328,13 @@
           "kind": "file",
           "label": "Programmable operations and module host",
           "target": "docs/design/modules-and-api.md",
-          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+          "relevance": "Records accepted D19\u2013D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+        },
+        {
+          "kind": "file",
+          "label": "Core edit history",
+          "target": "docs/specs/edit-history.md",
+          "relevance": "Defines durable per-action log, immutable historical state, arbitrary-entry preview/restore, retention, conflicts and acceptance."
         }
       ],
       "acceptance_criteria": [
@@ -337,7 +343,9 @@
         "Validate nonfinite values, invalid crop coverage, aspect ratios, angle bounds and output dimension limits consistently.",
         "Deterministic fixture and property tests cover EXIF interpretation boundaries, transform composition and valid inverse crop mapping without involving UI widgets.",
         "Define a minimal registry/provider contract for built-in tools/decoders: identifiers, operation/schema discovery, feature validation and recipe/render boundaries. Keep shared invariants and history/change APIs in the host; do not create a dynamic loader, public ABI framework or generic node graph.",
-        "Define an operation coverage matrix for every M1 action, including session state and any settings; new module operations must enter the same typed registry rather than a GUI-only path."
+        "Define an operation coverage matrix for every M1 action, including session state and any settings; new module operations must enter the same typed registry rather than a GUI-only path.",
+        "Define stable history entry IDs/sequence, semantic action/provider/parameters, actor/request attribution, base/result revisions and complete immutable recipe snapshots. Distinguish current committed state, undo/redo navigation and selected historical preview.",
+        "Define paginated history list/inspect, entry preview, return-to-current and restore schemas with expected revision/request ID, history notifications and missing-entry/wrong-asset/source/provider/draft/conflict errors. Every committed tool edit must use this core contract."
       ],
       "test_strategy": {
         "approach": "mixed",
@@ -356,7 +364,7 @@
     },
     {
       "id": "TASK-008",
-      "description": "Implement the transactional catalog and durable edit history.",
+      "description": "Implement the transactional catalog and persistent per-action edit log with reconstructable historical states.",
       "status": "pending",
       "dependencies": [
         "TASK-007"
@@ -383,7 +391,13 @@
           "kind": "file",
           "label": "Programmable operations and module host",
           "target": "docs/design/modules-and-api.md",
-          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+          "relevance": "Records accepted D19\u2013D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+        },
+        {
+          "kind": "file",
+          "label": "Core edit history",
+          "target": "docs/specs/edit-history.md",
+          "relevance": "Defines durable per-action log, immutable historical state, arbitrary-entry preview/restore, retention, conflicts and acceptance."
         }
       ],
       "acceptance_criteria": [
@@ -391,7 +405,11 @@
         "Atomically commit state/history and implement undo/redo branch behavior, revision checks and request deduplication semantics.",
         "Add exclusive application ownership and consistent catalog snapshots, with explicit busy/incompatible/failed-commit results.",
         "Integration checks prove restart persistence, transaction rollback, duplicate-request behavior and that failed writes preserve the last committed recipe.",
-        "Expose atomic recipe/history change services used by built-in modules; modules cannot write catalog tables or maintain separate undo state. Preserve unsupported provider payloads/history, or reject an incompatible catalog non-destructively with a recovery path; never normalize unknown edits away."
+        "Expose atomic recipe/history change services used by built-in modules; modules cannot write catalog tables or maintain separate undo state. Preserve unsupported provider payloads/history, or reject an incompatible catalog non-destructively with a recovery path; never normalize unknown edits away.",
+        "Persist Original and every committed image action with enough immutable recipe state to render any point without replaying old commands. Atomically update log, current recipe/reference, revision, navigation state and deduplication result.",
+        "Retain every entry when restoring, undoing/redoing or editing after undo. Apply the restore/navigation policy resolved by product TASK-070. History IDs and usable shortcut navigation survive restart; revision preconditions remain monotonic.",
+        "Failed/rejected/no-op edits, cancelled drafts and session operations create no successful image edit entry. Implement indexed bounded history queries without loading all entries or storing full pixel images per entry.",
+        "Store the current-entry reference, per-entry undo parent, restore target and persisted redo path. Undo/redo navigation increments concurrency revision atomically without appending artificial edit steps; new edits/restores clear shortcut redo while preserving the entire chronological log."
       ],
       "test_strategy": {
         "approach": "mixed",
@@ -399,7 +417,9 @@
           "Exercise temporary catalogs with valid, stale and retried edits.",
           "Interrupt transactions and reopen; verify durable state/history consistency.",
           "Test backup restoration and a second owner attempt.",
-          "Exercise a module-originated edit and host undo/redo; verify persisted provider data and explicit rejection/recovery for unsupported data without destructive rewriting."
+          "Exercise a module-originated edit and host undo/redo; verify persisted provider data and explicit rejection/recovery for unsupported data without destructive rewriting.",
+          "Verify crop/flip/rotate/straighten/reset entries, Original and all intermediate snapshots; preview/restore them after a new edit invalidates redo and after reopen.",
+          "Inject failed/interrupted transactions and duplicate requests; verify recipe/log/navigation/revision consistency and unchanged source bytes."
         ],
         "commands": [],
         "expected_results": [
@@ -441,7 +461,13 @@
           "kind": "file",
           "label": "Programmable operations and module host",
           "target": "docs/design/modules-and-api.md",
-          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+          "relevance": "Records accepted D19\u2013D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+        },
+        {
+          "kind": "file",
+          "label": "Core edit history",
+          "target": "docs/specs/edit-history.md",
+          "relevance": "Defines durable per-action log, immutable historical state, arbitrary-entry preview/restore, retention, conflicts and acceptance."
         }
       ],
       "acceptance_criteria": [
@@ -449,14 +475,16 @@
         "Implement the accepted color transforms and geometry sampler with bounded intermediate storage and no repeated destructive resampling.",
         "Handle untagged sRGB assumptions, unsupported color modes, malformed input/profile and excessive dimensions explicitly.",
         "Reference fixture renders match declared geometry/color expectations, and unsupported/oversized input fails without uncontrolled allocation.",
-        "Implement the built-in decoder/geometry processing providers behind TASK-007 contracts; the shared engine owns color/coordinate contracts and scheduling, while modules own their feature algorithms. Preview and export evaluate the same immutable recipe semantics."
+        "Implement the built-in decoder/geometry processing providers behind TASK-007 contracts; the shared engine owns color/coordinate contracts and scheduling, while modules own their feature algorithms. Preview and export evaluate the same immutable recipe semantics.",
+        "Render any retained complete recipe snapshot through the same source/geometry/color pipeline as current-state preview; identify the requested history entry and render generation, bound resources and reject stale results."
       ],
       "test_strategy": {
         "approach": "mixed",
         "steps": [
           "Run labeled geometry and ICC/EXIF fixtures through the CPU reference path.",
           "Measure peak allocations on 24/60 MP samples and malformed dimension cases.",
-          "Compare output against the TASK-004 reference results."
+          "Compare output against the TASK-004 reference results.",
+          "Compare Original and intermediate geometry previews against known snapshots; rapid historical requests cannot display a stale entry as current selection."
         ],
         "commands": [],
         "expected_results": [
@@ -537,7 +565,13 @@
           "kind": "file",
           "label": "Programmable operations and module host",
           "target": "docs/design/modules-and-api.md",
-          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+          "relevance": "Records accepted D19\u2013D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+        },
+        {
+          "kind": "file",
+          "label": "Core edit history",
+          "target": "docs/specs/edit-history.md",
+          "relevance": "Defines durable per-action log, immutable historical state, arbitrary-entry preview/restore, retention, conflicts and acceptance."
         }
       ],
       "acceptance_criteria": [
@@ -545,14 +579,18 @@
         "Handle source aliases, repeat import, missing/changed original, save failure, invalid parameters and revision conflicts with structured results.",
         "Route mutations through catalog transactions and emit committed revision/state changes; keep source files read-only.",
         "Service integration tests complete import/edit/reopen flows while proving failed or conflicting actions make no partial durable change.",
-        "Register the built-in providers and route module operations through host validation, atomic changes/history and scheduling. The service and registry are usable headlessly without constructing panels; no alternate module-owned persistence path is allowed."
+        "Register the built-in providers and route module operations through host validation, atomic changes/history and scheduling. The service and registry are usable headlessly without constructing panels; no alternate module-owned persistence path is allowed.",
+        "Implement bounded history list/inspect, arbitrary-entry read-only preview, return-to-current and revision-checked undoable restore through the host service. Restore/navigation follows product TASK-070; all tools use one log.",
+        "Preserve active drafts; require explicit resolution before restore/navigation mutations. Agent commits during historical preview update current state without retargeting the selected entry; stale restore fails. Headless historical rendering leaves GUI selection unchanged unless explicitly requested.",
+        "History preview does not mutate committed recipe/revision/log or change export input. Editing from a historical preview requires explicit restore or return-to-current."
       ],
       "test_strategy": {
         "approach": "mixed",
         "steps": [
           "Import valid and invalid fixtures into temporary catalogs.",
           "Replay equivalent core actions and compare histories and source hashes.",
-          "Exercise path aliases, lock conflicts, source replacement and failed persistence."
+          "Exercise path aliases, lock conflicts, source replacement and failed persistence.",
+          "Exercise all history operations headlessly, wrong-asset/missing entries, source/provider unavailability, duplicate restore and stale revision; compare immutable recipes and history IDs."
         ],
         "commands": [],
         "expected_results": [
@@ -635,7 +673,13 @@
           "kind": "file",
           "label": "Programmable operations and module host",
           "target": "docs/design/modules-and-api.md",
-          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+          "relevance": "Records accepted D19\u2013D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+        },
+        {
+          "kind": "file",
+          "label": "Core edit history",
+          "target": "docs/specs/edit-history.md",
+          "relevance": "Defines durable per-action log, immutable historical state, arbitrary-entry preview/restore, retention, conflicts and acceptance."
         }
       ],
       "acceptance_criteria": [
@@ -644,7 +688,8 @@
         "Provide Fit, editable zoom percentage, 100% inspection and pan with gestures distinct from crop movement; keep view state independent of edit history and exported dimensions.",
         "Keep one durable action per committed gesture and show accurate loading, draft, saving/saved, source-missing and failure states.",
         "Pointer and keyboard workflows work at supported DPI/zoom levels with accessible names/focus and no editing rules stored solely in widgets.",
-        "Map every introduced UI action to the common operation coverage matrix, including settings if added; widgets adapt gestures to registered feature operations and use the module validator instead of duplicating feature rules."
+        "Map every introduced UI action to the common operation coverage matrix, including settings if added; widgets adapt gestures to registered feature operations and use the module validator instead of duplicating feature rules.",
+        "Integrate shared history actions with geometry drafts: never silently discard a draft for restore/undo/redo, and distinguish historical-preview mode from active crop editing. The history panel itself is TASK-071."
       ],
       "test_strategy": {
         "approach": "mixed",
@@ -692,7 +737,13 @@
           "kind": "file",
           "label": "Programmable operations and module host",
           "target": "docs/design/modules-and-api.md",
-          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+          "relevance": "Records accepted D19\u2013D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+        },
+        {
+          "kind": "file",
+          "label": "Core edit history",
+          "target": "docs/specs/edit-history.md",
+          "relevance": "Defines durable per-action log, immutable historical state, arbitrary-entry preview/restore, retention, conflicts and acceptance."
         }
       ],
       "acceptance_criteria": [
@@ -700,7 +751,8 @@
         "Keep protocol stdout clean and errors structured; optional one-shot wrappers wait for completion.",
         "Enforce revision/retry rules, one-owner discovery and explicit client job cancellation. Client EOF must not kill a GUI owner or other clients' jobs; headless-owner shutdown remains safe.",
         "An automated headless journey imports, edits, inspects, undoes/redoes and exports through the same service without using the GUI.",
-        "Expose all applicable registered M1 operations, including any settings, with machine-readable state and errors. Compare JSON discovery with the operation coverage matrix; a hand-maintained subset of tools does not establish full API coverage."
+        "Expose all applicable registered M1 operations, including any settings, with machine-readable state and errors. Compare JSON discovery with the operation coverage matrix; a hand-maintained subset of tools does not establish full API coverage.",
+        "Expose history list/inspect/preview/return-to-current/restore in JSON with the same schemas and errors; a headless journey previews and restores an arbitrary retained entry after reopen."
       ],
       "test_strategy": {
         "approach": "mixed",
@@ -722,7 +774,8 @@
       "dependencies": [
         "TASK-012",
         "TASK-013",
-        "TASK-020"
+        "TASK-020",
+        "TASK-071"
       ],
       "extra_context": [
         "M1 follow-on after S0 and TASK-064, not part of the first image-loading skeleton. Reuse the S0 build, diagnostics and verification tooling."
@@ -740,13 +793,20 @@
           "label": "Design-stage user guide",
           "target": "docs/user-guide.md",
           "relevance": "Defines terminology and intended user experience."
+        },
+        {
+          "kind": "file",
+          "label": "Core edit history",
+          "target": "docs/specs/edit-history.md",
+          "relevance": "Defines durable per-action log, immutable historical state, arbitrary-entry preview/restore, retention, conflicts and acceptance."
         }
       ],
       "acceptance_criteria": [
         "Wire export destination selection, Keep metadata setting initially off, progress/cancellation and result reporting to the shared export service; show the effective option for the requested job.",
         "Restore committed recipe/history on reopen and show missing/changed source or failed-save states accurately.",
         "Subscribe to committed state/job events and reflect agent changes in the photo/history. Preserve an active human crop draft on an external commit and show an explicit stale-revision conflict; provide clear recovery/error text.",
-        "The full human import/edit/undo/reopen/export journey is usable in the desktop app and preserves source bytes."
+        "The full human import/edit/undo/reopen/export journey is usable in the desktop app and preserves source bytes.",
+        "Integrate TASK-071 history panel with reopen, drafts, current-state notifications and export. Show whether a historical entry or committed state is displayed; export explicitly captures committed state while history preview is active."
       ],
       "test_strategy": {
         "approach": "mixed",
@@ -792,7 +852,13 @@
           "kind": "file",
           "label": "Programmable operations and module host",
           "target": "docs/design/modules-and-api.md",
-          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+          "relevance": "Records accepted D19\u2013D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+        },
+        {
+          "kind": "file",
+          "label": "Core edit history",
+          "target": "docs/specs/edit-history.md",
+          "relevance": "Defines durable per-action log, immutable historical state, arbitrary-entry preview/restore, retention, conflicts and acceptance."
         }
       ],
       "acceptance_criteria": [
@@ -800,7 +866,9 @@
         "Verify source byte hashes, alias protection, changed originals, interrupted writes, retry behavior, job cancellation and catalog contention. Test agent commits during a human draft, disconnect/reconnect state refresh, and same-name/different-content relink candidates.",
         "Compare preview/export color and geometry under declared tolerances and record independent-viewer checks. Verify free/Option crop and composition-preserving straightening across zoom/DPI, actual 100% detail, and both metadata modes through UI/CLI/MCP with independent tag inspection.",
         "Document all results and fix correctness/recovery regressions; no unverified path is described as passing.",
-        "Complete the per-operation UI/service/JSON/MCP coverage matrix for all M1 actions; compare canonical state/history, notifications/errors and rendered results where applicable. Prove the built-in geometry module uses shared host change/undo services in headless and live-GUI flows."
+        "Complete the per-operation UI/service/JSON/MCP coverage matrix for all M1 actions; compare canonical state/history, notifications/errors and rendered results where applicable. Prove the built-in geometry module uses shared host change/undo services in headless and live-GUI flows.",
+        "Complete all history-spec acceptance cases: every committed geometry action, Original/intermediate preview, restore plus undo/redo/new edit, retention/reopen, attribution, missing source/provider, duplicate/stale requests, draft/agent conflicts, failure rollback and bounded long-history browsing.",
+        "Verify UI/JSON/live-MCP parity in entry IDs, canonical recipes, revision changes, notifications and rendered results. Capture real history UI with correlated selected-entry/current-state evidence."
       ],
       "test_strategy": {
         "approach": "mixed",
@@ -808,7 +876,8 @@
           "Run the acceptance matrix against the implemented executable and recorded fixtures.",
           "Use controlled interruption/failure injection for persistence and export.",
           "Inspect differences and distinguish JPEG encoding variation from geometry/color errors.",
-          "Inspect every registered operation and UI action for a documented API route; exercise valid, invalid and stale-revision cases appropriate to that action."
+          "Inspect every registered operation and UI action for a documented API route; exercise valid, invalid and stale-revision cases appropriate to that action.",
+          "Execute Original \u2192 Crop \u2192 Flip \u2192 Rotate \u2192 Straighten \u2192 Reset; preview each point, restore Crop and Original, undo/redo, make a new edit and reopen; compare all saved states and source hashes."
         ],
         "commands": [],
         "expected_results": [
@@ -844,6 +913,12 @@
           "target": "docs/plan.md",
           "relevance": "Requires packaged native runs rather than compilation alone.",
           "locator": "Milestones and exit gates"
+        },
+        {
+          "kind": "file",
+          "label": "Core edit history",
+          "target": "docs/specs/edit-history.md",
+          "relevance": "Defines durable per-action log, immutable historical state, arbitrary-entry preview/restore, retention, conflicts and acceptance."
         }
       ],
       "acceptance_criteria": [
@@ -851,7 +926,8 @@
         "Run the full import/edit/undo/reopen/export journey on the owner's M4 and verify bundle launch without the developer toolchain in a clean macOS environment.",
         "Record exact chip/RAM/macOS/display configuration and repeatable optimized-build startup, preview/frame latency, idle CPU, memory, export throughput and cancellation measurements. Include source-detail loading during 100% pan/zoom alongside Fit-preview measurements.",
         "Verify live MCP edits appear in the GUI and share undo history, and manual Locate restores moved originals through both UI and MCP without changing asset identity.",
-        "Compare against accepted M4 budgets and fix or explicitly resolve failures; label VM observations separately and retain added Windows/Linux M1 editor behavior as unverified until TASK-019 passes."
+        "Compare against accepted M4 budgets and fix or explicitly resolve failures; label VM observations separately and retain added Windows/Linux M1 editor behavior as unverified until TASK-019 passes.",
+        "Include native M4 history browsing, arbitrary-entry preview/restore and restart retention in the packaged editor journey. Record latency/memory with a generated long log and rapid preview selection; correlate visible history entries with state/capture evidence."
       ],
       "test_strategy": {
         "approach": "mixed",
@@ -902,13 +978,20 @@
           "label": "Documentation-first process",
           "target": "AGENTS.md",
           "relevance": "Requires coordinated task/spec/user-documentation updates."
+        },
+        {
+          "kind": "file",
+          "label": "Core edit history",
+          "target": "docs/specs/edit-history.md",
+          "relevance": "Defines durable per-action log, immutable historical state, arbitrary-entry preview/restore, retention, conflicts and acceptance."
         }
       ],
       "acceptance_criteria": [
         "Replace design-only instructions with verified install and UI/CLI examples where implementation exists; preserve planned labels elsewhere.",
         "Update feature state and decisions with links to validation and benchmark evidence, including supported color/input/platform limits.",
         "Validate both active task plans, dependency waves and external decision gate conditions; preserve task IDs/history and record remaining M1 blockers honestly.",
-        "Hand off a self-contained M1 report and next decisions about Library, tonal tools, RAW priority and broader photographer storage workflows; live MCP and manual Locate must already be included in the verified M1 scope."
+        "Hand off a self-contained M1 report and next decisions about Library, tonal tools, RAW priority and broader photographer storage workflows; live MCP and manual Locate must already be included in the verified M1 scope.",
+        "Publish the implemented history workflow and limitations, resolve feature status against TASK-071/016/017 evidence, and record product TASK-070 outcome without claiming future tools are implemented."
       ],
       "test_strategy": {
         "approach": "inspection",
@@ -968,6 +1051,12 @@
           "target": "docs/specs/single-image.md",
           "locator": "Acceptance journey",
           "relevance": "Defines the same observable editor behavior on every supported platform."
+        },
+        {
+          "kind": "file",
+          "label": "Core edit history",
+          "target": "docs/specs/edit-history.md",
+          "relevance": "Defines durable per-action log, immutable historical state, arbitrary-entry preview/restore, retention, conflicts and acceptance."
         }
       ],
       "acceptance_criteria": [
@@ -975,7 +1064,8 @@
         "Run the complete first-image journey on native GPU-equipped target systems, checking backend features, input/focus/accessibility, high DPI, color, dialogs and source preservation.",
         "Record driver/GPU and native performance results separately from VM/software-rendered results and fix material portability failures.",
         "Verify live MCP edits appear in the GUI and share undo history, and manual Locate restores moved originals through both UI and MCP without changing asset identity.",
-        "Update feature status and user documentation with tested OS/architecture/backend limits; keep unverified targets explicitly open."
+        "Update feature status and user documentation with tested OS/architecture/backend limits; keep unverified targets explicitly open.",
+        "Repeat history browsing/preview/restore, keyboard navigation, retention after new edits/reopen and live-agent history conflicts on the target Windows/Linux desktops; distinguish VM function from native GPU evidence."
       ],
       "test_strategy": {
         "approach": "mixed",
@@ -1018,13 +1108,20 @@
           "target": "docs/specs/single-image.md",
           "relevance": "Requires agents to operate while the GUI is open.",
           "locator": "Programmatic parity"
+        },
+        {
+          "kind": "file",
+          "label": "Core edit history",
+          "target": "docs/specs/edit-history.md",
+          "relevance": "Defines durable per-action log, immutable historical state, arbitrary-entry preview/restore, retention, conflicts and acceptance."
         }
       ],
       "acceptance_criteria": [
         "Implement per-catalog owner discovery and exclusive ownership with same-user local IPC; on macOS/Linux use a bounded Unix socket transport and design the Windows named-pipe adapter for portability.",
         "Route commands to the GUI owner when present, allow a headless owner when absent, and reject competing owners without stale state or split undo histories.",
         "Provide bounded command/event queues, request correlation, revision/sequence-aware state refresh and meaningful session selection/view queries.",
-        "Demonstrate two clients observing one authoritative state, stale-revision rejection, safe reconnect and owner/client shutdown without lost or duplicate mutations."
+        "Demonstrate two clients observing one authoritative state, stale-revision rejection, safe reconnect and owner/client shutdown without lost or duplicate mutations.",
+        "Carry history/current-revision events and explicit session historical-preview selection through the catalog owner; reconnect refreshes current and selected-entry state without replaying a mutation."
       ],
       "test_strategy": {
         "approach": "mixed",
@@ -1078,7 +1175,13 @@
           "kind": "file",
           "label": "Programmable operations and module host",
           "target": "docs/design/modules-and-api.md",
-          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+          "relevance": "Records accepted D19\u2013D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+        },
+        {
+          "kind": "file",
+          "label": "Core edit history",
+          "target": "docs/specs/edit-history.md",
+          "relevance": "Defines durable per-action log, immutable historical state, arbitrary-entry preview/restore, retention, conflicts and acceptance."
         }
       ],
       "acceptance_criteria": [
@@ -1086,7 +1189,8 @@
         "Expose discoverable schemas for M1 catalog/asset/session queries, geometry/history, bounded previews, export/jobs and source recovery from the shared operation registry.",
         "Preserve expected revisions, request/retry semantics, structured failures and explicit job cancellation; keep diagnostics off protocol stdout.",
         "Verify protocol interoperability and service parity with a real MCP client or conformance harness, including a live-GUI edit/preview/undo journey in final integration checks.",
-        "Audit MCP coverage against the common registry and every M1 UI action, including session/view state and any settings. Verify newly registered built-in operations require no separate feature implementation in the adapter."
+        "Audit MCP coverage against the common registry and every M1 UI action, including session/view state and any settings. Verify newly registered built-in operations require no separate feature implementation in the adapter.",
+        "Expose history list/inspect/preview/return-to-current/restore through discoverable MCP schemas; verify live-GUI and headless parity, including stale restore and preview that leaves committed state unchanged."
       ],
       "test_strategy": {
         "approach": "mixed",
@@ -1203,7 +1307,7 @@
           "Compare each answer with the S0 spec and record referenced task IDs."
         ],
         "commands": [
-          "python3 tools/check_repository.py"
+          "cargo xtask check-repository"
         ],
         "expected_results": [
           "Complete the gate only when the required product inputs are recorded; independent fixture/probe tasks may continue while inputs are missing."
@@ -1318,7 +1422,7 @@
           "Validate Markdown/task links and ensure the future CI schema/validator strategy is documented."
         ],
         "commands": [
-          "python3 tools/check_repository.py"
+          "cargo xtask check-repository"
         ],
         "expected_results": [
           "Keep private originals, logs/screenshots and build artifacts out of tracked source; conventions are usable on all target OSes."
@@ -1795,7 +1899,7 @@
       "extra_context": [
         "S0 implementation; no editing tools.",
         "Implementation, native Open/Cancel and shared failure path verified. Current packaged native selection remains unverified: automated panel Open stays disabled for valid synthetic JPEGs; no-filter experiment failed and was reverted. Owner confirmation requested. Earlier probe success is retained but not substituted.",
-        "2026-09-19: owner explicitly confirmed “I can open a JPEG manually.” Native selection is accepted as owner-observed evidence, separate from automated OS-window shortcut/cancel/resize/close and exact-package renderer/state/log evidence. Earlier automation blocker is resolved by this report; no claim of automated picker-selection success."
+        "2026-09-19: owner explicitly confirmed \u201cI can open a JPEG manually.\u201d Native selection is accepted as owner-observed evidence, separate from automated OS-window shortcut/cancel/resize/close and exact-package renderer/state/log evidence. Earlier automation blocker is resolved by this report; no claim of automated picker-selection success."
       ],
       "context_links": [
         {
@@ -2048,7 +2152,7 @@
         "commands": [
           "cargo xtask check",
           "cargo xtask smoke --scenario alternating --output artifacts/new-alternating",
-          "python3 tools/check_hardening.py --binary target/release/lightwell --output artifacts/new-failure-checks"
+          "cargo xtask hardening --binary target/release/lightwell --output artifacts/new-failure-checks"
         ],
         "expected_results": [
           "An agent can reproduce a scenario, inspect logs and the actual PNG, and determine the result without guessing GUI coordinates."
@@ -2068,8 +2172,7 @@
         "CI activation authorized after scaffold commit 05937b7. Follow docs/engineering/ci-plan.md; hosted execution and remaining task acceptance are distinct. First run: https://github.com/Willyham/lightwell/actions/runs/35460222072.",
         "Hosted verification: run 35460353189 passes macOS/Windows build-package and fixture jobs; run 35460833672 fixes Linux X11 runtime and passes all Linux Xvfb/llvmpipe smoke scenarios. Dependency audit still fails on two known maintenance advisories; full task prerequisites/desktop acceptance are not complete. See docs/engineering/ci-results.md.",
         "Existing hosted three-OS checks/packages passed at c0ad340; current source and expanded renderer scenarios have not been pushed/executed remotely, so fresh hosted verification remains pending.",
-        "2026-09-19 closure: source snapshot 6b13871 committed on codex/s0-closure; hosted verification awaits explicit source-push authorization after automatic approval rejection. Runtime-import collection and packaged Linux smoke are configured, not yet verified remotely. See docs/engineering/ci-results.md.",
-        "Closure run 35471983478 failed all native Check jobs on an accidental optional-Pillow import in the missing-evidence regression. Corrected metadata-before-pixels validation and tested with site packages disabled and pinned Pillow present; hosted rerun pending."
+        "2026-09-19 closure: source snapshot 6b13871 committed on codex/s0-closure; hosted verification awaits explicit source-push authorization after automatic approval rejection. Runtime-import collection and packaged Linux smoke are configured, not yet verified remotely. See docs/engineering/ci-results.md."
       ],
       "context_links": [
         {
@@ -2308,7 +2411,7 @@
       "extra_context": [
         "S0 implementation; no editing tools.",
         "Current local package smoke passes; native shortcut/cancel/resize/close observed. Native picker selection remains blocked in automation (Open disabled), awaiting owner manual result; no fresh permission is needed.",
-        "2026-09-19: owner explicitly confirmed “I can open a JPEG manually.” Native selection is accepted as owner-observed evidence, separate from automated OS-window shortcut/cancel/resize/close and exact-package renderer/state/log evidence. Earlier automation blocker is resolved by this report; no claim of automated picker-selection success."
+        "2026-09-19: owner explicitly confirmed \u201cI can open a JPEG manually.\u201d Native selection is accepted as owner-observed evidence, separate from automated OS-window shortcut/cancel/resize/close and exact-package renderer/state/log evidence. Earlier automation blocker is resolved by this report; no claim of automated picker-selection success."
       ],
       "context_links": [
         {
@@ -2539,7 +2642,7 @@
         ],
         "commands": [
           "cargo xtask check",
-          "python3 tools/measure_scaffold.py --binary target/release/lightwell --output artifacts/new-baseline"
+          "cargo xtask measure --binary target/release/lightwell --output artifacts/new-baseline"
         ],
         "expected_results": [
           "Publish an initial baseline with limitations; do not claim provisional M1 budgets, VM timings or unmeasured platforms were validated."
@@ -2559,7 +2662,7 @@
       ],
       "extra_context": [
         "S0 implementation; no editing tools.",
-        "2026-09-19: docs/engineering/bootstrap-playbook.md written; pinned Pillow setup, shared checks and actual packaged replacement smoke verified from a clean local clone (warm shared Cargo cache). Completion still waits for current Windows/Linux package prerequisites."
+        "2026-09-19: docs/engineering/bootstrap-playbook.md written; toolchain setup, shared checks and actual packaged replacement smoke verified from a clean local clone (warm shared Cargo cache). Completion still waits for current Windows/Linux package prerequisites."
       ],
       "context_links": [
         {
@@ -2699,7 +2802,20 @@
           "kind": "file",
           "label": "Programmable operations and module host",
           "target": "docs/design/modules-and-api.md",
-          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+          "relevance": "Records accepted D19\u2013D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+        },
+        {
+          "kind": "file",
+          "label": "Core edit history",
+          "target": "docs/specs/edit-history.md",
+          "relevance": "Defines durable per-action log, immutable historical state, arbitrary-entry preview/restore, retention, conflicts and acceptance."
+        },
+        {
+          "kind": "file",
+          "label": "History restore/navigation decision",
+          "target": "tasks/product-decisions.json",
+          "locator": "TASK-070",
+          "relevance": "Required additional external product input, inspected before closing this gate."
         }
       ],
       "acceptance_criteria": [
@@ -2707,7 +2823,9 @@
         "Reconcile the retained editor/source-recovery/architecture specs with S0 evidence and define the remaining geometry/color experiment outputs for TASK-004.",
         "Preserve the agreed crop, zoom, metadata, live MCP and manual Locate scope; do not turn future RAW/storage/plugin decisions into prerequisites.",
         "Record referenced product decisions and validate the revised editor dependencies before starting M1 implementation.",
-        "Apply accepted D19–D21 to the M1 contract: complete operation coverage, built-in feature registration/validation/rendering and host-owned recipe/history services. Distinguish linked modules from external loading; leave masks, clone/tonal tools and the loader outside M1."
+        "Apply accepted D19\u2013D21 to the M1 contract: complete operation coverage, built-in feature registration/validation/rendering and host-owned recipe/history services. Distinguish linked modules from external loading; leave masks, clone/tonal tools and the loader outside M1.",
+        "Verify external product TASK-070 is completed with the restore/navigation decision recorded; TASK-028/030 completion alone does not settle the later clarification. Inspect this extra external input explicitly; the existing repository checker only enforces TASK-026\u2013030.",
+        "Finalize persistent per-action history as a core dependency of every editing tool, including stable snapshots, arbitrary-entry preview/restore, retained old states, monotonic revisions and TASK-071 UI acceptance."
       ],
       "test_strategy": {
         "approach": "inspection",
@@ -2815,7 +2933,7 @@
           "kind": "file",
           "label": "Programmable operations and module host",
           "target": "docs/design/modules-and-api.md",
-          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+          "relevance": "Records accepted D19\u2013D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
         },
         {
           "kind": "file",
@@ -2888,6 +3006,91 @@
           "The dominant delay is measured and ordinary development uses the verified optimized path."
         ]
       }
+    },
+    {
+      "id": "TASK-069",
+      "description": "Implement Rust xtask development commands and verification.",
+      "status": "completed",
+      "dependencies": [],
+      "extra_context": [
+        "Owner selected Rust-only project tooling; independent Go API client is optional future work. Preserve existing fixture bytes and automated verification coverage.",
+        "Implemented in Rust xtask; updated CI/docs. cargo xtask check/fixtures/audit/package and all eight M4 native smoke scenarios pass, with hardening and short measurement-runner verification. Golden hashes unchanged; new debug/release large fixture generation matches byte-for-byte. Current hosted verification remains TASK-052/053/055/056."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "Rust tooling migration",
+          "target": "docs/engineering/rust-tooling.md",
+          "relevance": "Scope, command parity, fixture provenance and acceptance."
+        }
+      ],
+      "acceptance_criteria": [
+        "Run maintained check/build/develop/package/audit/fixture/smoke and diagnostic tooling through Rust.",
+        "Preserve fixture hashes and evidence/policy safeguards, with Rust regression tests.",
+        "Update CI and setup documentation and verify native packaged behavior."
+      ],
+      "test_strategy": {
+        "approach": "mixed",
+        "steps": [
+          "Run Rust checks, fixture verification and failure/pixel/policy regressions.",
+          "Exercise native packaged replacement and large-image smoke; record hosted status."
+        ],
+        "commands": [
+          "cargo xtask check",
+          "cargo xtask fixtures"
+        ],
+        "expected_results": [
+          "The pinned Rust toolchain runs all maintained development commands; truthful evidence and source preservation remain."
+        ]
+      }
+    },
+    {
+      "id": "TASK-071",
+      "description": "Build the M1 history browser with arbitrary-entry preview, restore and return-to-current.",
+      "status": "pending",
+      "dependencies": [
+        "TASK-010",
+        "TASK-011"
+      ],
+      "extra_context": [
+        "Dedicated missing UI outcome from the owner history clarification. Core log and service come from TASK-007/008/011; shell/draft/export integration is completed by TASK-015.",
+        "Restore/navigation semantics are resolved by product TASK-070 through TASK-064 upstream. No new editing tools or external module runtime are added.",
+        "2026-09-20: product TASK-070 is completed; Restore appends a new action and retains all history. Use the explicit undo-parent/redo-path and current/preview marker rules in the history spec."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "Core edit history",
+          "target": "docs/specs/edit-history.md",
+          "relevance": "Defines durable per-action log, immutable historical state, arbitrary-entry preview/restore, retention, conflicts and acceptance."
+        },
+        {
+          "kind": "file",
+          "label": "Editor interface",
+          "target": "docs/specs/single-image.md",
+          "locator": "Core edit history",
+          "relevance": "Places history in the one-image workspace and shared operation coverage."
+        }
+      ],
+      "acceptance_criteria": [
+        "Show Original and the persistent ordered action log with semantic labels and human/agent attribution; distinguish the current committed state and selected historical point. Use bounded paginated queries for long histories.",
+        "Provide pointer and accessible keyboard selection, read-only historical preview, Return to current and explicit Restore through the shared service. Apply product TASK-070 navigation rules without private widget history.",
+        "Show accurate preview loading/errors and entry identity; cancel/supersede stale renders. No preview may mutate committed state or masquerade as the current export recipe.",
+        "Surface restore draft/revision conflicts, preserve selected historical entry on live commits and permit return to the latest current state. Missing sources/providers retain visible history with an explicit rendering limitation.",
+        "Demonstrate real rendered Original/intermediate previews and restored results with state/capture provenance; correlate entry IDs and current revisions at Fit/100% and supported DPI."
+      ],
+      "test_strategy": {
+        "approach": "mixed",
+        "steps": [
+          "Use pointer and keyboard to browse Original/crop/flip/straighten states, return to current, restore an intermediate point, undo/redo and reopen.",
+          "Exercise rapid selection in a generated long log, background agent commit, active crop draft, unavailable original and failed restore.",
+          "Inspect native M4 layout/focus and actual image content against reported entry IDs; verify every UI action maps to the shared API coverage matrix."
+        ],
+        "commands": [],
+        "expected_results": [
+          "History is a usable visible editor feature with correct arbitrary-entry preview/restore; committed state changes only through an explicit successful mutation."
+        ]
+      }
     }
   ],
   "execution_waves": [
@@ -2897,7 +3100,8 @@
         "TASK-002",
         "TASK-035",
         "TASK-037",
-        "TASK-068"
+        "TASK-068",
+        "TASK-069"
       ]
     },
     {
@@ -3029,7 +3233,8 @@
       "task_ids": [
         "TASK-012",
         "TASK-013",
-        "TASK-020"
+        "TASK-020",
+        "TASK-071"
       ]
     },
     {

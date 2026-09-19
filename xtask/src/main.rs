@@ -1,32 +1,329 @@
+mod diagnostics;
+mod fixtures;
+mod package;
+mod policy;
+mod repository;
+mod smoke;
+use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::{
-    path::Path,
+    ffi::{OsStr, OsString},
+    fs,
+    io::Read,
+    path::{Path, PathBuf},
     process::{Command, ExitCode},
 };
-fn main() -> ExitCode {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
-    let args: Vec<_> = std::env::args_os().skip(1).collect();
-    let candidates: &[(&str, &[&str])] = if cfg!(windows) {
-        &[("py", &["-3"]), ("python", &[])]
+type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
+fn ensure(ok: bool, message: impl Into<String>) -> Result {
+    if ok {
+        Ok(())
     } else {
-        &[("python3", &[])]
-    };
-    for (program, prefix) in candidates {
-        match Command::new(program)
-            .env("PYTHONUTF8", "1")
-            .args(*prefix)
-            .arg(root.join("tools/dev.py"))
-            .args(&args)
-            .current_dir(root)
-            .status()
-        {
-            Ok(status) => return ExitCode::from(status.code().unwrap_or(1).clamp(0, 255) as u8),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(error) => {
-                eprintln!("Cannot run developer command: {error}");
-                return ExitCode::FAILURE;
-            }
+        Err(message.into().into())
+    }
+}
+fn read_json(path: &Path) -> Result<Value> {
+    Ok(serde_json::from_slice(&fs::read(path)?)?)
+}
+fn write_json(path: &Path, value: &Value) -> Result {
+    fs::write(path, format!("{}\n", serde_json::to_string_pretty(value)?))?;
+    Ok(())
+}
+fn hash(path: &Path) -> Result<String> {
+    let mut f = fs::File::open(path)?;
+    let mut h = Sha256::new();
+    let mut b = [0; 65536];
+    loop {
+        let n = f.read(&mut b)?;
+        if n == 0 {
+            break;
+        }
+        h.update(&b[..n]);
+    }
+    Ok(format!("{:x}", h.finalize()))
+}
+fn run(root: &Path, program: impl AsRef<OsStr>, args: &[&str]) -> Result {
+    let status = Command::new(program)
+        .args(args)
+        .current_dir(root)
+        .status()?;
+    ensure(
+        status.success(),
+        format!("Command {args:?} failed: {status}"),
+    )
+}
+fn output(root: &Path, program: impl AsRef<OsStr>, args: &[&str]) -> Result<String> {
+    let out = Command::new(program)
+        .args(args)
+        .current_dir(root)
+        .output()?;
+    ensure(out.status.success(), String::from_utf8_lossy(&out.stderr))?;
+    Ok(String::from_utf8(out.stdout)?)
+}
+fn files(root: &Path) -> Result<Vec<PathBuf>> {
+    let mut paths = Vec::new();
+    for item in fs::read_dir(root)? {
+        let p = item?.path();
+        if p.is_dir() {
+            paths.extend(files(&p)?)
+        } else {
+            paths.push(p)
         }
     }
-    eprintln!("Python 3.10+ is required for repository tooling; see CONTRIBUTING.md");
-    ExitCode::FAILURE
+    paths.sort();
+    Ok(paths)
+}
+fn root() -> Result<PathBuf> {
+    let cwd = std::env::current_dir()?;
+    cwd.ancestors()
+        .find(|p| {
+            p.join("tools/task-plan.schema.json").is_file() && p.join("xtask/Cargo.toml").is_file()
+        })
+        .map(Path::to_path_buf)
+        .ok_or_else(|| "Run from a Lightwell checkout".into())
+}
+fn absolute(root: &Path, path: &Path) -> PathBuf {
+    if path.is_absolute() {
+        path.into()
+    } else {
+        root.join(path)
+    }
+}
+fn binary(root: &Path) -> Result<PathBuf> {
+    let data: Value = serde_json::from_str(&output(
+        root,
+        "cargo",
+        &["metadata", "--locked", "--no-deps", "--format-version", "1"],
+    )?)?;
+    Ok(Path::new(
+        data["target_directory"]
+            .as_str()
+            .ok_or("Missing target directory")?,
+    )
+    .join("release")
+    .join(format!("lightwell{}", std::env::consts::EXE_SUFFIX)))
+}
+fn host(root: &Path) -> Result<String> {
+    output(root, "rustc", &["-vV"])?
+        .lines()
+        .find_map(|l| l.strip_prefix("host: ").map(str::to_owned))
+        .ok_or_else(|| "Missing rustc host".into())
+}
+fn cargo(root: &Path, op: &str, release: bool) -> Result {
+    let mut args = match op {
+        "build" => vec!["build", "--locked", "--package", "lightwell-app"],
+        "test" => vec!["test", "--locked", "--workspace"],
+        "fmt" => vec!["fmt", "--all", "--", "--check"],
+        "lint" => vec![
+            "clippy",
+            "--locked",
+            "--workspace",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings",
+        ],
+        _ => return Err("Unknown Cargo operation".into()),
+    };
+    if release {
+        args.push("--release")
+    }
+    run(root, "cargo", &args)
+}
+struct Args(Vec<OsString>);
+impl Args {
+    fn flag(&mut self, key: &str) -> bool {
+        if let Some(i) = self.0.iter().position(|x| x == key) {
+            self.0.remove(i);
+            true
+        } else {
+            false
+        }
+    }
+    fn value(&mut self, key: &str) -> Result<Option<OsString>> {
+        if let Some(i) = self.0.iter().position(|x| x == key) {
+            self.0.remove(i);
+            ensure(i < self.0.len(), format!("Missing {key} value"))?;
+            Ok(Some(self.0.remove(i)))
+        } else {
+            Ok(None)
+        }
+    }
+    fn path(&mut self, key: &str) -> Result<PathBuf> {
+        self.value(key)?
+            .map(PathBuf::from)
+            .ok_or_else(|| format!("Required: {key}").into())
+    }
+    fn done(&self) -> Result {
+        ensure(
+            self.0.is_empty(),
+            format!("Unknown arguments: {:?}", self.0),
+        )
+    }
+}
+fn main() -> ExitCode {
+    match main_result() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("FAIL: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+fn main_result() -> Result {
+    let root = root()?;
+    let mut args = std::env::args_os().skip(1);
+    let op = args.next().unwrap_or_else(|| "help".into());
+    let mut a = Args(args.collect());
+    match op.to_str().ok_or("Invalid command")? {
+        "develop" => {
+            let debug = a.flag("--debug");
+            let mut cmd = Command::new("cargo");
+            cmd.current_dir(&root).args(["run", "--locked"]);
+            if !debug {
+                cmd.arg("--release");
+            }
+            ensure(
+                cmd.args(["--package", "lightwell-app", "--"])
+                    .args(a.0)
+                    .status()?
+                    .success(),
+                "Application failed",
+            )?;
+        }
+        "check" => {
+            a.done()?;
+            repository::check(&root)?;
+            policy::checked(&root)?;
+            for op in ["fmt", "lint", "test"] {
+                cargo(&root, op, false)?
+            }
+            println!("Headless checks passed. GUI and platform acceptance remain separate.");
+        }
+        "check-repository" => {
+            a.done()?;
+            repository::check(&root)?;
+        }
+        "build" | "fmt" | "lint" | "test" => {
+            let release = a.flag("--release");
+            a.done()?;
+            cargo(&root, op.to_str().unwrap(), release)?;
+        }
+        "doctor" => {
+            a.done()?;
+            println!("Host: {}", host(&root)?);
+            for (p, as_) in [
+                ("rustc", vec!["--version"]),
+                ("cargo", vec!["fmt", "--version"]),
+                ("cargo", vec!["clippy", "--version"]),
+            ] {
+                run(&root, p, &as_)?
+            }
+            if cfg!(target_os = "macos") {
+                run(&root, "clang", &["--version"])?;
+            }
+            if cfg!(target_os = "linux") {
+                run(&root, "cc", &["--version"])?;
+                run(&root, "pkg-config", &["--version"])?;
+                ensure(
+                    std::env::var_os("DISPLAY").is_some()
+                        || std::env::var_os("WAYLAND_DISPLAY").is_some(),
+                    "No graphical session for smoke (headless check/build still available)",
+                )?;
+            }
+            println!(
+                "Native graphics driver, SDK/runtime libraries and an unlocked graphical session are required for UI checks; not proven by Doctor."
+            );
+        }
+        "fixtures" => {
+            a.done()?;
+            fixtures::check(&root)?;
+        }
+        "generate-fixtures" => {
+            let out = a
+                .value("--output")?
+                .map(PathBuf::from)
+                .unwrap_or_else(|| root.join("fixtures/generated"));
+            a.done()?;
+            fixtures::generate(&absolute(&root, &out))?;
+        }
+        "inventory" | "package" => {
+            let out = absolute(&root, &a.path("--output")?);
+            a.done()?;
+            if op == "package" {
+                package::package(&root, &out)?
+            } else {
+                package::inventory(&root, &out)?;
+            }
+        }
+        "audit" => {
+            a.done()?;
+            policy::audit(&root)?;
+        }
+        "smoke" => {
+            let out = absolute(&root, &a.path("--output")?);
+            let scenario = a
+                .value("--scenario")?
+                .unwrap_or_else(|| "load".into())
+                .into_string()
+                .map_err(|_| "Invalid scenario")?;
+            let bin = a
+                .value("--binary")?
+                .map(PathBuf::from)
+                .map(|p| absolute(&root, &p))
+                .unwrap_or(binary(&root)?);
+            a.done()?;
+            smoke::run(
+                &root,
+                &out,
+                &scenario,
+                &bin,
+                std::time::Duration::from_secs(35),
+            )?;
+        }
+        "check-capture" => {
+            let path = absolute(&root, &a.path("--image")?);
+            let orientation = a
+                .value("--orientation")?
+                .map(|s| s.to_string_lossy().parse::<u8>())
+                .transpose()?
+                .unwrap_or(6);
+            let aspect = a
+                .value("--aspect")?
+                .map(|s| s.to_string_lossy().parse::<f64>())
+                .transpose()?;
+            a.done()?;
+            println!("{}", smoke::pixels(&path, orientation, aspect)?);
+        }
+        "hardening" | "measure" => {
+            let out = absolute(&root, &a.path("--output")?);
+            let bin = absolute(&root, &a.path("--binary")?);
+            let samples = a
+                .value("--samples")?
+                .map(|s| s.to_string_lossy().parse::<usize>())
+                .transpose()?
+                .unwrap_or(30);
+            a.done()?;
+            if op == "hardening" {
+                diagnostics::hardening(&root, &out, &bin)?
+            } else {
+                diagnostics::measure(&root, &out, &bin, samples)?;
+            }
+        }
+        "probe" => {
+            let candidate = a
+                .value("--candidate")?
+                .ok_or("Required --candidate iced|egui")?
+                .into_string()
+                .map_err(|_| "Invalid candidate")?;
+            let out = absolute(&root, &a.path("--output")?);
+            a.done()?;
+            diagnostics::probe(&root, &out, &candidate)?;
+        }
+        "__hang" => std::thread::sleep(std::time::Duration::from_secs(60)),
+        "help" => println!(
+            "cargo xtask doctor|check|check-repository|fmt|lint|test|build [--release]|develop [--debug] [app args]|fixtures|generate-fixtures [--output NEW]|audit|inventory --output NEW|package --output NEW|smoke --output NEW [--scenario NAME] [--binary PATH]|check-capture --image PNG [--orientation N] [--aspect R]|hardening --binary PATH --output NEW|measure --binary PATH --output NEW [--samples N]|probe --candidate iced|egui --output NEW"
+        ),
+        _ => return Err("Unknown command; use cargo xtask help".into()),
+    }
+    Ok(())
 }

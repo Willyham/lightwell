@@ -42,11 +42,9 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get install -y xvfb mesa-vulkan-drivers libxkbcommon-x11-0
-          python3 -m venv .venv
-          .venv/bin/python -m pip install -r tools/fixture-requirements.txt
-          .venv/bin/python tools/generate_fixtures.py --large
+          cargo xtask generate-fixtures
           for scenario in empty load replacement invalid repeated alternating large24 large60; do
-            xvfb-run -a .venv/bin/python tools/dev.py smoke --binary artifacts/package/Lightwell/lightwell --scenario "$scenario" --output "artifacts/headless-$scenario"
+            xvfb-run -a cargo xtask smoke --binary artifacts/package/Lightwell/lightwell --scenario "$scenario" --output "artifacts/headless-$scenario"
           done
         env:
           WGPU_BACKEND: vulkan
@@ -65,12 +63,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: Pinned fixture environment
-        run: |
-          python3 -m venv .venv
-          .venv/bin/python -m pip install -r tools/fixture-requirements.txt
-      - name: Verify fixture hashes, content and regeneration
-        run: .venv/bin/python tools/dev.py fixtures
+      - name: Pinned Rust toolchain
+        run: rustup toolchain install 1.94.0 --profile minimal
+      - name: Verify golden fixtures and Rust generator
+        run: cargo xtask fixtures
 
   dependencies:
     runs-on: ubuntu-24.04

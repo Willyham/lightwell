@@ -30,7 +30,7 @@ The 4236-pixel source height crosses the 4096-pixel limit and triggers resamplin
 
 Evidence directories (ignored local artifacts): `artifacts/jpeg-investigation-debug`, `artifacts/jpeg-investigation-release`, `artifacts/jpeg-stages-debug`, `artifacts/jpeg-stages-release`. The stage runs exercised the actual `cargo xtask develop --debug` and default `cargo xtask develop` dispatch. The final release frame was visually inspected: terraced fields and the winding road fill the correctly proportioned portrait Fit image. The displayed image rectangle was pixel-identical between the instrumented debug and release renderer captures. This is output equivalence, not an independent color-accuracy certification.
 
-Source SHA-256 before/after: `8706b1fe34fc0e6d62d483a6868a5764e97429ca32a8dd9147dd66501a2e93b5`. The JPEG remains local and is ignored by Git. Repository check passed: both plan graphs and Markdown links, 11 Python tests, formatting, Clippy, 15 Rust tests and doc tests. No manual license or Windows/Linux desktop checks were added.
+Source SHA-256 before/after: `8706b1fe34fc0e6d62d483a6868a5764e97429ca32a8dd9147dd66501a2e93b5`. The JPEG remains local and is ignored by Git. Repository check passed: both plan graphs and Markdown links, runner regressions, formatting, Clippy, core/application tests and doc tests. No manual license or Windows/Linux desktop checks were added.
 
 Reproduce with a fresh evidence directory each time:
 

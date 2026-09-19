@@ -2,9 +2,6 @@
 **/target/
 /artifacts/
 /dist/
-/.venv/
-**/__pycache__/
-*.py[cod]
 # Local originals and diagnostic inputs never belong in source control.
 /private/
 /fixtures/generated/

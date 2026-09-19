@@ -8,3 +8,16 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+serde_json.workspace = true
+image.workspace = true
+lightwell-core = { path = "../crates/lightwell-core" }
+sha2 = "=0.10.9"
+regex = "=1.12.3"
+percent-encoding = "=2.3.2"
+tempfile = "=3.27.0"
+flate2 = "=1.1.10"
+tar = "=0.4.46"
+zip = { version = "=8.2.0", default-features = false, features = ["deflate-flate2"] }
+time = { version = "=0.3.55", features = ["parsing"] }

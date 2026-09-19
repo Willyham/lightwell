@@ -44,7 +44,7 @@ Proposed persisted entities:
 | --- | --- |
 | Asset | Stable ID, source locator, dimensions, orientation, format, metadata, source fingerprint, and availability |
 | Edit state | Asset ID, current recipe, monotonically increasing revision |
-| Edit commit | Previous/next recipe, actor, command/request ID, timestamp, and undo relationship |
+| Edit history entry | Stable ID/sequence, semantic action and parameters, actor/request/timestamp, base/result revision, immutable recipe snapshot and navigation/restore relationships |
 | Catalog metadata | Internal format marker and project settings |
 | Later: collections, ratings, labels and saved filters | Indexed organization primitives, added when scoped |
 
@@ -62,7 +62,7 @@ Internal format markers and backups protect v0 data. They do not imply a public 
 
 A recipe records intent: orientation adjustments, angle, crop, and later color parameters. Cache contents are derived from the source identity and complete recipe, never the source of truth.
 
-Keep pointer motion as an in-memory draft. Commit once per completed gesture or explicit Apply action. Undo restores the previous recipe; it does not reverse a lossy pixel transformation. Redo is available until a new edit replaces the redo branch. UI and agent commits have the same semantics and provenance.
+Keep pointer motion as an in-memory draft. Commit once per completed gesture or explicit Apply action. Every committed image change enters the core-owned persistent action log. Undo/redo, history browsing, arbitrary-entry preview and restore use its saved recipes; they never reverse lossy pixel transformations. A new edit may invalidate shortcut redo availability but must retain all historical entries and states. UI and agent commits share semantics and provenance. See the [history contract](../specs/edit-history.md); completed product TASK-070 records append-only Restore and retained history, verified before TASK-064 closes. The log plus current recipe can use ordinary tables and snapshots without a generalized event-sourcing system.
 
 The image's full edit geometry is independent of viewport zoom, panel position, display DPI, and preview resolution. M1 includes viewport pan, numeric zoom percentage and Fit; these are session/view state accessible to agents and do not alter the exported crop. [The single-image specification](../specs/single-image.md#geometry-contract) defines free handles, centered Option resizing and crop constraints before implementation.
 
@@ -98,7 +98,7 @@ Viewport-sized requests make drawing cost independent of total catalog size. A v
 
 **Accepted for the whole product:** every application operation, including all bundled and external photo-editing tools, must be callable by programs/agents. Exposure, white balance, masks and clone strokes are explicit future examples, not additions to M1. Semantic actions, settings and module lifecycle must be exposed when introduced; requiring GUI gestures is not API support. [The coverage contract](modules-and-api.md#what-an-operation-means) defines feature registration and reproducible inputs.
 
-**M1 agreed:** one typed command/query service exposed through JSON CLI and MCP, with live agent control while the GUI is open. Operation families include catalog create/open, asset import/list/get, edit get/set geometry/reset/undo/redo, preview render, export, and job get/cancel. Schemas include units, ranges, coordinate conventions, defaults, preconditions, and structured errors. Also expose capabilities so programs can discover what this build actually supports.
+**M1 agreed:** one typed command/query service exposed through JSON CLI and MCP, with live agent control while the GUI is open. Operation families include catalog create/open, asset import/list/get, edit get/set geometry/reset/undo/redo, history list/inspect/preview/restore and return-to-current, preview render, export, and job get/cancel. Schemas include units, ranges, coordinate conventions, defaults, preconditions, and structured errors. Also expose capabilities so programs can discover what this build actually supports.
 
 Use a persistent JSON command-session mode and a separate standards-compliant MCP stdio adapter, both with clean protocol stdout and diagnostic stderr. The adapters connect to the catalog owner. Optional one-shot CLI wrappers wait for completion. Disconnecting one client does not close the GUI or cancel another client's work; cancellation is explicit. When the owner exits, stop accepting work, cancel unfinished jobs safely, finish/roll back active catalog commits and release ownership. Do not promise durable export resumption in M1; clients reconnect and inspect revision/job state rather than blindly repeating a mutation.
 

@@ -17,13 +17,13 @@ The maintained source layout is recorded in `docs/design/s0-stack.md`. Do not cr
 
 ## Current checks
 
-Run from the repository root with Python 3.10 or later:
+Run from the repository root with the pinned Rust toolchain:
 
 ```sh
-python3 tools/check_repository.py
+cargo xtask check-repository
 ```
 
-On Windows, `py -3` may replace `python3`. This checks local Markdown/file links, both task schemas and DAGs, task status prerequisites, and external product gates. It requires no personal Codex path or third-party Python package. The checked-in schema defines the task format; keep it synchronized if the format is deliberately changed. Application formatting/build/test commands are documented below.
+This checks local Markdown/file links, both task schemas and DAGs, task status prerequisites, and external product gates. The pinned Rust toolchain runs these checks. The checked-in schema defines the task format; keep it synchronized if the format is deliberately changed. Application formatting/build/test commands are documented below.
 
 Fixture generation has separate pinned tooling; see the [fixture manifest](fixtures/README.md). Routine checks must not rewrite tracked files. Put all run evidence in `artifacts/<run-id>/`; document exact commands, build, fixture hash, backend and capture provenance. A skipped desktop check is not a pass. Do not commit private paths, machine identifiers, screenshots, logs, build outputs or camera originals. Only synthetic/licensed inputs may enter CI.
 

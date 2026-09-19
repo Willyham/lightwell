@@ -8,7 +8,7 @@ Status vocabulary: **planned now** = S0 bootstrap scope; **planned next** = reta
 
 | Capability | Status | Milestone / completion reference |
 | --- | --- | --- |
-| Repository conventions and plan/link checks | Implemented | TASK-037; Python checker, contributor instructions, ignore/editor defaults |
+| Repository conventions and plan/link checks | Implemented | TASK-037/069; Rust checker, contributor instructions, ignore/editor defaults |
 | Reproducible synthetic JPEG corpus | Implemented | TASK-002; 16 fixtures and generated 24/60 MP inputs |
 | JPEG and Iced/egui technical probes | Experimental | TASK-036 complete; TASK-003 complete; Iced selected |
 | Native macOS arm64 build | Implemented locally; acceptance ongoing | S0 package/load verification on M4; M1 editor verification follows |
@@ -25,7 +25,8 @@ Status vocabulary: **planned now** = S0 bootstrap scope; **planned next** = reta
 | 90° rotation and horizontal flip | Planned next | M1 |
 | Crop, aspect ratios and fine straightening | Planned next | M1; free side/corner handles, proportional centered Option-resize and composition-preserving straightening agreed |
 | Zoom/pan, percentage controls and Fit | Planned next | M1 confirmed; includes 100% inspection and high-DPI coordinate checks |
-| Undo/redo and reset | Planned next | Undo confirmed in M1 demo; redo/reset specified alongside it |
+| Persistent edit log, history browsing, preview and restore | Planned next | M1 core requirement for every tool; TASK-007/008/011/071 and [history contract](specs/edit-history.md); append-only Restore policy accepted in TASK-070 |
+| Undo/redo and reset | Planned next | M1 operations on the shared persistent history; old entries survive changes to the redo path |
 | JPEG export | Planned next | M1 confirmed; strip optional metadata by default with Keep metadata setting |
 | Input/display/output color correctness for supported JPEGs | Planned next | M1 color proof/implementation; S0 declares a smaller sRGB viewing subset |
 | Complete API coverage for every application operation | Accepted requirement; implementation staged | D19; every bundled/external edit, session/settings and lifecycle action is programmable when introduced; [coverage contract](design/modules-and-api.md#what-an-operation-means) |

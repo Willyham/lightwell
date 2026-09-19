@@ -12,7 +12,7 @@ macOS 14 is a conservative project baseline above Rust's Apple Silicon minimum; 
 
 ## Native prerequisites
 
-- All development hosts: Rust 1.94.0 with rustfmt and Clippy; Python 3.10+ for repository checks. Application dependencies remain pinned by the selected workspace and lockfile. Pillow 12.2.0 is optional fixture/capture-verification tooling.
+- All development hosts: Rust 1.94.0 with rustfmt and Clippy, plus Git. Application dependencies remain pinned by the selected workspace and lockfile. Tooling is Rust-only.
 - macOS: Xcode Command Line Tools/SDK, native linker, Metal-capable Apple Silicon and an unlocked graphical desktop for interaction verification. Development bundles are unsigned; no notarization/store signing is promised.
 - Windows: Visual Studio Build Tools with the C++ toolchain and Windows SDK for the MSVC target, plus a compatible DX12 driver and desktop session. Inspect the produced artifact's runtime imports before declaring packaging self-contained.
 - Linux: C/C++ build tools and pkg-config, development/runtime window and keyboard libraries for winit X11/Wayland, Vulkan loader/driver, and XDG desktop portal plus a working GNOME file chooser backend. Use the native Ubuntu 24.04 build environment to avoid accidentally raising the glibc baseline. Record actual package names in the verified setup instructions when the selected configuration builds there.

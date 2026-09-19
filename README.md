@@ -25,6 +25,6 @@ Read [AGENTS.md](AGENTS.md) before working in this repository. Start each change
 
 The owner prefers an open-source-only project and extension ecosystem. The owner has selected GPL-3.0-or-later. The repository license is applied; the configured dependency audit remains TASK-041. Initial RAW targets are Nikon Z6 and Fujifilm X100VI.
 
-Start with [contributor instructions](CONTRIBUTING.md) and the [measured S0 probe results](docs/engineering/s0-probe-results.md). `python3 tools/check_repository.py` is available now.
+Start with [contributor instructions](CONTRIBUTING.md) and the [measured S0 probe results](docs/engineering/s0-probe-results.md). `cargo xtask check-repository` is available now.
 
 Project code is licensed under GNU GPL version 3 or (at your option) any later version: **GPL-3.0-or-later**. See [LICENSE](LICENSE). Third-party components retain their own licenses; the configured dependency review remains in progress.

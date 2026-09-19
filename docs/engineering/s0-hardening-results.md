@@ -12,7 +12,7 @@ The requested local hardening batch and M1 decision tasks are complete. Native M
 - Eight native Metal process scenarios: empty, load, invalid initial input, failed replacement, repeated image, alternating landscape/portrait, 24 MP and 60 MP. Pixel checks verify actual bounds, aspect, placement and oriented color regions. Logs, frame states, generations and run identities must agree. Sources remain byte-identical.
 - Adversarial tests reject blank/stale/missing evidence. A real hung child was killed/reaped at the deadline. Unwritable evidence initialization fails without damaging existing files; ordinary viewing still decoded when its requested log directory was unavailable.
 
-The source checks are `cargo xtask check` (task/link graphs, formatting, strict Clippy, Rust and Python tests). Fixture checks remain `cargo xtask fixtures`. Existing automated dependency policy remains in place; no manual license review was performed.
+The source checks are `cargo xtask check` (task/link graphs, formatting, strict Clippy, Rust tests). Fixture checks remain `cargo xtask fixtures`. Existing automated dependency policy remains in place; no manual license review was performed.
 
 ## Exact package and evidence
 
@@ -56,11 +56,11 @@ Use fresh output paths and an unlocked native desktop:
 ```sh
 cargo xtask check
 cargo xtask fixtures
-python3 tools/generate_fixtures.py --large
+cargo xtask generate-fixtures
 cargo xtask package --output artifacts/new-hardening-package
 cargo xtask smoke --scenario large60 --output artifacts/new-large60
-python3 tools/check_hardening.py --binary target/release/lightwell --output artifacts/new-failure-checks
-python3 tools/measure_scaffold.py --binary target/release/lightwell --output artifacts/new-baseline
+cargo xtask hardening --binary target/release/lightwell --output artifacts/new-failure-checks
+cargo xtask measure --binary target/release/lightwell --output artifacts/new-baseline
 ```
 
-The Python image tools require the pinned fixture requirements. The measurement script currently uses macOS `ps` accounting and is an M4 tool, not a portable performance claim. CI retains the existing three-platform builds/packages and now includes invalid/repeated/alternating/large-image Linux headless scenarios; those workflow changes have not yet executed remotely. Prior hosted results remain in [CI results](ci-results.md).
+The Rust measurement runner currently uses macOS `ps` accounting and is an M4 tool, not a portable performance claim. CI retains the existing three-platform builds/packages and now includes invalid/repeated/alternating/large-image Linux headless scenarios; those workflow changes have not yet executed remotely. Prior hosted results remain in [CI results](ci-results.md).
