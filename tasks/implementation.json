@@ -1421,7 +1421,8 @@
         "S0 implementation; no editing tools.",
         "Pinned cargo-deny 0.20.2 license/source checks pass for configured three-target graph. Advisory scan reports unmaintained paste 1.0.15 and ttf-parser 0.25.1; no ignores added. Embedded asset/native notice review remains outstanding. See docs/engineering/dependency-review.md.",
         "CI activation authorized after scaffold commit 05937b7. Follow docs/engineering/ci-plan.md; hosted execution and remaining task acceptance are distinct. First run: https://github.com/Willyham/lightwell/actions/runs/35460222072.",
-        "Owner authorized advisory remediation. No supported selected-stack upgrade removes both findings. Implement exact-version/time-limited maintenance exceptions with TASK-065/066; full asset/native notice audit remains open."
+        "Owner authorized advisory remediation. No supported selected-stack upgrade removes both findings. Implement exact-version/time-limited maintenance exceptions with TASK-065/066; full asset/native notice audit remains open.",
+        "Verified c0ad340 in GitHub run 35465688171: reviewed advisory policy and all CI jobs pass. Six policy tests and negative cargo-deny verification pass. Exceptions expire exclusively 2026-10-19 (ttf-parser) and 2026-12-18 (paste); no dependency replacement claimed. Full asset/native notice review remains incomplete."
       ],
       "context_links": [
         {
