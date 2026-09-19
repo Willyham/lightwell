@@ -61,8 +61,6 @@ def cargo(operation,release=False):
 
 
 def verify_smoke(evidence, scenario, source_count):
-    from PIL import Image
-    from check_probe_capture import check as pixel_check
     app=json.loads((evidence/'result.json').read_text(encoding="utf-8"))
     events=[json.loads(line) for line in (evidence/'events.jsonl').read_text(encoding="utf-8").splitlines()]
     assert events[0]['event']=='startup' and events[-1]['event']=='shutdown','Missing lifecycle events'
@@ -76,6 +74,11 @@ def verify_smoke(evidence, scenario, source_count):
         assert state['requested_generation']==generation,'Wrong requested generation'
         assert state['backend']['backend'] and state['backend']['adapter'],'Missing backend evidence'
         assert frame['capture_provenance']=='window-renderer-readback'
+        try:
+            from PIL import Image
+            from check_probe_capture import check as pixel_check
+        except ImportError as error:
+            raise ValueError('Smoke pixel checks require Pillow; install tools/fixture-requirements.txt') from error
         path=evidence/frame['file']
         if scenario in ('empty','invalid'):
             assert state['phase']==('empty' if scenario=='empty' else 'error') and state['displayed_generation']==0

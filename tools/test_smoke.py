@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 import subprocess
+import sys
 import dev
 
 class ProcessFailureTests(unittest.TestCase):
@@ -19,12 +20,15 @@ class ProcessFailureTests(unittest.TestCase):
             self.assertEqual(json.loads((output/'result.json').read_text())['status'],'failed')
             self.assertTrue((output/'reproduce.md').is_file())
             self.assertFalse((output/'app/frame-1.png').exists())
+            return json.loads((output/'result.json').read_text())
     def test_hung_process_is_failure(self):
         self.run_failure(subprocess.TimeoutExpired('fixture',0.01))
     def test_missing_executable_is_failure(self):
         self.run_failure(FileNotFoundError('missing executable'))
     def test_success_exit_without_evidence_is_failure(self):
-        self.run_failure(lambda *args,**kwargs: subprocess.CompletedProcess(args,0))
+        with patch.dict(sys.modules, {'PIL': None}):
+            result=self.run_failure(lambda *args,**kwargs: subprocess.CompletedProcess(args,0))
+        self.assertIn('result.json',result['error'])
 
 try:
     from PIL import Image

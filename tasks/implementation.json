@@ -2068,7 +2068,8 @@
         "CI activation authorized after scaffold commit 05937b7. Follow docs/engineering/ci-plan.md; hosted execution and remaining task acceptance are distinct. First run: https://github.com/Willyham/lightwell/actions/runs/35460222072.",
         "Hosted verification: run 35460353189 passes macOS/Windows build-package and fixture jobs; run 35460833672 fixes Linux X11 runtime and passes all Linux Xvfb/llvmpipe smoke scenarios. Dependency audit still fails on two known maintenance advisories; full task prerequisites/desktop acceptance are not complete. See docs/engineering/ci-results.md.",
         "Existing hosted three-OS checks/packages passed at c0ad340; current source and expanded renderer scenarios have not been pushed/executed remotely, so fresh hosted verification remains pending.",
-        "2026-09-19 closure: source snapshot 6b13871 committed on codex/s0-closure; hosted verification awaits explicit source-push authorization after automatic approval rejection. Runtime-import collection and packaged Linux smoke are configured, not yet verified remotely. See docs/engineering/ci-results.md."
+        "2026-09-19 closure: source snapshot 6b13871 committed on codex/s0-closure; hosted verification awaits explicit source-push authorization after automatic approval rejection. Runtime-import collection and packaged Linux smoke are configured, not yet verified remotely. See docs/engineering/ci-results.md.",
+        "Closure run 35471983478 failed all native Check jobs on an accidental optional-Pillow import in the missing-evidence regression. Corrected metadata-before-pixels validation and tested with site packages disabled and pinned Pillow present; hosted rerun pending."
       ],
       "context_links": [
         {
