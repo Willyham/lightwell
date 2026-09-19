@@ -5,8 +5,8 @@ Status: **accepted target scope, provisional engineering baselines**. The owner 
 | Target | Initial baseline | Artifact | Graphics/window path | Verification route |
 | --- | --- | --- | --- | --- |
 | `aarch64-apple-darwin` | macOS 14 or later | `.app` in an unsigned ZIP | Metal, AppKit | Available M4 Pro / macOS 26.5.2 desktop; macOS 14 floor check remains outstanding |
-| `x86_64-pc-windows-msvc` | Windows 11 24H2 or later | executable and notices in ZIP | wgpu DX12, native Win32 picker | Native x64 Windows desktop required; no current session established |
-| `x86_64-unknown-linux-gnu` | Ubuntu 24.04 LTS x64, glibc 2.39 build baseline | directory in `.tar.gz` | Vulkan; GNOME Wayland primary, X11 also required for S0 checks | Native x64 Linux desktop required; no current session established |
+| `x86_64-pc-windows-msvc` | Windows 11 24H2 or later | executable and notices in ZIP | wgpu DX12, native Win32 picker | Native desktop check deferred; no current session established |
+| `x86_64-unknown-linux-gnu` | Ubuntu 24.04 LTS x64, glibc 2.39 build baseline | directory in `.tar.gz` | Vulkan; GNOME Wayland primary, X11 also required for S0 checks | Native desktop check deferred; no current session established |
 
 macOS 14 is a conservative project baseline above Rust's Apple Silicon minimum; it avoids promising every upstream-supported OS. Windows 11 and Ubuntu 24.04 keep the initial test matrix narrow. Baselines may be revised from measured dependency/runtime evidence, with changes recorded here. A build on a newer SDK does not prove execution on the floor. CI must compile all three targets; desktop test results must separately identify the actual OS, architecture and backend. Linux ARM64 or Windows ARM emulation may supplement, not replace, the x64 matrix.
 
@@ -23,7 +23,7 @@ The current rfd trial uses the XDG portal rather than GTK development bindings. 
 
 Available host: M4 Pro, 14 CPU/20 GPU cores, 48 GB unified memory, macOS 26.5.2. Existing native Metal renderer-readback captures at 2× scale are documented in [probe results](s0-probe-results.md). The owner's latest answer explicitly permits locally built software to run; a subsequent UI attempt was blocked by a locked Mac, not missing owner permission. Native picker/focus/resize checks resume when the desktop is unlocked.
 
-Windows and Linux hardware/session access, minimum-version checks, and packaging/runtime validation remain outstanding. This explicitly records missing test routes and does not prevent platform **decision** TASK-023 from completing. Those checks remain required implementation tasks TASK-055/056/058/059 and S0 gate TASK-063. Do not close S0 using compilation, a VM, or the current macOS probe alone. No VM installation, infrastructure purchase or public distribution is part of this matrix decision.
+Windows and Linux hardware/session access, minimum-version checks, and packaging/runtime validation remain outstanding. This explicitly records missing test routes and does not prevent platform **decision** TASK-023 from completing. TASK-055/056 retain automated packaging. The owner has deferred TASK-058/059 native desktop checks; they no longer block TASK-063. M4 hardening and native acceptance remain required. No VM installation, infrastructure purchase or public distribution is part of this matrix decision.
 
 ## Sources and selection basis
 
@@ -31,6 +31,6 @@ The [Rust Apple target documentation](https://doc.rust-lang.org/rustc/platform-s
 
 ## Windows test availability
 
-The owner confirmed on 2026-09-19 that no Windows 11 x64 machine is currently available. Native Windows launch/load acceptance remains pending; a hosted CI compilation or another operating system's smoke run cannot substitute. Continue independent local scaffold work without treating this as an unresolved product decision.
+The owner confirmed on 2026-09-19 that no Windows 11 x64 machine is currently available. Native Windows launch/load acceptance is deferred by the owner; a hosted CI compilation or another operating system's smoke run cannot substitute. Continue independent local scaffold work without treating this as an unresolved product decision.
 
 Linux X11 runtime requires `libxkbcommon-x11-0` in addition to the development libraries. Hosted renderer startup exposed the missing runtime library; `libxkbcommon-dev` alone did not supply it. Headless smoke installs Xvfb and Mesa Vulkan drivers separately from native desktop prerequisites.

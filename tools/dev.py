@@ -60,16 +60,46 @@ def cargo(operation,release=False):
     run('cargo',*args)
 
 
-def smoke(output,scenario,binary=None):
-    # All inputs are repository synthetic fixtures; no private image upload/logging.
+def verify_smoke(evidence, scenario, source_count):
     from PIL import Image
     from check_probe_capture import check as pixel_check
+    app=json.loads((evidence/'result.json').read_text(encoding="utf-8"))
+    events=[json.loads(line) for line in (evidence/'events.jsonl').read_text(encoding="utf-8").splitlines()]
+    assert events[0]['event']=='startup' and events[-1]['event']=='shutdown','Missing lifecycle events'
+    assert app['status']=='captured','Unsuccessful app result'
+    assert app.get('run_id') and all(e.get('run_id')==app['run_id'] for e in events),'Wrong log run identity'
+    assert len(app['frames'])==max(1,source_count),'Missing/stale frames'
+    for index,frame in enumerate(app['frames']):
+        state=frame['state'];generation=index+1 if source_count else 0
+        orientation=1 if scenario.startswith('large') or (scenario=='alternating' and index%2) else 6
+        assert state.get('run_id')==app['run_id'],'Wrong frame run identity'
+        assert state['requested_generation']==generation,'Wrong requested generation'
+        assert state['backend']['backend'] and state['backend']['adapter'],'Missing backend evidence'
+        assert frame['capture_provenance']=='window-renderer-readback'
+        path=evidence/frame['file']
+        if scenario in ('empty','invalid'):
+            assert state['phase']==('empty' if scenario=='empty' else 'error') and state['displayed_generation']==0
+            if scenario=='invalid':assert state['error_code']=='invalid-input'
+            with Image.open(path) as image:
+                assert len(image.getcolors(image.width*image.height) or [])>10,'Blank empty UI'
+        else:
+            assert state['displayed_generation']==(generation if scenario in ('repeated','alternating') else 1),'Stale/wrong displayed image'
+            assert state['source_dimensions']==({'large24':[6000,4000],'large60':[10000,6000]}.get(scenario,[480,320] if orientation==1 else [320,480])),'Wrong source dimensions'
+            assert state['phase']==('error' if scenario=='replacement' and index==1 else 'ready'),'Wrong state'
+            if scenario=='replacement' and index==1:assert state['error_code']=='invalid-input','Wrong replacement failure'
+            pixel_check(path,orientation=orientation,source_aspect={'large24':3/2,'large60':5/3}.get(scenario))
+            assert any(e['event']=='render_ready' and e['generation']==state['displayed_generation'] for e in events),'Missing upload readiness'
+    return app
+
+
+def smoke(output,scenario,binary=None,timeout=35):
+    # All inputs are repository synthetic fixtures; no private image upload/logging.
     output=output.resolve()
     if output.exists():raise ValueError('Smoke output must be a new directory')
     output.mkdir(parents=True)
     evidence=output/'app'
     fixture=ROOT/'fixtures/s0/orientation-6.jpg'
-    cases={'load':[fixture], 'replacement':[fixture,ROOT/'fixtures/s0/invalid.jpg'], 'empty':[]}
+    cases={'load':[fixture], 'replacement':[fixture,ROOT/'fixtures/s0/invalid.jpg'], 'empty':[], 'invalid':[ROOT/'fixtures/s0/invalid.jpg'], 'repeated':[fixture]*8, 'alternating':[fixture,ROOT/'fixtures/s0/orientation-1.jpg']*4, 'large24':[ROOT/'fixtures/generated/24mp.jpg'], 'large60':[ROOT/'fixtures/generated/60mp.jpg']}
     sources=cases[scenario]
     hashes={path.name:hashlib.sha256(path.read_bytes()).hexdigest() for path in sources}
     binary=Path(binary).resolve() if binary else ROOT/f'target/release/lightwell{EXE}'
@@ -80,33 +110,14 @@ def smoke(output,scenario,binary=None):
         result['binary_sha256']=hashlib.sha256(binary.read_bytes()).hexdigest()
         result['lockfile_sha256']=hashlib.sha256((ROOT/'Cargo.lock').read_bytes()).hexdigest()
         with (output/'subprocess.log').open('w') as log:
-            process=subprocess.run(command,cwd=ROOT,stdout=log,stderr=log,timeout=35)
+            process=subprocess.run(command,cwd=ROOT,stdout=log,stderr=log,timeout=timeout)
         result['exit_code']=process.returncode
         if process.returncode:raise ValueError(f'Application exit {process.returncode}')
-        app=json.loads((evidence/'result.json').read_text(encoding="utf-8"))
-        events=[json.loads(line) for line in (evidence/'events.jsonl').read_text(encoding="utf-8").splitlines()]
-        assert events[0]['event']=='startup' and events[-1]['event']=='shutdown','Missing lifecycle events'
-        assert len(app['frames'])==max(1,len(sources)),'Missing/stale frames'
-        for index,frame in enumerate(app['frames']):
-            state=frame['state'];generation=index+1 if sources else 0
-            assert state['requested_generation']==generation,'Wrong requested generation'
-            assert state['backend']['backend'] and state['backend']['adapter'],'Missing backend evidence'
-            assert frame['capture_provenance']=='window-renderer-readback'
-            path=evidence/frame['file']
-            if scenario=='empty':
-                assert state['phase']=='empty' and state['displayed_generation']==0
-                with Image.open(path) as image:
-                    assert len(image.getcolors(image.width*image.height) or [])>10,'Blank empty UI'
-            else:
-                assert state['displayed_generation']==1,'Stale/wrong displayed image'
-                assert state['source_dimensions']==[320,480],'Wrong source dimensions'
-                assert state['phase']==('error' if index==1 else 'ready'),'Wrong state'
-                if index==1:assert state['error_code']=='invalid-input','Wrong replacement failure'
-                pixel_check(path)
+        app=verify_smoke(evidence,scenario,len(sources))
         for path in sources:assert hashlib.sha256(path.read_bytes()).hexdigest()==hashes[path.name],'Source changed'
         result['status']='passed'
         result['backend']=app['frames'][-1]['state']['backend']
-    except (OSError,ValueError,AssertionError,subprocess.TimeoutExpired) as error:
+    except (OSError,ValueError,KeyError,IndexError,TypeError,AssertionError,subprocess.TimeoutExpired) as error:
         result['error']=str(error)
     (output/'result.json').write_text(json.dumps(result,indent=2)+'\n', encoding="utf-8")
     (output/'reproduce.md').write_text(f'# Smoke run\n\nScenario: {scenario}. Status: {result["status"]}.\n\nInvocation (argument array):\n\n```json\n{json.dumps(command,indent=2)}\n```\n\nRenderer readback; native dialog/focus is a separate test. Sources are synthetic.\n', encoding="utf-8")
@@ -143,6 +154,10 @@ def package(output):
         shutil.copy2(binary,app/'MacOS/lightwell')
         (app/'Info.plist').write_bytes(plistlib.dumps({'CFBundleIdentifier':'org.lightwell.app','CFBundleName':'Lightwell','CFBundleExecutable':'lightwell','CFBundlePackageType':'APPL','CFBundleShortVersionString':'0.0.0','LSMinimumSystemVersion':'14.0','NSHighResolutionCapable':True}))
     else:shutil.copy2(binary,target/binary.name)
+    revision=run('git','rev-parse','HEAD',capture_output=True,text=True).stdout.strip()
+    dirty=bool(run('git','status','--porcelain',capture_output=True,text=True).stdout.strip())
+    host=run('rustc','-vV',capture_output=True,text=True).stdout.split('host: ')[1].splitlines()[0]
+    (target/'build.json').write_text(json.dumps({'revision':revision,'working_tree_dirty':dirty,'target':host,'profile':'release','binary_sha256':hashlib.sha256(binary.read_bytes()).hexdigest(),'lock_sha256':hashlib.sha256((ROOT/'Cargo.lock').read_bytes()).hexdigest()},indent=2)+'\n',encoding='utf-8')
     shutil.copy2(ROOT/'LICENSE',target/'LICENSE')
     inventory(target/'notices')
     (target/'README.txt').write_text('Unsigned local development artifact. License/advisory audit and cross-platform verification are not complete. See project docs/engineering/platforms.md for runtime requirements.\n', encoding="utf-8")
@@ -163,12 +178,15 @@ def main():
     sub=parser.add_subparsers(dest='op',required=True)
     for name in ['doctor','fmt','lint','test','check','audit','fixtures']:sub.add_parser(name)
     p=sub.add_parser('build');p.add_argument('--release',action='store_true')
-    p=sub.add_parser('develop');p.add_argument('arguments',nargs=argparse.REMAINDER)
-    p=sub.add_parser('smoke');p.add_argument('--output',type=Path,required=True);p.add_argument('--scenario',choices=['empty','load','replacement'],default='load');p.add_argument('--binary')
+    p=sub.add_parser('develop');p.add_argument('--debug',action='store_true');p.add_argument('arguments',nargs=argparse.REMAINDER)
+    p=sub.add_parser('smoke');p.add_argument('--output',type=Path,required=True);p.add_argument('--scenario',choices=['empty','load','replacement','invalid','repeated','alternating','large24','large60'],default='load');p.add_argument('--binary')
     for name in ['package','inventory']:
         p=sub.add_parser(name);p.add_argument('--output',type=Path,required=True)
     if len(sys.argv)>1 and sys.argv[1]=="develop":
-        run("cargo","run","--locked","--package","lightwell-app","--",*sys.argv[2:]);return 0
+        arguments=sys.argv[2:]
+        debug=bool(arguments and arguments[0]=="--debug")
+        if debug:arguments=arguments[1:]
+        run("cargo","run","--locked",*([] if debug else ["--release"]),"--package","lightwell-app","--",*arguments);return 0
     args=parser.parse_args()
     if args.op=='doctor':return doctor()
     if args.op=='fixtures':
@@ -188,7 +206,6 @@ def main():
         for op in ['fmt','lint','test']:cargo(op)
         print('Headless checks passed. GUI, license/advisory audit and platform acceptance are separate.')
     elif args.op in ['build','fmt','lint','test']:cargo(args.op,getattr(args,'release',False))
-    elif args.op=='develop':run('cargo','run','--locked','--package','lightwell-app','--',*args.arguments)
     elif args.op=='smoke':return smoke(args.output,args.scenario,args.binary)
     elif args.op=='inventory':inventory(args.output)
     elif args.op=='package':package(args.output)

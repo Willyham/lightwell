@@ -2,7 +2,7 @@
 
 A planned, open-source, non-destructive desktop photo editor for macOS, Windows, and Linux, targeting an M4 MacBook Pro first. Built around a small, fast core that people, programs, and agents can operate equally.
 
-**Current state: the maintained Rust/Iced scaffold builds and displays JPEGs at Fit on the M4 Mac.** Native Metal smoke checks cover empty, load and failed replacement states. An unsigned local macOS development package is available. S0 remains incomplete: Windows/Linux desktop verification, diagnostics hardening, dependency review and performance acceptance are outstanding. Editing features are not implemented. All milestones belong to v0.
+**Current state: the maintained Rust/Iced scaffold builds and displays JPEGs at Fit on the M4 Mac.** Native Metal smoke checks cover empty, load and failed replacement states. An unsigned local macOS development package is available. Local hardening and an initial M4 baseline are verified. The owner confirmed manual native JPEG opening; S0 remains open for fresh hosted verification. Manual Windows/Linux desktop checks and manual license reviews are deferred. Editing features are not implemented. All milestones belong to v0.
 
 Run `cargo xtask develop`, or `cargo xtask check` for repository, formatting, lint and unit checks. See [working scaffold commands](docs/engineering/scaffold-commands.md) for setup, smoke evidence and packaging.
 

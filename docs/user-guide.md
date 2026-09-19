@@ -1,6 +1,6 @@
 # Lightwell user guide
 
-Status: **early working scaffold on macOS**. Run `cargo xtask develop` after the [developer setup](engineering/scaffold-commands.md). The unsigned local development package opens supported JPEGs at Fit. Cross-platform acceptance is unfinished; the M1 editor below remains planned.
+Status: **early working scaffold on macOS**. Run `cargo xtask develop` (optimized by default; `--debug` explicitly opts into slower unoptimized debugging) after the [developer setup](engineering/scaffold-commands.md). The unsigned local development package opens supported JPEGs at Fit. Cross-platform acceptance is unfinished; the M1 editor below remains planned.
 
 ## What Lightwell is for
 
@@ -38,8 +38,22 @@ The subsequent M1 editor includes JSON commands and local MCP for catalog operat
 
 These operations use the same validation and edit service as the interface. Automation does not require a built-in chat assistant, a subscription, or a particular model provider. The [agent contract](design/architecture.md#agent-contract) will become the implementation reference; concrete usage examples will be added only when the commands exist.
 
+Every future operation must also be programmable, including exposure, white balance, creating/editing masks and clone strokes. A tool supplied by an extension has the same requirement. These examples describe the design commitment; those tools are not available in the current viewer or included in M1.
+
+## Planned modules and customization
+
+Lightwell is designed around a small host with shared non-destructive edits and undo history. Feature modules use those services. Later optional modules should let you enable the features you use, and separately authored external modules will be loadable through the core APIs. The module manager and loader are not implemented; their first use case and format remain to be chosen.
+
+We will measure whether leaving a module inactive saves meaningful resources before splitting basic features into separate plugins. Hiding a panel will not remove edits. If an image needs a disabled or missing module, its edits and history remain saved and Lightwell must report the missing effect rather than silently export a different image. See the [module design](design/modules-and-api.md).
+
 ## Planned limitations of the first editor
 
 The first supported input is JPEG. RAW, PNG, tonal controls, large library browsing and installable plugins come in later scoped work. Untagged JPEGs are assumed to be sRGB; unsupported color modes or unusable profiles are reported. Initial RAW targets are Nikon Z6 and Fujifilm X100VI; support will be claimed by tested recording mode, not solely by filename extension or an upstream camera list.
 
 These editor limitations apply to M1; S0 has the smaller image-loading scope above. The current repository includes a maintained load-only viewer, developer checks, synthetic fixtures and isolated comparison probes.
+
+## Viewer hardening
+
+The viewer keeps the previous image until a replacement is decoded and ready to render. An invalid replacement leaves the previous image visible. Tab focuses Open, and Return/Space activates it; Cmd+O on macOS or Ctrl+O elsewhere opens the picker. The application remains Fit-only.
+
+Native Metal checks now cover 24/60 MP fixtures and alternating orientations. The owner confirmed manual native JPEG opening; automated picker selection remains limited; see [verification results](engineering/s0-hardening-results.md). Windows/Linux manual verification and license review are deferred. No editing, catalog, export or live MCP has been implemented by this work.

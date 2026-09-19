@@ -1,6 +1,8 @@
 # Maintained scaffold commands and evidence
 
-Status: runnable macOS scaffold with initial developer tooling; **S0 acceptance is not complete**. Stack rationale is in [S0 stack](../design/s0-stack.md), native requirements in [platforms](platforms.md), and earlier experiments in [probe results](s0-probe-results.md).
+Status: hardened runnable macOS scaffold with measured native Metal evidence; **S0 acceptance is not complete**. Stack rationale is in [S0 stack](../design/s0-stack.md), native requirements in [platforms](platforms.md), and earlier experiments in [probe results](s0-probe-results.md).
+
+For a fresh checkout and end-to-end evidence inspection, follow the [bootstrap playbook](bootstrap-playbook.md). Historical results below retain their original build identities.
 
 ## Commands available now
 
@@ -11,6 +13,8 @@ cargo xtask doctor
 cargo xtask check
 cargo xtask build --release
 cargo xtask develop --open fixtures/s0/orientation-6.jpg
+# Explicit unoptimized debugging (unsuitable for timing):
+cargo xtask develop --debug --open fixtures/s0/orientation-6.jpg
 cargo xtask smoke --scenario load --output artifacts/new-load
 cargo xtask smoke --scenario replacement --output artifacts/new-replacement
 cargo xtask smoke --scenario empty --output artifacts/new-empty
@@ -18,9 +22,11 @@ cargo xtask inventory --output artifacts/new-inventory
 cargo xtask package --output artifacts/new-package
 ```
 
+Smoke scenarios are `empty`, `load`, `replacement`, `invalid`, `repeated`, `alternating`, `large24` and `large60`; generate large fixtures with `python3 tools/generate_fixtures.py --large` before the last two.
+
 Smoke additionally requires Pillow 12.2.0 from [fixture requirements](../../tools/fixture-requirements.txt), and a native graphical session. Use a fresh output directory each time; refusing existing directories prevents stale evidence. `fmt`, `lint`, `test` and `build` are individually callable through xtask. `check` runs plan/link checks, formatting, Clippy and tests; it explicitly does not imply graphical or dependency-audit acceptance. Doctor reports missing tools without installing them. Setup installation commands remain explicit in [development](development.md).
 
-The application accepts `--open PATH`, `--window-size WIDTH HEIGHT` (logical dimensions 320..4096), and `--evidence-dir NEW_DIRECTORY`. Repeat `--open` only in evidence mode to run a bounded development sequence. Normal mode shows native Open with Cmd+O on macOS and Ctrl+O on Windows/Linux; no data/catalog writes are needed. Source paths stay native OS paths. No working public editing API or MCP is implied.
+The application accepts `--data-root DIRECTORY` for isolated diagnostic/config/cache paths, `--open PATH`, `--window-size WIDTH HEIGHT` (logical dimensions 320..4096), and `--evidence-dir NEW_DIRECTORY`. Repeat `--open` only in evidence mode to run a bounded development sequence. Normal mode shows native Open with Cmd+O on macOS and Ctrl+O on Windows/Linux; no data/catalog writes are needed. Source paths stay native OS paths. No working public editing API or MCP is implied.
 
 Evidence mode disables manual opening to keep the sequence deterministic. It uses the same image loader, writes state and real window-renderer PNGs per request, then final `events.jsonl`, `state.json`, and `result.json`. PNG encoding and evidence finalization run on the task executor, away from the UI thread. Application status `captured` is not a pixel-test pass: the outer smoke runner verifies fixture colors, Fit, generation/state, backend, exit status and source SHA-256 before writing its own `passed` result. Each bundle also includes subprocess output and reproduction arguments. Errors retain the previous displayed generation and photo. A 25-second app deadline and 35-second process deadline bound hangs.
 
@@ -34,11 +40,11 @@ Native Iced probe interaction verified Cmd+O, picker load, cancellation and resi
 
 ## Pending work and limitations
 
-Structured evidence is initial developer tooling, not completion of TASK-044/048/051: crash-time incremental logs, run/build identity, controlled diagnostic-write failure, broader malformed/read-only cases and deliberately hung/blank-process smoke tests need further work. Error categories are still strings; TASK-042 remains open for typed errors and the broader data-path contract. Ordinary mode currently writes no persistent configuration/cache/logs. No hidden catalog or compatibility layer has been added.
+Incremental background logs, typed image errors, run/request identity, controlled diagnostic failure checks, malformed/read-only cases and adversarial smoke checks are implemented. Rendering readiness waits for explicit GPU allocation, including large JPEGs. See [hardening results](s0-hardening-results.md) for exact evidence and native picker automation limitations. Ordinary mode writes no catalog/config/cache; it logs to stderr unless `--data-root` requests an isolated log. That root's existing log is never overwritten.
 
-Packaging assembles unsigned host development artifacts plus license inventory and copied notices. Inventory lists resolved host dependency licenses but is not a license/advisory audit; bundled assets/native runtime review remains required. No public signing/notarization, deployment, upload or store submission has occurred.
+Packaging assembles unsigned host development artifacts plus license inventory and copied notices. Inventory lists resolved host dependency licenses but is not a license/advisory audit; manual bundled assets/native runtime review is deferred. No public signing/notarization, deployment, upload or store submission has occurred.
 
-The checked-in CI workflow runs locked checks/build/package on macOS, Windows and Ubuntu and retains artifacts for seven days. Its first hosted executions are underway; see [CI activation](ci-plan.md). Hosted compile runners are not the required native desktop launch/load checks. Windows 2022 CI build is not Windows 11 user-session evidence. S0 remains open until the accepted platform matrix and remaining local hardening/performance tasks pass.
+The checked-in CI workflow runs locked checks/build/package on macOS, Windows and Ubuntu and retains artifacts for seven days. Its first hosted executions are underway; see [CI activation](ci-plan.md). Hosted compile runners are not the required native desktop launch/load checks. Windows 2022 CI build is not Windows 11 user-session evidence. S0 remains open for current hosted verification. The owner confirmed manual native JPEG opening. Windows/Linux manual checks are deferred.
 
 ## Dependency policy and latest evidence
 
@@ -53,7 +59,7 @@ Audit validates the [expiring exception policy](advisory-policy.md) and fails on
 
 The host package was built at `artifacts/maintained-package-2/lightwell-development.zip`, with SHA-256 in `checksums.txt`. Its actual app binary passed native Metal replacement smoke using an output directory containing spaces (`artifacts/package smoke 2`). The failed-input capture was visually reviewed: the oriented image remains visible and a readable error replaces the loading status. Earlier empty/load/replacement runs live in `artifacts/maintained-{empty,load,replacement}-1`. These paths are ignored local evidence, not checked-in portable reports. A subsequent bounded CLI change limits evidence sequences to 16 requests; rerun package/smoke after changes rather than treating an old archive as current.
 
-The runner also verifies a missing executable produces exit 1 and `status: failed`, without a fabricated screenshot. New smoke results record binary and lockfile hashes. Renderer readback proves content; native picker/focus/desktop observations remain separate. Ordinary viewing creates no catalog, config or source-adjacent files. Diagnostics hardening, typed errors, native accessibility, full lifecycle/resource measurements and Windows/Linux sessions remain required before completing S0.
+The runner also verifies a missing executable produces exit 1 and `status: failed`, without a fabricated screenshot. New smoke results record binary and lockfile hashes. Renderer readback proves content; native picker/focus/desktop observations remain separate. Ordinary viewing creates no catalog, config or source-adjacent files. Current hardening and initial measurements are recorded below; full accessibility and Windows/Linux desktop checks are unverified.
 
 Latest package: `artifacts/maintained-package-3/lightwell-development.zip`. Its replacement smoke passed in `artifacts/package smoke 3` with binary/lockfile hashes recorded. This includes the 16-request limit and friendly error messages. No Windows machine is currently available, as confirmed by the owner.
 
@@ -66,3 +72,9 @@ CI now includes dedicated fixture and blocking dependency-audit jobs. The audit 
 Hosted results are recorded in [CI results](ci-results.md). Linux empty/load/replacement smoke passed under Xvfb with llvmpipe Vulkan after adding the X11 runtime library. All three OS builds/packages have executed successfully. The initial blocking dependency job reproduced the two known maintenance findings; the subsequent reviewed policy is described above.
 
 `cargo xtask check` also runs six advisory-policy regression tests and validates live UTC expiry, exact locked versions and open follow-up tasks. `cargo xtask audit` generates its temporary ignore list only after the same validation. Calling cargo-deny directly against the base deny.toml continues to report the raw maintenance findings.
+
+## Current hardening result
+
+The current package is `artifacts/hardening-package-5/lightwell-development.zip`. Eight native Metal scenarios, actual timeout/abrupt-exit/diagnostic-failure checks, and a pixel-validated 24/60 MP baseline passed. [Results and reproduction](s0-hardening-results.md) record hashes, timing/memory, earlier superseded blank captures and owner-confirmed manual picker success and automated-selection limitations. Existing automated dependency policy is unchanged; manual license reviews are deferred.
+
+`develop` now uses the optimized release profile by default; its first compilation may take longer. Use `develop --debug` for an unoptimized debugger session. Plain `cargo run` remains unoptimized. JPEG diagnostics include worker stage timings and startup records include `debug_assertions` (an assertion setting, not a general proof of optimization). See the [real JPEG investigation](jpeg-performance.md).

@@ -8,6 +8,7 @@
 # Local originals and diagnostic inputs never belong in source control.
 /private/
 /fixtures/generated/
+/fixtures/jpg/
 .env
 .env.*
 !.env.example

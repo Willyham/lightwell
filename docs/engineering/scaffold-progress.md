@@ -12,7 +12,7 @@ Repository conventions cover ignored output/private data, LF text, contributor w
 
 ## Acceptance and unresolved work
 
-Complete each task only against its existing acceptance criteria. S0 cannot close without packaged native desktop evidence on the accepted matrix. Available host: macOS 26.5.2, arm64, M4 Pro (14 CPU / 20 GPU cores), 48 GB unified memory. Display scale/profile, storage and renderer evidence remain to measure; hardware identifiers are excluded from reports. Windows/Linux desktop sessions are not currently established.
+Complete each task only against its existing acceptance criteria. Historical gate: all desktop targets were required. The latest owner instruction defers Windows/Linux manual checks and reviews; current acceptance is recorded in s0-hardening.md. Available host: macOS 26.5.2, arm64, M4 Pro (14 CPU / 20 GPU cores), 48 GB unified memory. Display scale/profile, storage and renderer evidence remain to measure; hardware identifiers are excluded from reports. Windows/Linux desktop sessions are not currently established.
 
 The product gate inspection found TASK-023, TASK-024 and TASK-025 still ready/unanswered. Proposed defaults and prototype-only license deferral have been sent to the owner; no response has yet been recorded. Independent fixtures, conventions and probes may proceed.
 

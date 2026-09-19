@@ -1,5 +1,7 @@
 //! Read-only image decoding and bounded request scheduling, independent of the UI.
+mod error;
 mod profile;
+pub use error::{Error, ErrorKind};
 use image::{ImageDecoder, ImageReader, Limits};
 use std::{
     fs::File,
@@ -8,6 +10,17 @@ use std::{
     time::Instant,
 };
 
+/// Wall-clock stages on the image worker; excludes scheduling and GPU upload.
+#[derive(Debug, Default)]
+pub struct DecodeTimings {
+    pub read_ms: f64,
+    pub validate_ms: f64,
+    pub pixels_ms: f64,
+    pub orient_ms: f64,
+    pub resize_ms: f64,
+    pub rgba_ms: f64,
+}
+
 pub struct Photo {
     pub width: u32,
     pub height: u32,
@@ -15,6 +28,8 @@ pub struct Photo {
     pub preview_width: u32,
     pub preview_height: u32,
     pub decode_ms: f64,
+    pub timings: DecodeTimings,
+    pub orientation: u8,
 }
 
 // Walk JPEG header segments without decoding or allocating from declared dimensions.
@@ -53,7 +68,11 @@ fn header(bytes: &[u8]) -> Result<(u32, u32, u8), String> {
     Err("unsupported-input: JPEG frame type".into())
 }
 
-pub fn open(path: &Path) -> Result<Photo, String> {
+pub fn open(path: &Path) -> Result<Photo, Error> {
+    decode(path).map_err(Error::decoder)
+}
+
+fn decode(path: &Path) -> Result<Photo, String> {
     let start = Instant::now();
     if !path
         .metadata()
@@ -71,6 +90,7 @@ pub fn open(path: &Path) -> Result<Photo, String> {
     if bytes.len() > 128 * 1024 * 1024 {
         return Err("resource-limit: encoded bytes".into());
     }
+    let read_done = Instant::now();
     let (w, h, components) = header(&bytes)?;
     if w == 0 || h == 0 || w > 16384 || h > 16384 || u64::from(w) * u64::from(h) > 64_000_000 {
         return Err("resource-limit: dimensions".into());
@@ -96,23 +116,37 @@ pub fn open(path: &Path) -> Result<Photo, String> {
     let orientation = decoder
         .orientation()
         .map_err(|_| "invalid-input: orientation")?;
+    let validate_done = Instant::now();
     let mut decoded =
         image::DynamicImage::from_decoder(decoder).map_err(|_| "invalid-input: decode")?;
+    let pixels_done = Instant::now();
     decoded.apply_orientation(orientation);
+    let orient_done = Instant::now();
     let width = decoded.width();
     let height = decoded.height();
     // S0 displays Fit only; cap upload work and textures on the decoding worker.
     if width > 4096 || height > 4096 {
         decoded = decoded.resize(4096, 4096, image::imageops::FilterType::Triangle);
     }
+    let resize_done = Instant::now();
     let rgba = decoded.into_rgba8();
+    let rgba_done = Instant::now();
     Ok(Photo {
         width,
         height,
         preview_width: rgba.width(),
         preview_height: rgba.height(),
         rgba: rgba.into_raw(),
+        orientation: orientation.to_exif(),
         decode_ms: start.elapsed().as_secs_f64() * 1000.0,
+        timings: DecodeTimings {
+            read_ms: (read_done - start).as_secs_f64() * 1000.0,
+            validate_ms: (validate_done - read_done).as_secs_f64() * 1000.0,
+            pixels_ms: (pixels_done - validate_done).as_secs_f64() * 1000.0,
+            orient_ms: (orient_done - pixels_done).as_secs_f64() * 1000.0,
+            resize_ms: (resize_done - orient_done).as_secs_f64() * 1000.0,
+            rgba_ms: (rgba_done - resize_done).as_secs_f64() * 1000.0,
+        },
     })
 }
 
@@ -176,7 +210,7 @@ mod tests {
             ("missing.jpg", "read-error"),
         ] {
             assert!(
-                open(&fixture(name)).err().unwrap().starts_with(code),
+                open(&fixture(name)).err().unwrap().kind.code() == code,
                 "{name}"
             );
         }
@@ -188,7 +222,7 @@ mod tests {
 #[derive(Default)]
 pub struct Loader {
     generation: u64,
-    active: Option<(u64, std::sync::mpsc::Receiver<Result<Photo, String>>)>,
+    active: Option<(u64, std::sync::mpsc::Receiver<Result<Photo, Error>>)>,
     pending: Option<std::path::PathBuf>,
 }
 impl Loader {
@@ -210,12 +244,15 @@ impl Loader {
     pub fn loading(&self) -> bool {
         self.active.is_some()
     }
-    pub fn poll(&mut self) -> Option<Result<Photo, String>> {
+    pub fn poll(&mut self) -> Option<Result<Photo, Error>> {
         let (generation, receiver) = self.active.as_ref()?;
         let result = match receiver.try_recv() {
             Ok(result) => result,
             Err(std::sync::mpsc::TryRecvError::Empty) => return None,
-            Err(_) => Err("internal: decode worker disconnected".into()),
+            Err(_) => Err(Error::new(
+                ErrorKind::Internal,
+                "decode worker disconnected",
+            )),
         };
         let current = *generation == self.generation;
         self.active = None;
@@ -277,5 +314,66 @@ mod preview_tests {
         );
         assert_eq!(std::fs::read(&path).unwrap(), source);
         std::fs::remove_file(path).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod failure_tests {
+    use super::*;
+    #[test]
+    fn malformed_headers_never_panic_or_allocate_from_dimensions() {
+        let valid = std::fs::read(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/s0/orientation-1.jpg"),
+        )
+        .unwrap();
+        for end in 0..valid.len().min(1024) {
+            assert!(header(&valid[..end]).is_err());
+        }
+        for size in [0u16, 1, 2, 7, u16::MAX] {
+            let mut bytes = vec![0xff, 0xd8, 0xff, 0xc0];
+            bytes.extend(size.to_be_bytes());
+            bytes.extend([8, 0xff, 0xff, 0xff, 0xff, 3, 0xff, 0xd9]);
+            let _ = header(&bytes);
+        }
+    }
+    #[test]
+    fn dropping_an_active_loader_does_not_join_or_modify_source() {
+        let source =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/s0/orientation-1.jpg");
+        let bytes = std::fs::read(&source).unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        // Deterministically model a worker that has not returned yet.
+        let mut loader = Loader {
+            generation: 1,
+            active: Some((1, rx)),
+            pending: Some(source.clone()),
+        };
+        loader.request(source.clone());
+        drop(loader);
+        assert!(
+            tx.send(Err(Error::new(ErrorKind::Internal, "test")))
+                .is_err()
+        );
+        assert_eq!(std::fs::read(source).unwrap(), bytes);
+    }
+    #[test]
+    fn readonly_unicode_source_is_supported_and_preserved() {
+        let dir =
+            std::env::temp_dir().join(format!("lightwell read only ü {}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("photo ü.jpg");
+        let bytes = std::fs::read(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/s0/orientation-1.jpg"),
+        )
+        .unwrap();
+        std::fs::write(&path, &bytes).unwrap();
+        let original = std::fs::metadata(&path).unwrap().permissions();
+        let mut readonly = original.clone();
+        readonly.set_readonly(true);
+        std::fs::set_permissions(&path, readonly).unwrap();
+        assert!(open(&path).is_ok());
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        std::fs::set_permissions(&path, original).unwrap();
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

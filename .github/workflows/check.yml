@@ -25,14 +25,28 @@ jobs:
         run: cargo xtask build --release
       - name: Local development artifact and notices
         run: cargo xtask package --output artifacts/package
+      - name: Linux runtime imports
+        if: runner.os == 'Linux'
+        run: ldd artifacts/package/Lightwell/lightwell | tee artifacts/package/runtime-imports.txt
+      - name: Windows runtime imports
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe"
+          $vsRoot = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $dumpbin = Get-ChildItem "$vsRoot/VC/Tools/MSVC/*/bin/Hostx64/x64/dumpbin.exe" | Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $dumpbin) { throw "MSVC dumpbin unavailable" }
+          & $dumpbin.FullName /DEPENDENTS artifacts/package/Lightwell/lightwell.exe | Tee-Object artifacts/package/runtime-imports.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Headless Linux renderer smoke (software Vulkan, not native acceptance)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get install -y xvfb mesa-vulkan-drivers libxkbcommon-x11-0
           python3 -m venv .venv
           .venv/bin/python -m pip install -r tools/fixture-requirements.txt
-          for scenario in empty load replacement; do
-            xvfb-run -a .venv/bin/python tools/dev.py smoke --scenario "$scenario" --output "artifacts/headless-$scenario"
+          .venv/bin/python tools/generate_fixtures.py --large
+          for scenario in empty load replacement invalid repeated alternating large24 large60; do
+            xvfb-run -a .venv/bin/python tools/dev.py smoke --binary artifacts/package/Lightwell/lightwell --scenario "$scenario" --output "artifacts/headless-$scenario"
           done
         env:
           WGPU_BACKEND: vulkan

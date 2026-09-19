@@ -1,6 +1,6 @@
 # Referenced originals and source recovery
 
-Status: **M1 manual Locate agreed on 2026-09-19; detailed design draft; unimplemented**. The owner references existing photos, usually edits from local storage, then syncs back to an external drive. Other photographers' storage workflows require later research. Lightwell must preserve edits when originals are moved or reorganized.
+Status: **M1 manual Locate agreed on 2026-09-19; owner-facing recovery defaults accepted during TASK-028; unimplemented**. The owner references existing photos, usually edits from local storage, then syncs back to an external drive. Other photographers' storage workflows require later research. Lightwell must preserve edits when originals are moved or reorganized.
 
 ## Principles and data model
 

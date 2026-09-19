@@ -2,8 +2,8 @@
   "schema_version": "1.0",
   "plan_id": "implementation",
   "title": "Lightwell v0 implementation: cross-platform image-loading skeleton, then editor",
-  "objective": "Deliver S0: a native macOS/Windows/Linux skeleton that opens and displays a JPEG, with repeatable setup, lint/build workflows, structured logs, real-render screenshots, agent smoke tests and platform packages. Only after S0, build the retained M1 catalog/geometry/undo/export/live-MCP/manual-Locate editor.",
-  "context_summary": "Planning only; no app, tooling, VM, build or benchmark was executed. Latest user instruction supersedes the full editor as the first end-to-end build. S0 excludes editing tools, catalogs, export and production IPC/MCP; early agent verification uses a development launch/state/capture harness sharing the real open-image service. Mac M4 is the primary development machine, but S0 completion requires the accepted three-platform launch/load matrix. Rust/Iced/wgpu remains provisional pending narrow probes and product constraints. TASK-002 through TASK-022 retain IDs; TASK-004 and TASK-007 through TASK-022 are M1 follow-on work. TASK-035 through TASK-063 detail S0, with TASK-060 optional and off the completion gate. TASK-064 bridges to M1. Product choices are in tasks/product-decisions.json; explicit local gates verify external decisions before completing. Commands remain empty until real tooling exists. Execution started 2026-09-19: independent fixture and repository-convention work; external S0 gate answers remain outstanding.",
+  "objective": "Deliver S0: a native macOS/Windows/Linux skeleton that opens and displays a JPEG, with repeatable setup, lint/build workflows, structured logs, real-render screenshots, agent smoke tests and platform packages. Only after S0, build the retained M1 catalog/geometry/undo/export/live-MCP/manual-Locate editor. Apply the accepted programmable module-host boundaries in M1 and scope the later external-loader proof from measured activation costs.",
+  "context_summary": "Planning only; no app, tooling, VM, build or benchmark was executed. Latest user instruction supersedes the full editor as the first end-to-end build. S0 excludes editing tools, catalogs, export and production IPC/MCP; early agent verification uses a development launch/state/capture harness sharing the real open-image service. Mac M4 is the primary development machine, but S0 completion requires the accepted three-platform launch/load matrix. Rust/Iced/wgpu remains provisional pending narrow probes and product constraints. TASK-002 through TASK-022 retain IDs; TASK-004 and TASK-007 through TASK-022 are M1 follow-on work. TASK-035 through TASK-063 detail S0, with TASK-060 optional and off the completion gate. TASK-064 bridges to M1. Product choices are in tasks/product-decisions.json; explicit local gates verify external decisions before completing. Commands remain empty until real tooling exists. Execution started 2026-09-19: independent fixture and repository-convention work; external S0 gate answers remain outstanding. Latest owner override (2026-09-19): defer manual Windows/Linux acceptance and manual license review tasks; finish local scaffold hardening and M4 evidence. Architecture planning update 2026-09-19: accepted D19–D21 require all operations to be programmable and built-in/external tools to use core history/change services. M1 tasks now explicitly establish this boundary and verify full operation coverage. TASK-067 follows the verified M1 handoff to measure optional-module activation and scope the required external-loader proof; it is not on the S0/M1 gate. No application code or task completion is authorized by this update. Historical provisional stack notes above are superseded by the recorded Rust/Iced selection and existing S0 viewer; current task statuses remain authoritative.",
   "tasks": [
     {
       "id": "TASK-002",
@@ -323,13 +323,21 @@
           "target": "docs/design/architecture.md",
           "relevance": "Requires one typed operation vocabulary and state/error schemas.",
           "locator": "Agent contract"
+        },
+        {
+          "kind": "file",
+          "label": "Programmable operations and module host",
+          "target": "docs/design/modules-and-api.md",
+          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
         }
       ],
       "acceptance_criteria": [
         "Implement UI-independent asset/recipe/revision types and exact canonical geometry behavior settled in TASK-004. Asset identity is independent of root/path locators; define edit/source revision preconditions and manual Locate input/result types.",
         "Define typed command/query/results for M1 operations with discoverable JSON schemas, units, defaults, errors, request IDs and revision preconditions. Include session selection and viewport zoom percentage/Fit/pan, committed-state notifications, source verification/relink and an explicit Keep metadata export option defaulting to false.",
         "Validate nonfinite values, invalid crop coverage, aspect ratios, angle bounds and output dimension limits consistently.",
-        "Deterministic fixture and property tests cover EXIF interpretation boundaries, transform composition and valid inverse crop mapping without involving UI widgets."
+        "Deterministic fixture and property tests cover EXIF interpretation boundaries, transform composition and valid inverse crop mapping without involving UI widgets.",
+        "Define a minimal registry/provider contract for built-in tools/decoders: identifiers, operation/schema discovery, feature validation and recipe/render boundaries. Keep shared invariants and history/change APIs in the host; do not create a dynamic loader, public ABI framework or generic node graph.",
+        "Define an operation coverage matrix for every M1 action, including session state and any settings; new module operations must enter the same typed registry rather than a GUI-only path."
       ],
       "test_strategy": {
         "approach": "mixed",
@@ -337,7 +345,8 @@
           "Test coordinate round trips and all orientation/mirror/quarter-turn combinations.",
           "Use adversarial boundary values and check no invalid state can be committed.",
           "Validate schema examples against actual command decoding.",
-          "Verify centered proportional scaling, composition-preserving fitting and gesture-start evaluation against TASK-004 golden cases; prove viewport zoom/DPI do not alter recipe coordinates or export geometry."
+          "Verify centered proportional scaling, composition-preserving fitting and gesture-start evaluation against TASK-004 golden cases; prove viewport zoom/DPI do not alter recipe coordinates or export geometry.",
+          "Inspect each M1 action against its operation/schema/state representation and prove the geometry provider can validate a change without UI widgets."
         ],
         "commands": [],
         "expected_results": [
@@ -369,20 +378,28 @@
           "target": "docs/specs/single-image.md",
           "relevance": "Defines reopen, original preservation and failure states.",
           "locator": "Import and persistence"
+        },
+        {
+          "kind": "file",
+          "label": "Programmable operations and module host",
+          "target": "docs/design/modules-and-api.md",
+          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
         }
       ],
       "acceptance_criteria": [
         "Implement asset, current edit and history persistence with foreign keys, internal format markers and appropriate indexes. Separate source roots/relative locators from permanent asset IDs and persist verified fingerprints and availability.",
         "Atomically commit state/history and implement undo/redo branch behavior, revision checks and request deduplication semantics.",
         "Add exclusive application ownership and consistent catalog snapshots, with explicit busy/incompatible/failed-commit results.",
-        "Integration checks prove restart persistence, transaction rollback, duplicate-request behavior and that failed writes preserve the last committed recipe."
+        "Integration checks prove restart persistence, transaction rollback, duplicate-request behavior and that failed writes preserve the last committed recipe.",
+        "Expose atomic recipe/history change services used by built-in modules; modules cannot write catalog tables or maintain separate undo state. Preserve unsupported provider payloads/history, or reject an incompatible catalog non-destructively with a recovery path; never normalize unknown edits away."
       ],
       "test_strategy": {
         "approach": "mixed",
         "steps": [
           "Exercise temporary catalogs with valid, stale and retried edits.",
           "Interrupt transactions and reopen; verify durable state/history consistency.",
-          "Test backup restoration and a second owner attempt."
+          "Test backup restoration and a second owner attempt.",
+          "Exercise a module-originated edit and host undo/redo; verify persisted provider data and explicit rejection/recovery for unsupported data without destructive rewriting."
         ],
         "commands": [],
         "expected_results": [
@@ -419,13 +436,20 @@
           "label": "Fixture and memory requirements",
           "target": "docs/specs/performance.md",
           "relevance": "Defines meaningful image correctness checks."
+        },
+        {
+          "kind": "file",
+          "label": "Programmable operations and module host",
+          "target": "docs/design/modules-and-api.md",
+          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
         }
       ],
       "acceptance_criteria": [
         "Decode supported JPEGs behind a format adapter that reports metadata, dimensions, orientation, source fingerprint and profile meaning. Detect source changes during hashing/decoding so the fingerprint and pixels cannot represent different file versions. Read supported descriptive metadata through the TASK-004-selected adapter without promising opaque manufacturer/private-tag round trips.",
         "Implement the accepted color transforms and geometry sampler with bounded intermediate storage and no repeated destructive resampling.",
         "Handle untagged sRGB assumptions, unsupported color modes, malformed input/profile and excessive dimensions explicitly.",
-        "Reference fixture renders match declared geometry/color expectations, and unsupported/oversized input fails without uncontrolled allocation."
+        "Reference fixture renders match declared geometry/color expectations, and unsupported/oversized input fails without uncontrolled allocation.",
+        "Implement the built-in decoder/geometry processing providers behind TASK-007 contracts; the shared engine owns color/coordinate contracts and scheduling, while modules own their feature algorithms. Preview and export evaluate the same immutable recipe semantics."
       ],
       "test_strategy": {
         "approach": "mixed",
@@ -508,13 +532,20 @@
           "label": "Import and editing behavior",
           "target": "docs/specs/single-image.md",
           "relevance": "Defines atomic import, original identity and durable actions."
+        },
+        {
+          "kind": "file",
+          "label": "Programmable operations and module host",
+          "target": "docs/design/modules-and-api.md",
+          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
         }
       ],
       "acceptance_criteria": [
         "Implement catalog lifecycle, by-reference import, bounded asset queries, recipe updates/reset/undo/redo and capability inspection through one service. Route session zoom/pan/Fit and selection through the same service without changing the durable edit recipe or adding geometry history.",
         "Handle source aliases, repeat import, missing/changed original, save failure, invalid parameters and revision conflicts with structured results.",
         "Route mutations through catalog transactions and emit committed revision/state changes; keep source files read-only.",
-        "Service integration tests complete import/edit/reopen flows while proving failed or conflicting actions make no partial durable change."
+        "Service integration tests complete import/edit/reopen flows while proving failed or conflicting actions make no partial durable change.",
+        "Register the built-in providers and route module operations through host validation, atomic changes/history and scheduling. The service and registry are usable headlessly without constructing panels; no alternate module-owned persistence path is allowed."
       ],
       "test_strategy": {
         "approach": "mixed",
@@ -599,6 +630,12 @@
           "target": "docs/plan.md",
           "relevance": "Defines simplicity and Lightroom familiarity.",
           "locator": "Product shape"
+        },
+        {
+          "kind": "file",
+          "label": "Programmable operations and module host",
+          "target": "docs/design/modules-and-api.md",
+          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
         }
       ],
       "acceptance_criteria": [
@@ -606,7 +643,8 @@
         "Implement free side/corner handles, aspect/angle controls, fixed-center proportional Option scaling and composition-preserving straightening, plus rotate/flip/reset, Apply/Cancel and undo/redo through shared geometry/service logic.",
         "Provide Fit, editable zoom percentage, 100% inspection and pan with gestures distinct from crop movement; keep view state independent of edit history and exported dimensions.",
         "Keep one durable action per committed gesture and show accurate loading, draft, saving/saved, source-missing and failure states.",
-        "Pointer and keyboard workflows work at supported DPI/zoom levels with accessible names/focus and no editing rules stored solely in widgets."
+        "Pointer and keyboard workflows work at supported DPI/zoom levels with accessible names/focus and no editing rules stored solely in widgets.",
+        "Map every introduced UI action to the common operation coverage matrix, including settings if added; widgets adapt gestures to registered feature operations and use the module validator instead of duplicating feature rules."
       ],
       "test_strategy": {
         "approach": "mixed",
@@ -649,13 +687,20 @@
           "target": "docs/specs/single-image.md",
           "relevance": "Defines required scriptable operations and catalog_busy behavior.",
           "locator": "Programmatic parity"
+        },
+        {
+          "kind": "file",
+          "label": "Programmable operations and module host",
+          "target": "docs/design/modules-and-api.md",
+          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
         }
       ],
       "acceptance_criteria": [
         "Expose a documented JSON request/response session for every M1 durable operation, session selection and zoom/pan/Fit, bounded queries/previews, capabilities and job status/cancellation; attach to the GUI owner while it is open. Include the same explicit Keep metadata option and default as the export service.",
         "Keep protocol stdout clean and errors structured; optional one-shot wrappers wait for completion.",
         "Enforce revision/retry rules, one-owner discovery and explicit client job cancellation. Client EOF must not kill a GUI owner or other clients' jobs; headless-owner shutdown remains safe.",
-        "An automated headless journey imports, edits, inspects, undoes/redoes and exports through the same service without using the GUI."
+        "An automated headless journey imports, edits, inspects, undoes/redoes and exports through the same service without using the GUI.",
+        "Expose all applicable registered M1 operations, including any settings, with machine-readable state and errors. Compare JSON discovery with the operation coverage matrix; a hand-maintained subset of tools does not establish full API coverage."
       ],
       "test_strategy": {
         "approach": "mixed",
@@ -742,20 +787,28 @@
           "label": "Correctness methodology",
           "target": "docs/specs/performance.md",
           "relevance": "Defines fixture-based comparisons and declared tolerances."
+        },
+        {
+          "kind": "file",
+          "label": "Programmable operations and module host",
+          "target": "docs/design/modules-and-api.md",
+          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
         }
       ],
       "acceptance_criteria": [
         "Add targeted integration/end-to-end checks for live UI/CLI/MCP parity, shared persisted history, canonical geometry and manual Locate preserving asset identity and edits.",
         "Verify source byte hashes, alias protection, changed originals, interrupted writes, retry behavior, job cancellation and catalog contention. Test agent commits during a human draft, disconnect/reconnect state refresh, and same-name/different-content relink candidates.",
         "Compare preview/export color and geometry under declared tolerances and record independent-viewer checks. Verify free/Option crop and composition-preserving straightening across zoom/DPI, actual 100% detail, and both metadata modes through UI/CLI/MCP with independent tag inspection.",
-        "Document all results and fix correctness/recovery regressions; no unverified path is described as passing."
+        "Document all results and fix correctness/recovery regressions; no unverified path is described as passing.",
+        "Complete the per-operation UI/service/JSON/MCP coverage matrix for all M1 actions; compare canonical state/history, notifications/errors and rendered results where applicable. Prove the built-in geometry module uses shared host change/undo services in headless and live-GUI flows."
       ],
       "test_strategy": {
         "approach": "mixed",
         "steps": [
           "Run the acceptance matrix against the implemented executable and recorded fixtures.",
           "Use controlled interruption/failure injection for persistence and export.",
-          "Inspect differences and distinguish JPEG encoding variation from geometry/color errors."
+          "Inspect differences and distinguish JPEG encoding variation from geometry/color errors.",
+          "Inspect every registered operation and UI action for a documented API route; exercise valid, invalid and stale-revision cases appropriate to that action."
         ],
         "commands": [],
         "expected_results": [
@@ -885,7 +938,8 @@
         "Separate portability gate retained from the original three-platform packaging scope. It does not block the Mac-first M1 handoff in TASK-018.",
         "Linux ARM64 VM smoke checks are useful functional evidence but do not substitute for native GPU testing. Prefer the owner's Omarchy candidate when its actual backend supports the workload.",
         "Windows/Linux remain required product targets. Lack of a test machine keeps this task open; it is not grounds to claim M1 editor support.",
-        "S0 already verifies its own platform matrix in TASK-057/TASK-058/TASK-059. This separate task verifies added catalog/edit/export/IPC behavior; earlier skeleton success does not prove those features."
+        "S0 already verifies its own platform matrix in TASK-057/TASK-058/TASK-059. This separate task verifies added catalog/edit/export/IPC behavior; earlier skeleton success does not prove those features.",
+        "Manual Windows/Linux checks are deferred for now by the 2026-09-19 owner instruction. Retained for later editor portability; not cancelled or completed."
       ],
       "context_links": [
         {
@@ -1019,13 +1073,20 @@
           "target": "docs/specs/single-image.md",
           "relevance": "Defines observable live editing and preview behavior.",
           "locator": "Programmatic parity"
+        },
+        {
+          "kind": "file",
+          "label": "Programmable operations and module host",
+          "target": "docs/design/modules-and-api.md",
+          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
         }
       ],
       "acceptance_criteria": [
         "Implement a standards-compliant stdio MCP adapter using a pinned suitable SDK/protocol version and connecting to the active catalog owner.",
         "Expose discoverable schemas for M1 catalog/asset/session queries, geometry/history, bounded previews, export/jobs and source recovery from the shared operation registry.",
         "Preserve expected revisions, request/retry semantics, structured failures and explicit job cancellation; keep diagnostics off protocol stdout.",
-        "Verify protocol interoperability and service parity with a real MCP client or conformance harness, including a live-GUI edit/preview/undo journey in final integration checks."
+        "Verify protocol interoperability and service parity with a real MCP client or conformance harness, including a live-GUI edit/preview/undo journey in final integration checks.",
+        "Audit MCP coverage against the common registry and every M1 UI action, including session/view state and any settings. Verify newly registered built-in operations require no separate feature implementation in the adapter."
       ],
       "test_strategy": {
         "approach": "mixed",
@@ -1413,7 +1474,7 @@
     {
       "id": "TASK-041",
       "description": "Automate dependency, license, asset and advisory checks.",
-      "status": "in_progress",
+      "status": "pending",
       "dependencies": [
         "TASK-006"
       ],
@@ -1422,7 +1483,8 @@
         "Pinned cargo-deny 0.20.2 license/source checks pass for configured three-target graph. Advisory scan reports unmaintained paste 1.0.15 and ttf-parser 0.25.1; no ignores added. Embedded asset/native notice review remains outstanding. See docs/engineering/dependency-review.md.",
         "CI activation authorized after scaffold commit 05937b7. Follow docs/engineering/ci-plan.md; hosted execution and remaining task acceptance are distinct. First run: https://github.com/Willyham/lightwell/actions/runs/35460222072.",
         "Owner authorized advisory remediation. No supported selected-stack upgrade removes both findings. Implement exact-version/time-limited maintenance exceptions with TASK-065/066; full asset/native notice audit remains open.",
-        "Verified c0ad340 in GitHub run 35465688171: reviewed advisory policy and all CI jobs pass. Six policy tests and negative cargo-deny verification pass. Exceptions expire exclusively 2026-10-19 (ttf-parser) and 2026-12-18 (paste); no dependency replacement claimed. Full asset/native notice review remains incomplete."
+        "Verified c0ad340 in GitHub run 35465688171: reviewed advisory policy and all CI jobs pass. Six policy tests and negative cargo-deny verification pass. Exceptions expire exclusively 2026-10-19 (ttf-parser) and 2026-12-18 (paste); no dependency replacement claimed. Full asset/native notice review remains incomplete.",
+        "2026-09-19 owner instruction: deferred for now; not a current S0 completion prerequisite. Existing evidence and criteria retained; not completed."
       ],
       "context_links": [
         {
@@ -1462,12 +1524,13 @@
     {
       "id": "TASK-042",
       "description": "Implement isolated configuration, data paths and application errors.",
-      "status": "in_progress",
+      "status": "completed",
       "dependencies": [
         "TASK-006"
       ],
       "extra_context": [
-        "S0 implementation; no editing tools."
+        "S0 implementation; no editing tools.",
+        "2026-09-19 local hardening verified: see docs/engineering/s0-hardening-results.md for current package hashes, tests, native Metal captures, measured baseline and explicit limitations. Does not imply current picker selection or hosted Windows/Linux execution."
       ],
       "context_links": [
         {
@@ -1481,6 +1544,12 @@
           "label": "Development and verification",
           "target": "docs/engineering/development.md",
           "relevance": "Defines setup, checks, logs, screenshots and build evidence."
+        },
+        {
+          "kind": "file",
+          "label": "Local hardening evidence",
+          "target": "docs/engineering/s0-hardening-results.md",
+          "relevance": "Records exact package identity, reproducible tests, measurements and verification limitations."
         }
       ],
       "acceptance_criteria": [
@@ -1496,7 +1565,9 @@
           "Exercise read-only/unwritable locations and unusual path names.",
           "Verify useful errors without panics or writes beside originals."
         ],
-        "commands": [],
+        "commands": [
+          "cargo xtask check"
+        ],
         "expected_results": [
           "An isolated test run leaves real user configuration and source directories unchanged, including unwritable-directory failures."
         ]
@@ -1505,13 +1576,14 @@
     {
       "id": "TASK-043",
       "description": "Build the native window and application lifecycle.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "TASK-006",
         "TASK-042"
       ],
       "extra_context": [
-        "S0 implementation; no editing tools."
+        "S0 implementation; no editing tools.",
+        "2026-09-19 local hardening verified: see docs/engineering/s0-hardening-results.md for current package hashes, tests, native Metal captures, measured baseline and explicit limitations. Does not imply current picker selection or hosted Windows/Linux execution."
       ],
       "context_links": [
         {
@@ -1525,6 +1597,12 @@
           "label": "Development and verification",
           "target": "docs/engineering/development.md",
           "relevance": "Defines setup, checks, logs, screenshots and build evidence."
+        },
+        {
+          "kind": "file",
+          "label": "Local hardening evidence",
+          "target": "docs/engineering/s0-hardening-results.md",
+          "relevance": "Records exact package identity, reproducible tests, measurements and verification limitations."
         }
       ],
       "acceptance_criteria": [
@@ -1540,7 +1618,9 @@
           "Exercise renderer-init failure and repeated lifecycle transitions.",
           "Inspect empty-state focus and screenshot layout when capture becomes available."
         ],
-        "commands": [],
+        "commands": [
+          "cargo xtask check"
+        ],
         "expected_results": [
           "The window launches and exits cleanly on the primary machine; UI state logic is testable separately from native event delivery."
         ]
@@ -1549,14 +1629,15 @@
     {
       "id": "TASK-044",
       "description": "Add structured logs, timings and failure diagnostics.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "TASK-006",
         "TASK-042"
       ],
       "extra_context": [
         "S0 implementation; no editing tools.",
-        "Draft evidence logging exists in scaffold, but full task remains pending completion of TASK-042 and bounded diagnostics/failure coverage."
+        "Draft evidence logging exists in scaffold, but full task remains pending completion of TASK-042 and bounded diagnostics/failure coverage.",
+        "2026-09-19 local hardening verified: see docs/engineering/s0-hardening-results.md for current package hashes, tests, native Metal captures, measured baseline and explicit limitations. Does not imply current picker selection or hosted Windows/Linux execution."
       ],
       "context_links": [
         {
@@ -1570,6 +1651,12 @@
           "label": "Development and verification",
           "target": "docs/engineering/development.md",
           "relevance": "Defines setup, checks, logs, screenshots and build evidence."
+        },
+        {
+          "kind": "file",
+          "label": "Local hardening evidence",
+          "target": "docs/engineering/s0-hardening-results.md",
+          "relevance": "Records exact package identity, reproducible tests, measurements and verification limitations."
         }
       ],
       "acceptance_criteria": [
@@ -1585,7 +1672,9 @@
           "Exercise unavailable log output and verify bounded, useful fallback diagnostics.",
           "Inspect logs for unexpected source paths, GPS or per-frame noise."
         ],
-        "commands": [],
+        "commands": [
+          "cargo xtask check"
+        ],
         "expected_results": [
           "An agent can correlate a request from startup through failure/success and shutdown using machine-readable logs."
         ]
@@ -1594,12 +1683,13 @@
     {
       "id": "TASK-045",
       "description": "Implement the read-only image-open service and bounded background decode.",
-      "status": "in_progress",
+      "status": "completed",
       "dependencies": [
         "TASK-006"
       ],
       "extra_context": [
-        "S0 implementation; no editing tools."
+        "S0 implementation; no editing tools.",
+        "2026-09-19 local hardening verified: see docs/engineering/s0-hardening-results.md for current package hashes, tests, native Metal captures, measured baseline and explicit limitations. Does not imply current picker selection or hosted Windows/Linux execution."
       ],
       "context_links": [
         {
@@ -1613,6 +1703,12 @@
           "label": "Development and verification",
           "target": "docs/engineering/development.md",
           "relevance": "Defines setup, checks, logs, screenshots and build evidence."
+        },
+        {
+          "kind": "file",
+          "label": "Local hardening evidence",
+          "target": "docs/engineering/s0-hardening-results.md",
+          "relevance": "Records exact package identity, reproducible tests, measurements and verification limitations."
         }
       ],
       "acceptance_criteria": [
@@ -1628,7 +1724,9 @@
           "Issue rapid A/B opens and close during decode; verify only the current generation is accepted.",
           "Check source hashes and peak allocation behavior."
         ],
-        "commands": [],
+        "commands": [
+          "cargo xtask check"
+        ],
         "expected_results": [
           "Valid and invalid image requests preserve source bytes and cannot publish stale pixels or allocate without bounds."
         ]
@@ -1637,13 +1735,14 @@
     {
       "id": "TASK-046",
       "description": "Display the decoded image at Fit with correct resize and orientation.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "TASK-043",
         "TASK-045"
       ],
       "extra_context": [
-        "S0 implementation; no editing tools."
+        "S0 implementation; no editing tools.",
+        "2026-09-19 local hardening verified: see docs/engineering/s0-hardening-results.md for current package hashes, tests, native Metal captures, measured baseline and explicit limitations. Does not imply current picker selection or hosted Windows/Linux execution."
       ],
       "context_links": [
         {
@@ -1657,6 +1756,12 @@
           "label": "Development and verification",
           "target": "docs/engineering/development.md",
           "relevance": "Defines setup, checks, logs, screenshots and build evidence."
+        },
+        {
+          "kind": "file",
+          "label": "Local hardening evidence",
+          "target": "docs/engineering/s0-hardening-results.md",
+          "relevance": "Records exact package identity, reproducible tests, measurements and verification limitations."
         }
       ],
       "acceptance_criteria": [
@@ -1672,7 +1777,9 @@
           "Resize across aspect ratios and supported display scales.",
           "Repeat image replacement and inspect resource use and backend diagnostics."
         ],
-        "commands": [],
+        "commands": [
+          "cargo xtask check"
+        ],
         "expected_results": [
           "Portrait/landscape/oriented fixtures display correctly across resize/DPI changes, with rendering readiness tied to the current generation."
         ]
@@ -1681,12 +1788,14 @@
     {
       "id": "TASK-047",
       "description": "Connect native file opening, keyboard actions and visible failure states.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "TASK-046"
       ],
       "extra_context": [
-        "S0 implementation; no editing tools."
+        "S0 implementation; no editing tools.",
+        "Implementation, native Open/Cancel and shared failure path verified. Current packaged native selection remains unverified: automated panel Open stays disabled for valid synthetic JPEGs; no-filter experiment failed and was reverted. Owner confirmation requested. Earlier probe success is retained but not substituted.",
+        "2026-09-19: owner explicitly confirmed “I can open a JPEG manually.” Native selection is accepted as owner-observed evidence, separate from automated OS-window shortcut/cancel/resize/close and exact-package renderer/state/log evidence. Earlier automation blocker is resolved by this report; no claim of automated picker-selection success."
       ],
       "context_links": [
         {
@@ -1700,6 +1809,12 @@
           "label": "Development and verification",
           "target": "docs/engineering/development.md",
           "relevance": "Defines setup, checks, logs, screenshots and build evidence."
+        },
+        {
+          "kind": "file",
+          "label": "Native verification and owner result",
+          "target": "docs/engineering/s0-hardening-results.md",
+          "relevance": "Separates owner-observed manual picker success from automated native frame, resize and shutdown evidence."
         }
       ],
       "acceptance_criteria": [
@@ -1724,14 +1839,15 @@
     {
       "id": "TASK-048",
       "description": "Expose deterministic launch, state and readiness controls for development tests.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "TASK-043",
         "TASK-044",
         "TASK-045"
       ],
       "extra_context": [
-        "S0 implementation; no editing tools."
+        "S0 implementation; no editing tools.",
+        "2026-09-19 local hardening verified: see docs/engineering/s0-hardening-results.md for current package hashes, tests, native Metal captures, measured baseline and explicit limitations. Does not imply current picker selection or hosted Windows/Linux execution."
       ],
       "context_links": [
         {
@@ -1745,6 +1861,12 @@
           "label": "Development and verification",
           "target": "docs/engineering/development.md",
           "relevance": "Defines setup, checks, logs, screenshots and build evidence."
+        },
+        {
+          "kind": "file",
+          "label": "Local hardening evidence",
+          "target": "docs/engineering/s0-hardening-results.md",
+          "relevance": "Records exact package identity, reproducible tests, measurements and verification limitations."
         }
       ],
       "acceptance_criteria": [
@@ -1760,7 +1882,9 @@
           "Verify timeout and stale-generation cases return meaningful outcomes.",
           "Compare automated opening with the same UI service operation."
         ],
-        "commands": [],
+        "commands": [
+          "cargo xtask check"
+        ],
         "expected_results": [
           "A driver can launch and inspect the real app without a catalog, MCP server, network listener or arbitrary fixed sleeps."
         ]
@@ -1769,13 +1893,14 @@
     {
       "id": "TASK-049",
       "description": "Capture actual application frames and record screenshot provenance.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "TASK-046",
         "TASK-048"
       ],
       "extra_context": [
-        "S0 implementation; no editing tools."
+        "S0 implementation; no editing tools.",
+        "2026-09-19 local hardening verified: see docs/engineering/s0-hardening-results.md for current package hashes, tests, native Metal captures, measured baseline and explicit limitations. Does not imply current picker selection or hosted Windows/Linux execution."
       ],
       "context_links": [
         {
@@ -1789,6 +1914,12 @@
           "label": "Development and verification",
           "target": "docs/engineering/development.md",
           "relevance": "Defines setup, checks, logs, screenshots and build evidence."
+        },
+        {
+          "kind": "file",
+          "label": "Local hardening evidence",
+          "target": "docs/engineering/s0-hardening-results.md",
+          "relevance": "Records exact package identity, reproducible tests, measurements and verification limitations."
         }
       ],
       "acceptance_criteria": [
@@ -1804,7 +1935,9 @@
           "Force a stale/blank render and verify evidence does not count as success.",
           "Check frame/state generation agreement and high-DPI dimensions."
         ],
-        "commands": [],
+        "commands": [
+          "cargo xtask check"
+        ],
         "expected_results": [
           "Fixture captures can detect blank/stale frames and show the image plus application content required for layout review."
         ]
@@ -1813,14 +1946,15 @@
     {
       "id": "TASK-050",
       "description": "Add focused decode, state and rendered-image correctness checks.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "TASK-045",
         "TASK-046",
         "TASK-049"
       ],
       "extra_context": [
-        "S0 implementation; no editing tools."
+        "S0 implementation; no editing tools.",
+        "2026-09-19 local hardening verified: see docs/engineering/s0-hardening-results.md for current package hashes, tests, native Metal captures, measured baseline and explicit limitations. Does not imply current picker selection or hosted Windows/Linux execution."
       ],
       "context_links": [
         {
@@ -1834,6 +1968,12 @@
           "label": "Development and verification",
           "target": "docs/engineering/development.md",
           "relevance": "Defines setup, checks, logs, screenshots and build evidence."
+        },
+        {
+          "kind": "file",
+          "label": "Local hardening evidence",
+          "target": "docs/engineering/s0-hardening-results.md",
+          "relevance": "Records exact package identity, reproducible tests, measurements and verification limitations."
         }
       ],
       "acceptance_criteria": [
@@ -1849,7 +1989,9 @@
           "Inject obsolete requests and malformed input with bounded time/allocation expectations.",
           "Review captures and source hashes independently."
         ],
-        "commands": [],
+        "commands": [
+          "cargo xtask check"
+        ],
         "expected_results": [
           "Failures identify the mismatched state/region and retain expected/actual evidence with documented tolerances."
         ]
@@ -1858,15 +2000,17 @@
     {
       "id": "TASK-051",
       "description": "Build a process-level agent smoke runner and evidence bundle.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
-        "TASK-047",
+        "TASK-046",
         "TASK-048",
         "TASK-049",
         "TASK-050"
       ],
       "extra_context": [
-        "S0 implementation; no editing tools."
+        "S0 implementation; no editing tools.",
+        "Process smoke drives the shared image service and rendered window; it does not depend on native picker acceptance, which remains TASK-047/057.",
+        "2026-09-19 local hardening verified: see docs/engineering/s0-hardening-results.md for current package hashes, tests, native Metal captures, measured baseline and explicit limitations. Does not imply current picker selection or hosted Windows/Linux execution."
       ],
       "context_links": [
         {
@@ -1880,6 +2024,12 @@
           "label": "Development and verification",
           "target": "docs/engineering/development.md",
           "relevance": "Defines setup, checks, logs, screenshots and build evidence."
+        },
+        {
+          "kind": "file",
+          "label": "Local hardening evidence",
+          "target": "docs/engineering/s0-hardening-results.md",
+          "relevance": "Records exact package identity, reproducible tests, measurements and verification limitations."
         }
       ],
       "acceptance_criteria": [
@@ -1895,7 +2045,11 @@
           "Kill or hang a test subprocess and verify timeout cleanup plus retained diagnostics.",
           "Verify source paths/data are sanitized for CI fixture runs."
         ],
-        "commands": [],
+        "commands": [
+          "cargo xtask check",
+          "cargo xtask smoke --scenario alternating --output artifacts/new-alternating",
+          "python3 tools/check_hardening.py --binary target/release/lightwell --output artifacts/new-failure-checks"
+        ],
         "expected_results": [
           "An agent can reproduce a scenario, inspect logs and the actual PNG, and determine the result without guessing GUI coordinates."
         ]
@@ -1904,16 +2058,16 @@
     {
       "id": "TASK-052",
       "description": "Add the three-platform build and check CI workflow.",
-      "status": "pending",
+      "status": "in_progress",
       "dependencies": [
         "TASK-039",
-        "TASK-040",
-        "TASK-041"
+        "TASK-040"
       ],
       "extra_context": [
         "S0 implementation; no editing tools.",
         "CI activation authorized after scaffold commit 05937b7. Follow docs/engineering/ci-plan.md; hosted execution and remaining task acceptance are distinct. First run: https://github.com/Willyham/lightwell/actions/runs/35460222072.",
-        "Hosted verification: run 35460353189 passes macOS/Windows build-package and fixture jobs; run 35460833672 fixes Linux X11 runtime and passes all Linux Xvfb/llvmpipe smoke scenarios. Dependency audit still fails on two known maintenance advisories; full task prerequisites/desktop acceptance are not complete. See docs/engineering/ci-results.md."
+        "Hosted verification: run 35460353189 passes macOS/Windows build-package and fixture jobs; run 35460833672 fixes Linux X11 runtime and passes all Linux Xvfb/llvmpipe smoke scenarios. Dependency audit still fails on two known maintenance advisories; full task prerequisites/desktop acceptance are not complete. See docs/engineering/ci-results.md.",
+        "Existing hosted three-OS checks/packages passed at c0ad340; current source and expanded renderer scenarios have not been pushed/executed remotely, so fresh hosted verification remains pending."
       ],
       "context_links": [
         {
@@ -1997,14 +2151,15 @@
     {
       "id": "TASK-054",
       "description": "Package the S0 skeleton for macOS arm64.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
-        "TASK-047",
-        "TASK-039",
-        "TASK-041"
+        "TASK-046",
+        "TASK-039"
       ],
       "extra_context": [
-        "S0 implementation; no editing tools."
+        "S0 implementation; no editing tools.",
+        "Packaging depends on the compiled rendering slice; native picker acceptance is separately tracked by TASK-057/058/059, avoiding a false packaging dependency on manual checks.",
+        "2026-09-19 local hardening verified: see docs/engineering/s0-hardening-results.md for current package hashes, tests, native Metal captures, measured baseline and explicit limitations. Does not imply current picker selection or hosted Windows/Linux execution."
       ],
       "context_links": [
         {
@@ -2018,6 +2173,12 @@
           "label": "Development and verification",
           "target": "docs/engineering/development.md",
           "relevance": "Defines setup, checks, logs, screenshots and build evidence."
+        },
+        {
+          "kind": "file",
+          "label": "Local hardening evidence",
+          "target": "docs/engineering/s0-hardening-results.md",
+          "relevance": "Records exact package identity, reproducible tests, measurements and verification limitations."
         }
       ],
       "acceptance_criteria": [
@@ -2033,7 +2194,9 @@
           "Check dynamic/runtime dependencies and verify assets/notices are included.",
           "Record actual package commands and remaining clean-environment checks."
         ],
-        "commands": [],
+        "commands": [
+          "cargo xtask check"
+        ],
         "expected_results": [
           "Produce an install/unpack-and-launch artifact whose later smoke evidence can be tied to the exact tested binary, not an older build."
         ]
@@ -2042,14 +2205,14 @@
     {
       "id": "TASK-055",
       "description": "Package the S0 skeleton for Windows.",
-      "status": "pending",
+      "status": "in_progress",
       "dependencies": [
-        "TASK-047",
-        "TASK-039",
-        "TASK-041"
+        "TASK-046",
+        "TASK-039"
       ],
       "extra_context": [
-        "S0 implementation; no editing tools."
+        "S0 implementation; no editing tools.",
+        "Packaging depends on the compiled rendering slice; native picker acceptance is separately tracked by TASK-057/058/059, avoiding a false packaging dependency on manual checks."
       ],
       "context_links": [
         {
@@ -2087,14 +2250,14 @@
     {
       "id": "TASK-056",
       "description": "Package the S0 skeleton for Linux.",
-      "status": "pending",
+      "status": "in_progress",
       "dependencies": [
-        "TASK-047",
-        "TASK-039",
-        "TASK-041"
+        "TASK-046",
+        "TASK-039"
       ],
       "extra_context": [
-        "S0 implementation; no editing tools."
+        "S0 implementation; no editing tools.",
+        "Packaging depends on the compiled rendering slice; native picker acceptance is separately tracked by TASK-057/058/059, avoiding a false packaging dependency on manual checks."
       ],
       "context_links": [
         {
@@ -2132,13 +2295,15 @@
     {
       "id": "TASK-057",
       "description": "Verify packaged launch and image loading in a macOS on the M4 desktop session.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "TASK-054",
         "TASK-051"
       ],
       "extra_context": [
-        "S0 implementation; no editing tools."
+        "S0 implementation; no editing tools.",
+        "Current local package smoke passes; native shortcut/cancel/resize/close observed. Native picker selection remains blocked in automation (Open disabled), awaiting owner manual result; no fresh permission is needed.",
+        "2026-09-19: owner explicitly confirmed “I can open a JPEG manually.” Native selection is accepted as owner-observed evidence, separate from automated OS-window shortcut/cancel/resize/close and exact-package renderer/state/log evidence. Earlier automation blocker is resolved by this report; no claim of automated picker-selection success."
       ],
       "context_links": [
         {
@@ -2152,6 +2317,12 @@
           "label": "Development and verification",
           "target": "docs/engineering/development.md",
           "relevance": "Defines setup, checks, logs, screenshots and build evidence."
+        },
+        {
+          "kind": "file",
+          "label": "Native verification and owner result",
+          "target": "docs/engineering/s0-hardening-results.md",
+          "relevance": "Separates owner-observed manual picker success from automated native frame, resize and shutdown evidence."
         }
       ],
       "acceptance_criteria": [
@@ -2183,7 +2354,8 @@
       ],
       "extra_context": [
         "S0 implementation; no editing tools.",
-        "Owner confirmed no Windows 11 x64 machine available on 2026-09-19. Native launch/load remains pending; CI compilation is not substitute evidence."
+        "Owner confirmed no Windows 11 x64 machine available on 2026-09-19. Native launch/load remains pending; CI compilation is not substitute evidence.",
+        "2026-09-19 owner instruction: deferred for now; not a current S0 completion prerequisite. Existing evidence and criteria retained; not completed."
       ],
       "context_links": [
         {
@@ -2227,7 +2399,8 @@
         "TASK-051"
       ],
       "extra_context": [
-        "S0 implementation; no editing tools."
+        "S0 implementation; no editing tools.",
+        "2026-09-19 owner instruction: deferred for now; not a current S0 completion prerequisite. Existing evidence and criteria retained; not completed."
       ],
       "context_links": [
         {
@@ -2272,7 +2445,8 @@
       ],
       "extra_context": [
         "S0 implementation; no editing tools.",
-        "Optional portability aid, not required for TASK-063. This task plan does not install a VM or authorize infrastructure purchases."
+        "Optional portability aid, not required for TASK-063. This task plan does not install a VM or authorize infrastructure purchases.",
+        "2026-09-19 owner instruction: deferred for now; not a current S0 completion prerequisite. Existing evidence and criteria retained; not completed."
       ],
       "context_links": [
         {
@@ -2310,12 +2484,14 @@
     {
       "id": "TASK-061",
       "description": "Measure skeleton startup, image loading, memory and idle behavior on M4.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
-        "TASK-057"
+        "TASK-054"
       ],
       "extra_context": [
-        "S0 implementation; no editing tools."
+        "S0 implementation; no editing tools.",
+        "Measure the packaged binary independently of native picker automation; TASK-057 separately records manual desktop coverage.",
+        "2026-09-19 local hardening verified: see docs/engineering/s0-hardening-results.md for current package hashes, tests, native Metal captures, measured baseline and explicit limitations. Does not imply current picker selection or hosted Windows/Linux execution."
       ],
       "context_links": [
         {
@@ -2335,6 +2511,12 @@
           "label": "Measurement rules",
           "target": "docs/specs/performance.md",
           "relevance": "Defines honest baseline and platform reporting."
+        },
+        {
+          "kind": "file",
+          "label": "Local hardening evidence",
+          "target": "docs/engineering/s0-hardening-results.md",
+          "relevance": "Records exact package identity, reproducible tests, measurements and verification limitations."
         }
       ],
       "acceptance_criteria": [
@@ -2350,7 +2532,10 @@
           "Inspect memory/resource behavior over repeated image replacements.",
           "Measure idle behavior after all work has settled."
         ],
-        "commands": [],
+        "commands": [
+          "cargo xtask check",
+          "python3 tools/measure_scaffold.py --binary target/release/lightwell --output artifacts/new-baseline"
+        ],
         "expected_results": [
           "Publish an initial baseline with limitations; do not claim provisional M1 budgets, VM timings or unmeasured platforms were validated."
         ]
@@ -2405,18 +2590,17 @@
     },
     {
       "id": "TASK-063",
-      "description": "Close S0 only after the cross-platform load-only acceptance gate passes.",
+      "description": "Close S0 after automated portable checks and current native M4 acceptance.",
       "status": "pending",
       "dependencies": [
         "TASK-053",
         "TASK-057",
-        "TASK-058",
-        "TASK-059",
         "TASK-061",
         "TASK-062"
       ],
       "extra_context": [
-        "S0 implementation; no editing tools."
+        "S0 implementation; no editing tools.",
+        "Latest owner override: manual Windows/Linux desktop checks and license reviews are deferred; automated build/package evidence remains required. No native Windows/Linux support claim."
       ],
       "context_links": [
         {
@@ -2439,10 +2623,10 @@
         }
       ],
       "acceptance_criteria": [
-        "Review packaged launch/load evidence for every accepted platform plus source preservation, invalid-input and clean-shutdown results.",
+        "Review current native M4 packaged launch/load, source preservation, invalid-input and clean-shutdown results plus automated portable build/package evidence. Manual Windows/Linux desktop checks and manual license reviews are deferred by owner instruction.",
         "Verify the developer checks, agent result/log/capture workflow and M4 baseline are reproducible and linked.",
         "Confirm no catalog/edit/export/MCP subsystem is required for the skeleton and do not mark M1 tools implemented.",
-        "Update the feature matrix and handoff with exact supported scope and remaining limitations; any missing required platform check keeps S0 incomplete."
+        "Update the feature matrix and handoff with exact verified scope and limitations. Missing current M4 or automated checks keep S0 incomplete; deferred Windows/Linux manual checks and reviews do not."
       ],
       "test_strategy": {
         "approach": "inspection",
@@ -2498,13 +2682,20 @@
           "label": "Planning and gate rules",
           "target": "docs/task-planning.md",
           "relevance": "Defines separate plans, milestone boundaries and external decision gates."
+        },
+        {
+          "kind": "file",
+          "label": "Programmable operations and module host",
+          "target": "docs/design/modules-and-api.md",
+          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
         }
       ],
       "acceptance_criteria": [
         "Verify product TASK-026 through TASK-030 are completed and their accepted workspace, geometry, history/recovery, export and agent-conflict rules are recorded.",
         "Reconcile the retained editor/source-recovery/architecture specs with S0 evidence and define the remaining geometry/color experiment outputs for TASK-004.",
         "Preserve the agreed crop, zoom, metadata, live MCP and manual Locate scope; do not turn future RAW/storage/plugin decisions into prerequisites.",
-        "Record referenced product decisions and validate the revised editor dependencies before starting M1 implementation."
+        "Record referenced product decisions and validate the revised editor dependencies before starting M1 implementation.",
+        "Apply accepted D19–D21 to the M1 contract: complete operation coverage, built-in feature registration/validation/rendering and host-owned recipe/history services. Distinguish linked modules from external loading; leave masks, clone/tonal tools and the loader outside M1."
       ],
       "test_strategy": {
         "approach": "inspection",
@@ -2594,6 +2785,97 @@
           "No stale, permanent or broad advisory suppression remains."
         ]
       }
+    },
+    {
+      "id": "TASK-067",
+      "description": "Measure optional-module activation and scope the required external-loader proof.",
+      "status": "pending",
+      "dependencies": [
+        "TASK-018"
+      ],
+      "extra_context": [
+        "Later v0 extension planning and a bounded measurement prototype, not a S0/M1 completion prerequisite. Uses the verified M1 host/API handoff as its working baseline.",
+        "External product prerequisite: TASK-033 must be completed with a selected use case before dependent prototype/design work; consult TASK-034 priorities and record any unresolved budgets. No cross-file dependency IDs are inserted in dependencies.",
+        "External loading is required by D21 even if measurements favor linked built-ins. This task produces the loader specification and validated implementation plan, not a claim that production external loading is delivered."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "Programmable operations and module host",
+          "target": "docs/design/modules-and-api.md",
+          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+        },
+        {
+          "kind": "file",
+          "label": "External use case and performance decisions",
+          "target": "tasks/product-decisions.json",
+          "locator": "TASK-033 and TASK-034",
+          "relevance": "Required selected use case/lifecycle and available performance priorities; verify before starting dependent work."
+        },
+        {
+          "kind": "file",
+          "label": "Module measurement protocol",
+          "target": "docs/specs/performance.md",
+          "locator": "Module activation measurements",
+          "relevance": "Requires equivalent-output startup, memory, idle and first-use comparisons on the M4."
+        }
+      ],
+      "acceptance_criteria": [
+        "Verify product TASK-033 is completed and cite the chosen use case/lifecycle; record TASK-034 priorities and unresolved tradeoffs without inventing approval or thresholds.",
+        "Use the M1 baseline and a bounded prototype to compare default/minimal configurations, disabled modules, enabled-but-unused modules and first use. Compare lazy linked resources and external loading where relevant; report native M4 startup, memory, idle work, first-use latency and shared dependency costs at equivalent output.",
+        "Recommend independent optional boundaries from measured benefit. Retain lightweight linked built-ins when a split is not worthwhile; define lifecycle/state APIs, dependency handling and bounded initialization for optional providers.",
+        "Write a Markdown external-loader/proof specification covering actual module loading without host source changes, shared API registration and UI/programmatic parity, packaging/runtime selection, portability, trust/resources/cancellation and existing-edit recovery when disabled/missing. No marketplace, general graph or v0 public compatibility framework.",
+        "Use Create Tasks to add bounded implementation and verification tasks with new monotonic IDs, preserving history and validating both graphs. Their acceptance must demonstrate a separately authored loaded module using host changes/history, API discovery/execution, failure, disable/re-enable and recipe/source preservation; do not count an external API client alone as the proof."
+      ],
+      "test_strategy": {
+        "approach": "mixed",
+        "steps": [
+          "Inspect TASK-033 decisions and the verified M1 operation/host handoff before selecting the prototype.",
+          "Run equivalent-output configurations using the performance sampling/reporting protocol; identify costs removed versus shifted to first use.",
+          "Walk through loaded-module operations, missing-provider history and export, dependencies and recovery in the proposed contract.",
+          "Validate both task plans and inspect that external proof delivery has explicit tasks without becoming an earlier milestone gate."
+        ],
+        "commands": [],
+        "expected_results": [
+          "Measurement-backed module boundaries and a scoped, executable plan for required external loading, with no fabricated speedup or implementation claim."
+        ]
+      }
+    },
+    {
+      "id": "TASK-068",
+      "description": "Diagnose real JPEG loading latency and make the normal development launch performant.",
+      "status": "completed",
+      "dependencies": [],
+      "extra_context": [
+        "Owner supplied a private 10 MB JPEG that takes about ten seconds to open. Preserve the source and keep it out of source control.",
+        "2026-09-19: reproduced 10.33 s debug vs 0.35 s optimized capture on the owner JPEG; resize dominates. Default develop now uses release, explicit --debug retained. Stage diagnostics added, native image-region pixels match, source hash unchanged, cargo xtask check passed. See investigation report for local evidence and sampling limitations."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "JPEG performance investigation",
+          "target": "docs/engineering/jpeg-performance.md",
+          "relevance": "Defines reproduction, scope and acceptance."
+        }
+      ],
+      "acceptance_criteria": [
+        "Compare debug and optimized native loading on the owner JPEG with stage timings and renderer evidence.",
+        "Use an optimized normal development launch while retaining explicit debug access.",
+        "Preserve preview correctness and source bytes; record evidence and limitations."
+      ],
+      "test_strategy": {
+        "approach": "mixed",
+        "steps": [
+          "Run native evidence captures in both profiles and inspect image content.",
+          "Check source hash and run repository checks."
+        ],
+        "commands": [
+          "cargo xtask check"
+        ],
+        "expected_results": [
+          "The dominant delay is measured and ordinary development uses the verified optimized path."
+        ]
+      }
     }
   ],
   "execution_waves": [
@@ -2602,7 +2884,8 @@
       "task_ids": [
         "TASK-002",
         "TASK-035",
-        "TASK-037"
+        "TASK-037",
+        "TASK-068"
       ]
     },
     {
@@ -2661,16 +2944,17 @@
       "wave": 9,
       "task_ids": [
         "TASK-047",
-        "TASK-049"
+        "TASK-049",
+        "TASK-054",
+        "TASK-055",
+        "TASK-056"
       ]
     },
     {
       "wave": 10,
       "task_ids": [
         "TASK-050",
-        "TASK-054",
-        "TASK-055",
-        "TASK-056"
+        "TASK-061"
       ]
     },
     {
@@ -2693,49 +2977,43 @@
     {
       "wave": 13,
       "task_ids": [
-        "TASK-061"
+        "TASK-063"
       ]
     },
     {
       "wave": 14,
       "task_ids": [
-        "TASK-063"
+        "TASK-064"
       ]
     },
     {
       "wave": 15,
       "task_ids": [
-        "TASK-064"
+        "TASK-004"
       ]
     },
     {
       "wave": 16,
       "task_ids": [
-        "TASK-004"
-      ]
-    },
-    {
-      "wave": 17,
-      "task_ids": [
         "TASK-007"
       ]
     },
     {
-      "wave": 18,
+      "wave": 17,
       "task_ids": [
         "TASK-008",
         "TASK-009"
       ]
     },
     {
-      "wave": 19,
+      "wave": 18,
       "task_ids": [
         "TASK-010",
         "TASK-011"
       ]
     },
     {
-      "wave": 20,
+      "wave": 19,
       "task_ids": [
         "TASK-012",
         "TASK-013",
@@ -2743,7 +3021,7 @@
       ]
     },
     {
-      "wave": 21,
+      "wave": 20,
       "task_ids": [
         "TASK-014",
         "TASK-015",
@@ -2752,7 +3030,7 @@
       ]
     },
     {
-      "wave": 22,
+      "wave": 21,
       "task_ids": [
         "TASK-016",
         "TASK-017",
@@ -2760,9 +3038,15 @@
       ]
     },
     {
-      "wave": 23,
+      "wave": 22,
       "task_ids": [
         "TASK-018"
+      ]
+    },
+    {
+      "wave": 23,
+      "task_ids": [
+        "TASK-067"
       ]
     }
   ]

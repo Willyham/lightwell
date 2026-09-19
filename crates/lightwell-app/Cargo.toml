@@ -13,6 +13,9 @@ path = "src/main.rs"
 [dependencies]
 lightwell-core = { path = "../lightwell-core" }
 iced.workspace = true
+# Iced 0.14 gates its public allocation re-export on codec-enabled image support.
+# Use the already-resolved runtime directly to keep JPEG-only decoding.
+iced_runtime = "=0.14.0"
 image.workspace = true
 rfd.workspace = true
 serde_json.workspace = true

@@ -4,7 +4,7 @@ Status: **maintained S0 in progress; macOS viewer and initial tooling verified**
 
 ## Outcome
 
-Build a small desktop application for macOS, Windows and Linux that opens one local JPEG and displays it correctly at Fit. The M4 MacBook Pro remains the first development machine. S0 is complete only when the agreed platform matrix has packaged launch-and-load evidence, not just successful compilation.
+Build a small desktop application for macOS, Windows and Linux that opens one local JPEG and displays it correctly at Fit. The M4 MacBook Pro remains the first development machine. Current owner instruction defers manual Windows/Linux checks. S0 requires automated portable builds/packages plus native M4 launch/load evidence and local hardening; native Windows/Linux support remains unverified.
 
 JPEG follows the existing JPEG-first requirement. The owner accepted a deliberately documented input subset: 8-bit RGB/greyscale JPEG, EXIF orientations 1–8, untagged-as-sRGB and supported standard tagged sRGB. The stack decision must establish a defensible recognition/display path; the experimental exact-profile allowlist alone does not satisfy this accepted scope. Reject unsupported color profiles/modes explicitly rather than silently display incorrect pixels. Broader ICC conversion and professional display validation remain M1 work unless the selected stack supplies them cleanly in S0.
 
@@ -31,11 +31,11 @@ GPU initialization failure must produce an actionable diagnostic. A software-ren
 
 ## Platform gate
 
-| Accepted target | Proposed first artifact format | Required S0 evidence |
+| Accepted target | Proposed first artifact format | Verification scope |
 | --- | --- | --- |
 | macOS arm64 | App bundle plus archive | M4 native launch, file dialog, image display, resize/high-DPI and clean shutdown |
-| Windows x64 | Executable with required runtime files in an archive | Native Windows launch, dialog, load/render and shutdown; architecture/runtime details recorded |
-| Linux x64 | Relocatable directory/archive with declared runtime requirements | Linux desktop session launch, dialog, load/render and shutdown; chosen distribution and X11/Wayland path recorded |
+| Windows x64 | Executable with required runtime files in an archive | Deferred: native Windows launch, dialog, load/render and shutdown; retain automated build/package checks |
+| Linux x64 | Relocatable directory/archive with declared runtime requirements | Deferred: Linux desktop launch/dialog/load/shutdown and X11/Wayland; retain automated build/package/headless smoke |
 
 The owner accepted macOS Apple Silicon, Windows x64 and Linux x64 with unsigned development packages. Exact artifact formats, OS/runtime floors and Linux window-system coverage remain to finalize; accepted targets are not already verified support. Linux arm64 is useful for an M4-hosted VM but does not replace testing the selected x64 artifact. A Windows ARM guest running an x64 binary must be labelled as emulated, not native x64. A VM can establish guest functional behavior; record its graphics adapter and software/accelerated path. Native hardware performance remains separate evidence.
 
@@ -52,7 +52,7 @@ For each run produce:
 - A PNG of the actual application content, tied to the requested image generation after rendering completes, plus a state snapshot. Label renderer capture versus OS-window capture distinctly.
 - Test output and a Markdown reproduction summary with the exact invocation, artifact locations and platform limits.
 
-An offscreen frame is useful for renderer correctness but is not proof that a visible OS window, file dialog, focus or compositor works. Add a native visible-window smoke check on each target. Never report a screenshot as taken when capture is unsupported or no graphical session is available. Do not use fixed sleeps as readiness checks: wait for the intended generation/state with a bounded deadline, then retain failure evidence.
+An offscreen frame is useful for renderer correctness but is not proof that a visible OS window, file dialog, focus or compositor works. Perform the native visible-window check on M4; Windows/Linux native checks are deferred. Never report a screenshot as taken when capture is unsupported or no graphical session is available. Do not use fixed sleeps as readiness checks: wait for the intended generation/state with a bounded deadline, then retain failure evidence.
 
 Use synthetic/licensed fixtures for CI screenshots and logs. Routine logs omit private source paths and photo metadata; an explicitly selected local diagnostic run may include them. No automatic telemetry or screenshot uploads. The detailed artifact and tooling contract is in [development and verification](../engineering/development.md).
 

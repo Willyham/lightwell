@@ -1,6 +1,6 @@
 # Proposed architecture
 
-Status: **draft**; linked decisions remain open. **S0** is the first cross-platform image-loading skeleton; **M1** is the subsequent one-image editor; **later** means a future v0 milestone. See [plan](../plan.md) and [research](../research/technical-options.md) for rationale and primary sources.
+Status: **implementation design draft; full programmability and a small module host are accepted requirements**. Linked implementation choices remain open. **S0** is the first cross-platform image-loading skeleton; **M1** is the subsequent one-image editor; **later** means a future v0 milestone. See [modules and API](modules-and-api.md) for D19–D21, and [plan](../plan.md) and [research](../research/technical-options.md) for rationale and primary sources.
 
 ## Skeleton first
 
@@ -14,20 +14,25 @@ flowchart TD
     CLI[JSON command CLI] --> Service
     MCP[Local MCP adapter] --> IPC[Local IPC]
     IPC --> Service
-    Service --> Domain[Asset identity, recipes, validation]
+    Service --> Registry[Operation and module registry]
+    Registry --> Modules[Built-in tool modules: validation and processing]
+    Service --> Domain[Asset identity, recipes, shared invariants]
     Service --> Catalog[SQLite catalog and revisions]
     Service --> Jobs[Bounded job scheduler]
     Jobs --> Decode[Decoder adapters]
     Decode --> Engine[Image and color engine]
+    Engine --> Modules
     Engine --> Preview[Disposable previews and GPU viewport]
     Engine --> Export[New exported files]
     Files[Read-only source files] --> Decode
-    Ext[Later: external extensions] -.-> Service
+    Host[Later: external module loader] -.-> Registry
+    Ext[Later: loaded external modules] -.-> Host
+    Ext -.-> Service
 ```
 
 Use one repository and a small Cargo workspace if Rust is selected. For S0, create only the application and UI-independent image/service boundaries that contain real code. For M1, a possible four-crate layout is `lightwell-core` (types, validation, geometry), `lightwell-engine` (decoding, color, rendering), `lightwell-catalog` (persistence), and `lightwell-app` (service orchestration, desktop and CLI entry points). These are proposed names, not existing paths. Add persistence, IPC, MCP and plugin boundaries when their milestone needs them.
 
-The UI owns transient focus, layout, and pointer gestures. The application service owns durable state transitions and jobs. Rendering consumes immutable recipe snapshots. No panel edits database rows or holds the only copy of an editing rule.
+The UI owns transient focus, layout, and pointer gestures. The application service owns durable state transitions and jobs. Feature modules own their parameter validation and processing semantics; the core supplies registration, shared invariants, recipe/history transactions and undo/redo. Rendering consumes immutable recipe snapshots through the registered providers. No panel or module edits database rows or holds a separate authoritative undo history. Logical modules do not require separate crates or dynamically loaded binaries.
 
 ## Originals, catalogs, and recipes
 
@@ -91,6 +96,8 @@ Viewport-sized requests make drawing cost independent of total catalog size. A v
 
 ## Agent contract
 
+**Accepted for the whole product:** every application operation, including all bundled and external photo-editing tools, must be callable by programs/agents. Exposure, white balance, masks and clone strokes are explicit future examples, not additions to M1. Semantic actions, settings and module lifecycle must be exposed when introduced; requiring GUI gestures is not API support. [The coverage contract](modules-and-api.md#what-an-operation-means) defines feature registration and reproducible inputs.
+
 **M1 agreed:** one typed command/query service exposed through JSON CLI and MCP, with live agent control while the GUI is open. Operation families include catalog create/open, asset import/list/get, edit get/set geometry/reset/undo/redo, preview render, export, and job get/cancel. Schemas include units, ranges, coordinate conventions, defaults, preconditions, and structured errors. Also expose capabilities so programs can discover what this build actually supports.
 
 Use a persistent JSON command-session mode and a separate standards-compliant MCP stdio adapter, both with clean protocol stdout and diagnostic stderr. The adapters connect to the catalog owner. Optional one-shot CLI wrappers wait for completion. Disconnecting one client does not close the GUI or cancel another client's work; cancellation is explicit. When the owner exits, stop accepting work, cancel unfinished jobs safely, finish/roll back active catalog commits and release ownership. Do not promise durable export resumption in M1; clients reconnect and inspect revision/job state rather than blindly repeating a mutation.
@@ -109,11 +116,13 @@ No AI model is required to run the app. Local or remote agents are clients. Imag
 
 ## Extension path
 
-1. **M1:** built-in decoder and tool modules, with identifiers, parameter definitions, validators, and rendering boundaries. No dynamic loading requirement.
-2. **Later:** user-customizable panel visibility/order, presets, and external workflow tools through the command API. A hidden panel does not remove the underlying recipe stage.
-3. **After an extension use case exists:** sandboxed WASM for suitable metadata/workflow logic and declarative controls. Define file/network capabilities, cancellation, memory/time limits, and diagnostics.
-4. **Separate future investigation:** image-processing extensions, native workers and GPU operations, with explicit pixel formats, region/halo needs, resource budgets, and fallback semantics.
+The core is a small shell/module host with shared non-destructive services, not the implementation of every tool. External module loading is an accepted product requirement; runtime, packaging and first use case remain open. [The module design](modules-and-api.md) separates logical modularity, runtime enablement, lazy initialization and binary loading.
 
-Extensions use host commands for catalog mutations; they do not issue arbitrary SQL. Unknown or missing processing tools preserve their serialized settings and report the unavailable effect. Do not silently export an image with an effect omitted. A small default workspace must remain useful with every optional extension disabled.
+1. **M1:** built-in decoder and geometry modules, with identifiers, parameter definitions, validators and rendering boundaries using host-owned transactions/history. No dynamic loading or optional-module settings requirement.
+2. **Later:** user-customizable panels and optional feature modules where useful. Keep lightweight built-ins linked and lazily initialize expensive resources as the engineering recommendation; verify savings before splitting core functionality into plugin binaries. Hidden panels do not remove recipe stages.
+3. **Scoped external proof:** select the use case in product TASK-033, then benchmark activation and plan the actual loader in implementation TASK-067. Load a separately authored module without host source changes and expose its operations through shared APIs. External scripts alone do not satisfy this proof. WASM is a candidate for suitable workflow logic, not a selected runtime.
+4. **Separate future investigation:** image-processing extensions, native workers and GPU operations, with explicit pixel formats, region/halo needs, resource budgets, cancellation and failure behavior. No general graph or marketplace is needed.
 
-The owner's preferred ecosystem is open source only. Plan for compatible open-source bundled and official extensions, with GPL-3.0-or-later as the proposed core license. Do not assume that calling the API automatically changes an independent client's license; settle actual integration obligations when specifying the extension mechanism.
+Extensions use host commands for catalog mutations; they do not issue arbitrary SQL. Unknown, disabled or missing processing tools preserve serialized settings and history and report the unavailable effect. Block final export rather than omit an effect. A small default workspace must remain useful with every optional extension disabled. Required core services cannot be disabled; module lifecycle operations and dependency failures are themselves programmable.
+
+The owner's preferred ecosystem is open source only. Plan for compatible open-source bundled and official extensions, with GPL-3.0-or-later as the selected core license. Do not assume that calling the API automatically changes an independent client's license; settle actual integration obligations when specifying the extension mechanism.

@@ -1,13 +1,15 @@
 # Decision interview
 
-Status: **interview in progress; first-build scope revised**. The latest 2026-09-19 instruction makes S0 a cross-platform skeleton that loads an image with no tools. The earlier geometry/persistence/export/live-agent demo remains the subsequent M1 editor, including agreed crop, metadata and zoom behavior. Product choices and implementation now have separate task files. GPL-3.0-or-later is now selected by the owner. Workspace layout and remaining UI/platform details remain open.
+**Current owner override (2026-09-19):** manual Windows/Linux desktop checks and manual license reviews are deferred. S0 currently requires native M4 evidence and automated portable checks; deferred checks are not passing results. See [hardening scope](engineering/s0-hardening.md).
+
+Status: **interview in progress; first-build scope revised**. The latest 2026-09-19 instruction makes S0 a cross-platform skeleton that loads an image with no tools. The earlier geometry/persistence/export/live-agent demo remains the subsequent M1 editor, including agreed crop, metadata and zoom behavior. Product choices and implementation now have separate task files. GPL-3.0-or-later is now selected by the owner. M1 workspace, geometry, history, export and conflict defaults were subsequently adopted; later product choices remain open.
 
 ## Already established by the owner
 
 - Cross-platform desktop: Windows, macOS and Linux.
 - Open source, free to modify, highly performant, simple and extensible.
 - Professional/prosumer catalogs, potentially multiple terabytes of originals.
-- Agents/programs must be able to inspect and perform the same meaningful operations as people.
+- Every application operation must be available to code/agents, including all bundled and external photo edits; see D19–D21 for full API and host/module requirements.
 - First test: one JPEG in a catalog with simple geometry edits; later PNG and Nikon/Fujifilm RAW.
 - Lightroom is a UX baseline; Library/Develop are relevant, the other named modules and Publish Services are not.
 - Markdown documentation and design/specification before work; JSON task plans through Create Tasks.
@@ -63,9 +65,9 @@ Ask these after the initial constraints, with the researched tradeoffs available
 | D11 | **Decided:** straightening preserves composition and trims only as needed to avoid empty corners | The M1 geometry experiment must define a deterministic fitting algorithm and golden examples; no reset to a centered crop |
 | D12 | **Decided:** strip optional metadata by default; allow a keep-data setting | Output color/geometry information remains correct in both modes. Implement a documented supported-field policy for keeping metadata rather than copying stale orientation/dimensions/thumbnails |
 | D13 | **Decided:** basic zoom/pan, percentage settings and Fit in M1 | Include numeric percentage control and 100% inspection. Input gestures, limits and high-DPI pixel mapping are implementation details to validate for M1 |
-| D14 | **Open; current interview:** one workspace or separate Library/Edit modes? | Recommend one workspace with collapsible library and editing panels. This does not add a full grid to M1 |
-| D15 | **Open; current interview:** flip the current composition left-to-right, carrying its crop, or flip along the original photo's axis? | Recommend mirroring what the user sees. Finalize the command mapping only after the answer; canonical storage order must not dictate visible behavior |
-| D16 | **Open; current interview:** which two or three daily Lightroom frustrations matter most, beyond moved-file recovery? | Use concrete examples to prioritize workflow improvements and later milestone order |
+| D14 | **Decided:** one workspace with collapsible editing panels; no full grid in M1 | Recommend one workspace with collapsible library and editing panels. This does not add a full grid to M1 |
+| D15 | **Decided:** mirror the visible composition left-to-right and carry its crop | Recommend mirroring what the user sees. TASK-004 finalizes the mathematical command mapping; canonical storage order must not dictate visible behavior |
+| D16 | **Answered:** workflow frustrations recorded below, including speed, bloat, library organization and export | Use concrete examples to prioritize workflow improvements and later milestone order |
 
 - How should quarter-turn rotation transform an existing crop, and which Lightroom shortcuts should transfer?
 - Which aspect-ratio presets and numeric crop controls are essential? Free dragging must remain available when no ratio is locked.
@@ -82,6 +84,22 @@ Ask these after the initial constraints, with the researched tradeoffs available
 The latest sequencing supersedes the earlier Mac-only first-demo plan, not the product's editing requirements. The earlier history above describes the previous plan. No code, VM, benchmark or build was produced by this restructuring. The word “lighting” is interpreted as linting in the tooling request; this is an explicit working interpretation, not a new photo feature.
 
 See [product decision tasks](../tasks/product-decisions.json), [implementation tasks](../tasks/implementation.json), [S0 scope](specs/bootstrap.md) and [dependency rules](task-planning.md). S0 needs only the platform, license-disposition and minimal shell decisions; the full editor interview continues separately.
+
+## Architecture reaffirmed: programmable operations and modules
+
+Owner instruction, **2026-09-19**: every operation must be exposed through an API; the application should be a small shell/module host whose shared core applies and undoes non-destructive changes; prefer user-selectable modules where worthwhile, but avoid needless modularization for an unproven performance gain. External modules must still be loadable and use core APIs.
+
+| ID | Owner answer / status | Consequence |
+| --- | --- | --- |
+| D19 | **Decided:** all operations are programmable, especially photo edits including exposure, white balance, cloning and masks | Every feature, bundled or external, supplies structured operations/state through the common service. No tool depends on GUI gestures. Future tool examples do not expand M1 scope |
+| D20 | **Decided:** a small shell/module host and basic shared core underpin the software | Core owns recipe transactions, shared history/undo and services; modules implement their own parameters, validation and algorithms using those APIs. Replace the ambiguous claim that every effect belongs in the core |
+| D21 | **Decided:** prefer useful user-selectable modules, conditional on meaningful benefit for core splitting; support external loading regardless | Separate logical modules, runtime enablement, lazy resources and binary packaging. Preserve edits when modules are missing/disabled. Measure before claiming speed or fragmenting basic features into plugin binaries |
+
+**Engineering recommendation, not a measured result:** keep lightweight built-ins linked, make registration cheap, and initialize expensive resources on demand. Optional presets, decoder/resource groups and workflow integrations are useful candidates. A per-camera split may save little when cameras share a decoder. Choose granularity from evidence rather than one binary per tool. An Instagram export module illustrates optionality; it is not a newly accepted Publish Services feature.
+
+**Still open:** the first external use case, exact optional boundaries and performance tradeoffs, runtime/package format, trust/isolation and UI contribution mechanism. External loading itself is no longer an open question. Existing sequence remains S0 viewer, M1 host contracts and built-in tools, then the scoped external proof currently placed in M5. No marketplace, stable public ABI or hot unloading requirement is added.
+
+The [module/API design](design/modules-and-api.md) records responsibilities, API examples, lifecycle protections and acceptance. Updated architecture, plan, feature status, editor/performance specs and contributor/user guidance. Product TASK-001/030/033/034 preserve these answers while retaining their unresolved work. Implementation TASK-007/008/009/011/013/014/016/021/064 enforce them in M1; new TASK-067 tracks activation measurements and the later external-loader implementation plan. Existing task IDs, completed history and S0 scope are preserved; this is documentation/planning work only.
 
 ## How decisions become authoritative
 
@@ -116,3 +134,32 @@ The owner answered “Yes fine for now” to allowing engineering to choose and 
 The owner explicitly approved opening the local Iced trial and stated that locally built/running software is approved. The previous approval-review block is resolved by that answer. A subsequent computer-use attempt reported the Mac locked; interaction checks await an unlocked desktop. No further permission question is needed for the same local build/test scope.
 
 Under the delegated baseline choice, engineering recorded macOS 14+ arm64, Windows 11 24H2+ x64, and Ubuntu 24.04 x64 with GNOME Wayland and X11 validation, plus development archive formats and explicit missing test routes in the [platform matrix](engineering/platforms.md). This completes product TASK-023 as a decision record. It does not complete platform verification. Product TASK-023/024/025 are now all complete, allowing implementation TASK-035 to close.
+
+## Scaffold hardening scope override — 2026-09-19
+
+The owner instructed: “Update tasks to not require manual windows/linux checking for now. Don't worry about licenses or reviews of them for now. Complete all the tasks you listed.” TASK-058/059 and review task TASK-041 are deferred with their IDs and unfinished criteria retained. They are removed from the current S0 dependency gate. Automated portable builds and existing notices remain. Existing automated dependency checks and expiring maintenance exceptions remain in place; no new license review is performed during this slice. This is no change to GPL selection and no assertion of license compatibility or native Windows/Linux verification.
+
+Implementation proceeds on local hardening, packaged Mac verification and measurements. M1 recommendations have been presented for TASK-026–030; absent an answer, they remain proposals. Personal Lightroom frustrations cannot be inferred from an instruction to execute engineering tasks.
+
+## Owner workflow priorities — 2026-09-19
+
+The owner identified these Lightroom frustrations beyond moved-source recovery: speed; unused-tool bloat; poor filtering; confusing colour/rating/flag tagging; unintuitive collections; inability to retain a full catalog while lazily loading a subsection such as one shoot for editing; awkward multi-selection/stacking; no native identification of bracketed exposures or panoramas; and confusing export controls without modern defaults.
+
+These are accepted **problem statements and prioritization input**, not approval of every proposed solution or a commitment to implement these features in S0/M1.
+
+| Priority input | Immediate consequence | Later design work |
+| --- | --- | --- |
+| Speed and unused-tool bloat | Measure startup/loading/idle; keep S0 minimal and M1 limited to agreed tools | Measure module activation and lazy resource use; avoid speculative binary splitting |
+| Filtering, tagging and collections | Do not copy Lightroom's organization model by default | M2 interview must compare concrete retrieval tasks and propose a small consistent model |
+| Full catalog with lazy shoot/subsection editing | Preserve catalog-scale independence from decoded pixels | M2 queries and virtualized views should scope a shoot without loading the entire catalog; determine shoot/group identity and navigation |
+| Multi-selection and stacking | Keep out of one-image M1 | Specify selection ranges, stack identity, representative image and batch-action behavior for M2 |
+| Bracket/panorama identification | Record as a workflow candidate | Research detection/grouping separately from HDR or panorama merging, which remain unselected |
+| Confusing export/defaults | Present one clear M1 JPEG export path with the agreed metadata default | Confirm quality/name/collision defaults through TASK-029; later platform destinations are separate scope |
+
+TASK-026's personal-frustration input is now answered. Workspace adoption, geometry details, history/recovery, export defaults and conflict presentation still await the separate recommendations question. Do not interpret this answer as approval of those defaults.
+
+## M1 recommendations adopted — 2026-09-19
+
+The owner answered **“Adopt these recommendations and choose routine details”** to the explicit TASK-026–030 proposal: one workspace; flip/rotate carry the visible crop; Apply/Cancel with persistent committed undo; JPEG quality 90 with no overwrites; preserve human drafts and show conflict when an agent commits. The separately answered Lightroom-frustration input completes the personal-workflow criterion. Product TASK-026–030 are now complete.
+
+The [accepted M1 decisions](design/m1-decisions.md) record routine shortcuts, focus behavior, crop presets/custom ratio, Space-drag pan, ±45° fine straightening, nonpersistent drafts, verified manual Locate/duplicate handling, export naming/metadata principle and shared attributed history/reconnect behavior. Exact geometry algorithms, color/metadata feasibility and numerical tolerances remain engineering work in TASK-004. S0 and TASK-064 remain gates; this acceptance implements no editing tools. Earlier open/proposed interview entries are historical and superseded by this record.

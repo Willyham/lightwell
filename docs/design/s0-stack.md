@@ -26,7 +26,7 @@ One active and one latest pending decode; discard stale completion. No thread jo
 
 ## Acceptance and remaining risks
 
-TASK-006 completes with locked workspace build and testable core boundary, not all S0 tasks. Later tasks require actual command implementations, dependency notices, fixture/evidence checks, native packages, repeatable M4 measurement and three-platform desktop evidence. macOS floor, Windows/Linux runtime details, complete accessibility and broad ICC/display calibration remain unverified. S0 must not be marked complete while these required platform checks are missing.
+TASK-006 completes with locked workspace build and testable core boundary, not all S0 tasks. Later tasks require actual command implementations, dependency notices, fixture/evidence checks, native packages, repeatable M4 measurement and M4 desktop evidence plus automated portable checks. macOS floor, Windows/Linux runtime details, complete accessibility and broad ICC/display calibration remain unverified. Manual Windows/Linux and license reviews are now deferred by owner instruction; other limitations must remain explicit.
 
 ## Maintained evidence slice
 
