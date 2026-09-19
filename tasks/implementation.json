@@ -1420,7 +1420,8 @@
       "extra_context": [
         "S0 implementation; no editing tools.",
         "Pinned cargo-deny 0.20.2 license/source checks pass for configured three-target graph. Advisory scan reports unmaintained paste 1.0.15 and ttf-parser 0.25.1; no ignores added. Embedded asset/native notice review remains outstanding. See docs/engineering/dependency-review.md.",
-        "CI activation authorized after scaffold commit 05937b7. Follow docs/engineering/ci-plan.md; hosted execution and remaining task acceptance are distinct. First run: https://github.com/Willyham/lightwell/actions/runs/35460222072."
+        "CI activation authorized after scaffold commit 05937b7. Follow docs/engineering/ci-plan.md; hosted execution and remaining task acceptance are distinct. First run: https://github.com/Willyham/lightwell/actions/runs/35460222072.",
+        "Owner authorized advisory remediation. No supported selected-stack upgrade removes both findings. Implement exact-version/time-limited maintenance exceptions with TASK-065/066; full asset/native notice audit remains open."
       ],
       "context_links": [
         {
@@ -2516,6 +2517,82 @@
           "Record referenced product decisions and validate the revised editor dependencies before starting M1 implementation."
         ]
       }
+    },
+    {
+      "id": "TASK-065",
+      "description": "Remove or re-review the temporary paste maintenance exception before 2026-12-18.",
+      "status": "ready",
+      "dependencies": [
+        "TASK-006"
+      ],
+      "extra_context": [
+        "Expires exclusively on 2026-12-18; UTC expiry is enforced by the audit wrapper. Review sooner for new security information, distribution or font-input scope changes."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "Advisory review and enforcement",
+          "target": "docs/engineering/advisory-policy.md",
+          "relevance": "Records exposure, upstream constraints and expiry."
+        }
+      ],
+      "acceptance_criteria": [
+        "Check supported upstream releases and remove paste when a compatible migration is available.",
+        "Remove the exception when no longer needed; otherwise document a new bounded review with current evidence before expiry.",
+        "Run policy tests, dependency audit and relevant build/render checks after dependency changes."
+      ],
+      "test_strategy": {
+        "approach": "mixed",
+        "steps": [
+          "Inspect current upstream releases and exact configured dependency graph.",
+          "Verify expiry, audit and relevant runtime checks."
+        ],
+        "commands": [
+          "cargo xtask audit",
+          "cargo xtask check"
+        ],
+        "expected_results": [
+          "No stale, permanent or broad advisory suppression remains."
+        ]
+      }
+    },
+    {
+      "id": "TASK-066",
+      "description": "Remove or re-review the temporary ttf-parser maintenance exception before 2026-10-19.",
+      "status": "ready",
+      "dependencies": [
+        "TASK-006"
+      ],
+      "extra_context": [
+        "Expires exclusively on 2026-10-19; UTC expiry is enforced by the audit wrapper. Review sooner for new security information, distribution or font-input scope changes."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "Advisory review and enforcement",
+          "target": "docs/engineering/advisory-policy.md",
+          "relevance": "Records exposure, upstream constraints and expiry."
+        }
+      ],
+      "acceptance_criteria": [
+        "Check supported upstream releases and remove ttf-parser when a compatible migration is available.",
+        "Remove the exception when no longer needed; otherwise document a new bounded review with current evidence before expiry.",
+        "Run policy tests, dependency audit and relevant build/render checks after dependency changes."
+      ],
+      "test_strategy": {
+        "approach": "mixed",
+        "steps": [
+          "Inspect current upstream releases and exact configured dependency graph.",
+          "Verify expiry, audit and relevant runtime checks."
+        ],
+        "commands": [
+          "cargo xtask audit",
+          "cargo xtask check"
+        ],
+        "expected_results": [
+          "No stale, permanent or broad advisory suppression remains."
+        ]
+      }
     }
   ],
   "execution_waves": [
@@ -2559,7 +2636,9 @@
         "TASK-040",
         "TASK-041",
         "TASK-042",
-        "TASK-045"
+        "TASK-045",
+        "TASK-065",
+        "TASK-066"
       ]
     },
     {

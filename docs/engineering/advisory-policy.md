@@ -1,0 +1,18 @@
+# Review of the two S0 maintenance advisories
+
+Design recorded before implementation, 2026-09-19. The owner authorized upstream upgrade research followed by narrowly scoped, time-limited exceptions where no supported upgrade removes the findings.
+
+Published crates.io metadata was checked for Iced, wgpu, metal, cosmic-text, fontdb, winit and their font/Metal dependencies. Iced 0.14.0 is still the latest stable release and uses wgpu 27 and cosmic-text 0.15. Newer wgpu/cosmic-text releases are outside these requirements; updating those transitive versions alone is not a supported upgrade. Both paste 1.0.15 and ttf-parser 0.25.1 remain their latest published versions. Published metal 0.33.0 still requires paste ^1; cosmic-text 0.19.0 still requires fontdb ^0.23, while fontdb 0.24.0 drops the ttf-parser dependency but falls outside that requirement. Do not replace the GUI stack or carry a private fork just to remove a maintenance finding.
+
+## Reviewed scope
+
+- **RUSTSEC-2024-0436 / paste 1.0.15:** proc-macro used by metal 0.32.0 through wgpu-hal. It executes at build time on dependency source, not on opened JPEG pixels. Permit this specific maintenance advisory until **2026-12-18** (exclusive); replacement tracked by TASK-065. This does not approve a different version or another advisory against paste.
+- **RUSTSEC-2026-0192 / ttf-parser 0.25.1:** runtime parser through fontdb/cosmic-text and owned_ttf_parser/ab_glyph/Linux decorations. Iced initializes its font database from installed system fonts and its bundled icon font. Lightwell has no font import, downloaded-font or document-font feature; JPEG bytes are not passed to this parser. Installed fonts are nevertheless an input surface. Upstream issue 217 includes a report of an undisclosed security issue, so do not equate this maintenance advisory with proof of safety. Permit this advisory for the current local S0 development scope until **2026-10-19** (exclusive); TASK-066 must review removal sooner and before distribution or font-input features.
+
+Sources: [paste advisory](https://rustsec.org/advisories/RUSTSEC-2024-0436), [ttf-parser advisory](https://rustsec.org/advisories/RUSTSEC-2026-0192), [upstream security-report discussion](https://github.com/harfbuzz/ttf-parser/issues/217), [Iced published crate](https://crates.io/crates/iced/0.14.0), [metal dependency manifest](https://github.com/gfx-rs/metal-rs/blob/master/Cargo.toml), and the exact registry sources referenced by Cargo.lock. New upstream development may provide a migration later; it is not evidence that the selected released graph can already remove both dependencies.
+
+## Enforcement design
+
+Keep deny.toml strict with no static ignores. The maintained audit wrapper will validate each exception against UTC expiry, its exact resolved crate/version/source and its open implementation follow-up task. It prints the accepted scope and creates a temporary cargo-deny configuration with only the two advisory IDs and their rationale. Expired, removed or changed dependencies and retired/missing tasks fail before invoking cargo-deny. Invalid/broad base advisory overrides are rejected. A direct cargo-deny invocation against deny.toml continues to show the raw findings.
+
+The wrapper preserves license/source policy and fails on new advisories, vulnerabilities and audit errors. Do not use continue-on-error, blanket unmaintained allowances, package-wide exclusions or permanent suppressions. Tests exercise expiry at the date boundary, version changes, missing tasks and forbidden overrides. Both headless check and the blocking CI audit exercise policy validation; a passing audit means reviewed policy compliance, not removal of the dependencies or completion of the full asset/native notice audit.

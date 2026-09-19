@@ -178,9 +178,13 @@ def main():
         if not checker.is_file():raise ValueError('Install cargo-deny 0.20.2 into .tools/cargo-deny; see scaffold-commands.md')
         version=run(checker,'--version',capture_output=True,text=True).stdout.strip()
         if version!='cargo-deny 0.20.2':raise ValueError(f'Unexpected audit tool: {version}')
-        run(checker,'check','licenses','sources','advisories');return 0
+        from advisory_policy import audit
+        audit(checker);return 0
     if args.op=='check':
         run(sys.executable,'tools/check_repository.py')
+        run(sys.executable,'-m','unittest','discover','-s','tools','-p','test_*.py')
+        from advisory_policy import check_policy
+        check_policy()
         for op in ['fmt','lint','test']:cargo(op)
         print('Headless checks passed. GUI, license/advisory audit and platform acceptance are separate.')
     elif args.op in ['build','fmt','lint','test']:cargo(args.op,getattr(args,'release',False))

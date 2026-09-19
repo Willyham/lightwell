@@ -12,7 +12,7 @@ Status vocabulary: **planned now** = S0 bootstrap scope; **planned next** = reta
 | Native macOS arm64 build | Implemented locally; acceptance ongoing | S0 package/load verification on M4; M1 editor verification follows |
 | Windows/Linux packages and launch/load checks | Planned now | S0 requires the accepted matrix; TASK-019 later rechecks M1 editor behavior |
 | Linux VM checks, possibly Try Omarchy | Candidate | Functional testing on Apple Silicon; no installed/tested VM and no native GPU-performance claim |
-| License selection and dependency policy | License applied; audit in progress | GPL-3.0-or-later; two unmaintained dependency findings and asset review remain |
+| License selection and dependency policy | License applied; audit in progress | GPL-3.0-or-later; two maintenance findings have expiring exceptions; asset/native review remains |
 | Open image and automatic Fit display | Implemented on macOS; wider verification pending | S0; no catalog, editing tools or export; [skeleton spec](specs/bootstrap.md) |
 | Pinned tooling, setup/Doctor and command runner | Implemented locally | S0 developer workflow |
 | Formatting, linting, dependency and documentation checks | Implemented; audit findings open | S0 local/CI parity |

@@ -49,7 +49,7 @@ cargo install --locked --version 0.20.2 --root .tools/cargo-deny cargo-deny
 cargo xtask audit
 ```
 
-Audit returns failure for unresolved findings; see [dependency review](dependency-review.md). License/source checks pass, but two maintenance advisories and the full embedded asset/native notice review remain open. This command is intentionally separate from headless `check` and is not represented as passing CI.
+Audit validates the [expiring exception policy](advisory-policy.md) and fails on expired/changed exceptions or unapproved findings; see [dependency review](dependency-review.md). License/source checks pass. Two maintenance findings have temporary, exact-version exceptions; the full embedded asset/native notice review remains open. This command is intentionally separate from headless `check` and is not represented as passing CI.
 
 The host package was built at `artifacts/maintained-package-2/lightwell-development.zip`, with SHA-256 in `checksums.txt`. Its actual app binary passed native Metal replacement smoke using an output directory containing spaces (`artifacts/package smoke 2`). The failed-input capture was visually reviewed: the oriented image remains visible and a readable error replaces the loading status. Earlier empty/load/replacement runs live in `artifacts/maintained-{empty,load,replacement}-1`. These paths are ignored local evidence, not checked-in portable reports. A subsequent bounded CLI change limits evidence sequences to 16 requests; rerun package/smoke after changes rather than treating an old archive as current.
 
@@ -61,6 +61,8 @@ Latest package: `artifacts/maintained-package-3/lightwell-development.zip`. Its 
 
 The scaffold is now pushed. The first GitHub run exposed Windows code-page decoding of UTF-8 Markdown; tooling now reads/writes UTF-8 explicitly and xtask enables Python UTF-8 mode. `cargo xtask fixtures` invokes the corpus checker after installing the pinned fixture requirements.
 
-CI now includes dedicated fixture and blocking dependency-audit jobs. The audit intentionally remains failing while the documented maintenance findings are unresolved. Ubuntu also runs the three renderer smoke scenarios under Xvfb/software Vulkan; this is headless functional evidence, never native Linux desktop or GPU-performance acceptance. Native picker checks remain separate. Job results must be recorded after execution, not inferred from this configuration.
+CI now includes dedicated fixture and blocking dependency-audit jobs. The audit was initially failing on the maintenance findings; the later reviewed policy permits only the two expiring exceptions. Ubuntu also runs the three renderer smoke scenarios under Xvfb/software Vulkan; this is headless functional evidence, never native Linux desktop or GPU-performance acceptance. Native picker checks remain separate. Job results must be recorded after execution, not inferred from this configuration.
 
-Hosted results are recorded in [CI results](ci-results.md). Linux empty/load/replacement smoke passed under Xvfb with llvmpipe Vulkan after adding the X11 runtime library. All three OS builds/packages have executed successfully. The blocking dependency job reproduces the two known maintenance findings.
+Hosted results are recorded in [CI results](ci-results.md). Linux empty/load/replacement smoke passed under Xvfb with llvmpipe Vulkan after adding the X11 runtime library. All three OS builds/packages have executed successfully. The initial blocking dependency job reproduced the two known maintenance findings; the subsequent reviewed policy is described above.
+
+`cargo xtask check` also runs six advisory-policy regression tests and validates live UTC expiry, exact locked versions and open follow-up tasks. `cargo xtask audit` generates its temporary ignore list only after the same validation. Calling cargo-deny directly against the base deny.toml continues to report the raw maintenance findings.

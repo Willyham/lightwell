@@ -14,7 +14,7 @@ IDs are globally unique across the two active files. TASK-001 moves to the produ
 
 The product plan has 13 tasks in one dependency wave: TASK-001 is the ongoing interview and TASK-023–TASK-034 are available decision tasks. Prioritize TASK-023–TASK-025 for S0; later product choices can wait.
 
-The implementation plan has 51 tasks in 23 derived waves: 32 required S0 tasks, one optional Linux VM task and 18 subsequent M1 tasks. The original ready tasks were TASK-002 (fixtures), TASK-035 (inspect the S0 decision gate) and TASK-037 (repository conventions). TASK-002/003/005/006/035/036/037/038 are complete. Product TASK-023–025 are complete. The maintained workspace, command runner, image loader and evidence slice run on macOS; subsequent tasks remain open until their full criteria pass.  A ready gate is not a completed decision; its missing external answers must still be resolved. See the [execution evidence](engineering/s0-probe-results.md) for completed work and limitations.
+The implementation plan has 53 tasks in 23 derived waves: 32 original required S0 tasks, one optional Linux VM task, 18 subsequent M1 tasks and two dependency-exception follow-ups (TASK-065/066). The original ready tasks were TASK-002 (fixtures), TASK-035 (inspect the S0 decision gate) and TASK-037 (repository conventions). TASK-002/003/005/006/035/036/037/038 are complete. Product TASK-023–025 are complete. The maintained workspace, command runner, image loader and evidence slice run on macOS; subsequent tasks remain open until their full criteria pass.  A ready gate is not a completed decision; its missing external answers must still be resolved. See the [execution evidence](engineering/s0-probe-results.md) for completed work and limitations.
 
 ## Milestone boundaries
 
