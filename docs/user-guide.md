@@ -2,6 +2,8 @@
 
 What works today: opening a JPEG, pixel-proof edits, exact transforms and a Lightroom-style crop and straighten tool, all delivered as tool modules with generated controls, persistent history and the JSON API, verified on macOS. Export, Locate and MCP are planned; see [feature status](features.md).
 
+Basic exposure, tone, white balance and color controls, plus a histogram and clipping inspector, have a [proposed design](design/basic-and-histogram.md). They are not available yet.
+
 ## Start the editor
 
 After [developer setup](engineering/development.md), start an optimized build with a catalog and an optional JPEG:
@@ -11,6 +13,8 @@ cargo xtask develop --catalog /path/to/catalog.sqlite --open /path/to/photo.jpg
 ```
 
 Omit `--catalog` to use the platform configuration directory. `--data-root DIRECTORY` isolates config, cache and log paths. `cargo xtask develop --debug` is an unoptimized build for debugging and is unsuitable for timing.
+
+For agent-driven API or rendered checks on macOS, add `--background` to keep the editor from taking desktop focus. Use a separate test catalog or `--evidence-dir NEW_DIR`; background evidence runs capture the editor and exit automatically. Smoke and diagnostic harnesses use background launches by default on macOS. Launch normally for keyboard, mouse and native-dialog interaction.
 
 Open references an existing supported sRGB or greyscale JPEG without copying or modifying it. Cmd+O on macOS and Ctrl+O elsewhere opens the picker. EXIF orientation is applied once before any edit. The catalog stores stable identities, the source fingerprint, ordered operations and history. It is not a backup of the original photo.
 

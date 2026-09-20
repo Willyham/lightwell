@@ -2,7 +2,7 @@
 
 | Capability | Status | Notes |
 | --- | --- | --- |
-| Repository checks, fixtures, smoke evidence, packaging | Implemented | Smoke and hardening run against the editor; [development](engineering/development.md) |
+| Repository checks, fixtures, smoke evidence, packaging | Implemented | macOS test launches run in background bundles without desktop activation; smoke and hardening use the editor; [development](engineering/development.md) |
 | JPEG open, automatic EXIF orientation, Fit, failed-replacement retention | Implemented (S0) | 8-bit sRGB and greyscale subset; broad ICC conversion and display calibration are not established |
 | Windows/Linux automated builds and packages | Hosted baseline verified; refresh open | Native desktop checks deferred |
 | License and dependency policy | Enforced | Manual license, native and asset review deferred; two expiring advisory exceptions ([dependencies](engineering/dependencies.md)) |
@@ -30,7 +30,9 @@
 | Complete editor packaging and portability verification | Editor follow-up | Native Windows/Linux remains deferred |
 | External module loading | Required later | Selected use case and measured activation costs first |
 | Multi-image library, filters, tagging, collections | Later | Owner workflow decisions first |
-| Exposure, white balance, tonal controls, PNG | Later | |
+| RGB histogram, output clipping indicators/overlays | Proposed plan | [Basic and histogram](design/basic-and-histogram.md); no implementation yet |
+| Exposure, white balance, tone, vibrance and saturation | Proposed plan | JPEG-first slices in [Basic and histogram](design/basic-and-histogram.md); product/numerical choices remain open |
+| PNG input | Later | Separate from the proposed JPEG Basic controls |
 | Nikon Z6 and Fujifilm X100VI RAW | Later | Real recording-mode fixtures; benchmark established decoders |
 | Texture, clarity, dehaze, masks, clone/heal | Later | Full API required whenever introduced |
 | Bitmap layers, blend modes, layer reordering | Not selected | |

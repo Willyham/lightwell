@@ -52,3 +52,5 @@ Tracked in [product decisions](../tasks/product-decisions.json).
 - Should RAW precede a small library or tonal tools? Which camera modes and camera-JPEG or film-simulation matching matter most?
 - What is the first external module the owner would use, and what enablement and recovery behavior does it need?
 - Which measured workloads and responsiveness budgets become acceptance requirements?
+
+The [Basic and histogram proposal](design/basic-and-histogram.md#open-decisions) also leaves JPEG-first delivery, Basic layer organization, gesture commit timing, global Tone quality scope and relative priority open. These are recommendations for the requested planning work, not accepted product decisions.
