@@ -13,7 +13,7 @@ fn await_log(
             return Ok(text);
         }
         ensure(
-            child.0.try_wait()?.is_none(),
+            child.child.try_wait()?.is_none(),
             format!("Child exited before {needle}: {text}"),
         )?;
         ensure(
@@ -26,7 +26,7 @@ fn await_log(
 pub fn hardening(root: &Path, out: &Path, bin: &Path) -> Result {
     ensure(!out.exists(), "Hardening output must be new")?;
     fs::create_dir_all(out)?;
-    let mut result = json!({"status":"failed","binary_sha256":hash(bin)?,"checks":[]});
+    let mut result = json!({"status":"failed","launch_mode":launch::MODE,"binary_sha256":hash(bin)?,"checks":[]});
     let checked = (|| -> Result {
         let fixture = root.join("fixtures/s0/orientation-6.jpg");
         let before = hash(&fixture)?;
@@ -184,7 +184,7 @@ pub fn measure(root: &Path, out: &Path, bin: &Path, samples: usize) -> Result {
     ensure((1..=1000).contains(&samples), "Samples must be 1..1000")?;
     ensure(!out.exists(), "Measurement output must be new")?;
     fs::create_dir_all(out)?;
-    let mut report = json!({"status":"in_progress","platform":host(root)?,"binary_sha256":hash(bin)?,"lockfile_sha256":hash(&root.join("Cargo.lock"))?,"method":"App-cold editor launches with an isolated evidence catalog; filesystem cache not purged. open_to_raster_ms spans import, refresh and render. Frame observation upper bound includes polling/readback, not scanout. RSS sampled about every 50 ms; GPU memory not separated.","runs":[]});
+    let mut report = json!({"status":"in_progress","launch_mode":launch::MODE,"platform":host(root)?,"binary_sha256":hash(bin)?,"lockfile_sha256":hash(&root.join("Cargo.lock"))?,"method":"App-cold editor launches with an isolated evidence catalog; filesystem cache not purged. On macOS, launch timing includes a temporary background bundle and binary copy; this is not foreground activation timing. open_to_raster_ms spans import, refresh and render. Frame observation upper bound includes polling/readback, not scanout. RSS sampled about every 50 ms; GPU memory not separated.","runs":[]});
     let checked = (|| -> Result {
         for name in ["empty", "24mp", "60mp", "repeated60mp"] {
             for index in 0..if name == "repeated60mp" { 1 } else { samples } {
@@ -220,14 +220,14 @@ pub fn measure(root: &Path, out: &Path, bin: &Path, samples: usize) -> Result {
                 let mut rss = Vec::new();
                 let mut first = None;
                 let status = loop {
-                    if let Some(s) = child.0.try_wait()? {
+                    if let Some(s) = child.child.try_wait()? {
                         break s;
                     }
                     ensure(
                         start.elapsed() < Duration::from_secs(35),
                         "Measurement deadline exceeded",
                     )?;
-                    if let Ok((_, r)) = usage(root, child.0.id()) {
+                    if let Ok((_, r)) = usage(root, child.child.id()) {
                         rss.push(json!([start.elapsed().as_secs_f64(), r]));
                     }
                     if first.is_none()
@@ -330,14 +330,14 @@ pub fn measure(root: &Path, out: &Path, bin: &Path, samples: usize) -> Result {
             Duration::from_secs(10),
         )?;
         std::thread::sleep(Duration::from_secs(1));
-        let before = usage(root, child.0.id())?;
+        let before = usage(root, child.child.id())?;
         let start = Instant::now();
         let mut peak = before.1;
         while start.elapsed() < Duration::from_secs(30) {
-            peak = peak.max(usage(root, child.0.id())?.1);
+            peak = peak.max(usage(root, child.child.id())?.1);
             std::thread::sleep(Duration::from_millis(500));
         }
-        let after = usage(root, child.0.id())?;
+        let after = usage(root, child.child.id())?;
         let elapsed = start.elapsed().as_secs_f64();
         report["idle"] = json!({"duration_s":elapsed,"cpu_percent_one_core":(after.0-before.0)/elapsed*100.0,"rss_mib_start":before.1,"rss_mib_end":after.1,"rss_mib_peak":peak,"method":"ps CPU delta, 30 seconds after readiness plus one-second settle; child then terminated, not clean-close evidence"});
         let mut summary = json!({});
@@ -397,7 +397,7 @@ pub fn probe(root: &Path, out: &Path, candidate: &str) -> Result {
         "probes/s0/target/release/{candidate}-viewer{}",
         std::env::consts::EXE_SUFFIX
     ));
-    let mut result = json!({"candidate":candidate,"status":"failed","fixture_sha256":before,"native_dialog_resize_verification":"not-performed"});
+    let mut result = json!({"candidate":candidate,"status":"failed","launch_mode":launch::MODE,"fixture_sha256":before,"native_dialog_resize_verification":"not-performed"});
     let check = (|| -> Result {
         let mut child = smoke::spawn(
             root,

@@ -25,6 +25,7 @@ S0 (JPEG viewing) is accepted; the evidence harness now drives the editor itself
 - **Stay in scope.** Do what was asked. A planning request does not authorize implementing the plan. Do not prebuild future features or placeholder controls.
 - **Consult the owner on consequential product tradeoffs.** Record recommendations as proposals until decided. Never turn an unanswered question into an accepted decision.
 - **Verify proportionately.** Run `cargo xtask check` before handing off. UI or image changes need a real rendered check with correlated state and logs. Changes under `crates/` answer the performance-rules checklist.
+- **Keep automated app launches in the background.** On macOS, use `cargo xtask smoke`, `hardening`, `measure` or `probe`, which launch without activating the desktop. For ad hoc API/render checks use `cargo xtask develop --background` with an isolated catalog or evidence directory. Do not launch the GUI binary directly or activate it through UI automation for routine tests. Foreground interaction checks require the owner's explicit request.
 - **Keep docs current, not historical.** When behavior or scope changes, update the spec, [feature status](docs/features.md) and [user guide](docs/user-guide.md). Document current behavior and outstanding work only: no change logs, run logs or planning history. Record a lesson only when something was tried and did not work. Never document a proposed command as if it exists.
 
 ## Engineering rules

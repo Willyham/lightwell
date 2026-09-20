@@ -12,6 +12,8 @@ cargo xtask develop --catalog /path/to/catalog.sqlite --open /path/to/photo.jpg
 
 Omit `--catalog` to use the platform configuration directory. `--data-root DIRECTORY` isolates config, cache and log paths. `cargo xtask develop --debug` is an unoptimized build for debugging and is unsuitable for timing.
 
+For agent-driven API or rendered checks on macOS, add `--background` to keep the editor from taking desktop focus. Use a separate test catalog or `--evidence-dir NEW_DIR`; background evidence runs capture the editor and exit automatically. Smoke and diagnostic harnesses use background launches by default on macOS. Launch normally for keyboard, mouse and native-dialog interaction.
+
 Open references an existing supported sRGB or greyscale JPEG without copying or modifying it. Cmd+O on macOS and Ctrl+O elsewhere opens the picker. EXIF orientation is applied once before any edit. The catalog stores stable identities, the source fingerprint, ordered operations and history. It is not a backup of the original photo.
 
 ## Edit and inspect

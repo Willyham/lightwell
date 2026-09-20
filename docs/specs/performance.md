@@ -54,6 +54,8 @@ Native M4 Pro, release builds, warm filesystem cache, synthetic fixtures. Diagno
 
 Core figures exclude desktop scheduling, GPU upload and presentation. Reproduce with `editor-performance` and `measure` as described in [development](../engineering/development.md).
 
+Current macOS `measure` runs use background-only bundles to preserve desktop focus. Launch-to-frame timings include copying the executable and creating its temporary bundle; they are background renderer measurements, not foreground activation measurements. Reports identify the launch mode. Earlier launch baselines above predate this wrapper and are not directly comparable.
+
 ## Method
 
 Optimized builds only, with commit, lockfile, OS, CPU/GPU, RAM, display and storage recorded. Report cold and warm runs separately and say which cold is meant. Keep at least 30 samples and never drop failures or tails silently. Measure user event to presented frame, not shader time, and account CPU RSS, cache bytes, GPU allocations and transient copies without double-counting unified memory. Capture idle after all background work stops. No timing gates in CI; CI enforces exactness, deterministic bounds and coverage. VM checks record hypervisor, guest graphics path and software versus accelerated rendering, and never stand in for native timings.

@@ -3,31 +3,36 @@ use std::{
     process::{Child, Stdio},
     time::{Duration, Instant},
 };
-pub struct Guard(pub Child);
+pub struct Guard {
+    pub child: Child,
+    _launch: launch::Background,
+}
 impl Drop for Guard {
     fn drop(&mut self) {
-        if !matches!(self.0.try_wait(), Ok(Some(_))) {
-            let _ = self.0.kill();
+        if !matches!(self.child.try_wait(), Ok(Some(_))) {
+            let _ = self.child.kill();
         }
-        let _ = self.0.wait();
+        let _ = self.child.wait();
     }
 }
 pub fn spawn(root: &Path, bin: &Path, args: &[OsString], log: &Path) -> Result<Guard> {
+    let launch = launch::Background::new(bin)?;
     let f = fs::File::create(log)?;
-    Ok(Guard(
-        Command::new(bin)
+    Ok(Guard {
+        child: Command::new(&launch.executable)
             .args(args)
             .current_dir(root)
             .stdin(Stdio::null())
             .stdout(f.try_clone()?)
             .stderr(f)
             .spawn()?,
-    ))
+        _launch: launch,
+    })
 }
 pub fn wait(child: &mut Guard, timeout: Duration) -> Result<std::process::ExitStatus> {
     let start = Instant::now();
     loop {
-        if let Some(status) = child.0.try_wait()? {
+        if let Some(status) = child.child.try_wait()? {
             return Ok(status);
         }
         ensure(
@@ -273,7 +278,7 @@ pub fn run(root: &Path, out: &Path, scenario: &str, bin: &Path, timeout: Duratio
         .chain(args.iter().map(OsString::as_os_str))
         .map(|s| s.to_string_lossy().into_owned())
         .collect::<Vec<_>>();
-    let mut result = json!({"scenario":scenario,"status":"failed","command":command,"platform":format!("{}-{}",std::env::consts::OS,std::env::consts::ARCH)});
+    let mut result = json!({"scenario":scenario,"status":"failed","command":command,"launch_mode":launch::MODE,"platform":format!("{}-{}",std::env::consts::OS,std::env::consts::ARCH)});
     let check = (|| -> Result {
         let mut hashes = serde_json::Map::new();
         for p in &sources {
@@ -309,8 +314,9 @@ pub fn run(root: &Path, out: &Path, scenario: &str, bin: &Path, timeout: Duratio
     fs::write(
         out.join("reproduce.md"),
         format!(
-            "# Smoke run\n\nScenario: {scenario}. Status: {}.\n\nArgument array:\n\n```json\n{}\n```\n\nActual renderer readback; native dialog/focus verified separately. Synthetic fixtures only.\n",
+            "# Smoke run\n\nScenario: {scenario}. Status: {}.\n\nLaunch mode: {}. Reproduce with `cargo xtask smoke --scenario {scenario} --output NEW_DIR --binary PATH`; on macOS this copies the binary into a temporary background-only bundle. Running the argument array directly bypasses that focus protection.\n\nArgument array:\n\n```json\n{}\n```\n\nActual renderer readback; native dialog/focus verified separately. Synthetic fixtures only.\n",
             result["status"],
+            launch::MODE,
             serde_json::to_string_pretty(&command)?
         ),
     )?;
@@ -407,7 +413,7 @@ mod tests {
                 .to_string()
                 .contains("timed out")
         );
-        child.0.kill().unwrap();
-        assert!(child.0.wait().is_ok());
+        child.child.kill().unwrap();
+        assert!(child.child.wait().is_ok());
     }
 }

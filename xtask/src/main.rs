@@ -2,6 +2,7 @@ mod diagnostics;
 mod editor_acceptance;
 mod editor_performance;
 mod fixtures;
+mod launch;
 mod package;
 mod policy;
 mod repository;
@@ -179,6 +180,34 @@ fn main_result() -> Result {
     match op.to_str().ok_or("Invalid command")? {
         "develop" => {
             let debug = a.flag("--debug");
+            let background = a.flag("--background");
+            if background {
+                ensure(
+                    cfg!(target_os = "macos"),
+                    "develop --background is currently supported only on macOS",
+                )?;
+                cargo(&root, "build", !debug)?;
+                let mut bin = binary(&root)?;
+                if debug {
+                    bin = bin
+                        .parent()
+                        .unwrap()
+                        .parent()
+                        .unwrap()
+                        .join("debug")
+                        .join(bin.file_name().unwrap());
+                }
+                let launch = launch::Background::new(&bin)?;
+                ensure(
+                    Command::new(&launch.executable)
+                        .current_dir(&root)
+                        .args(a.0)
+                        .status()?
+                        .success(),
+                    "Application failed",
+                )?;
+                return Ok(());
+            }
             let mut cmd = Command::new("cargo");
             cmd.current_dir(&root).args(["run", "--locked"]);
             if !debug {
@@ -349,7 +378,7 @@ fn main_result() -> Result {
         }
         "__hang" => std::thread::sleep(std::time::Duration::from_secs(60)),
         "help" => println!(
-            "cargo xtask doctor|check|check-repository|fmt|lint|test|build [--release]|develop [--debug] [app args]|fixtures|generate-fixtures [--output NEW]|audit|editor-acceptance --output NEW|editor-performance --source JPEG --output NEW [--samples N]|inventory --output NEW|package --output NEW|smoke --output NEW [--scenario NAME] [--binary PATH]|check-capture --image PNG [--orientation N] [--aspect R] [--columns LEFT,RIGHT]|hardening --binary PATH --output NEW|measure --binary PATH --output NEW [--samples N]|probe --candidate iced|egui --output NEW"
+            "cargo xtask doctor|check|check-repository|fmt|lint|test|build [--release]|develop [--debug] [--background] [app args]|fixtures|generate-fixtures [--output NEW]|audit|editor-acceptance --output NEW|editor-performance --source JPEG --output NEW [--samples N]|inventory --output NEW|package --output NEW|smoke --output NEW [--scenario NAME] [--binary PATH]|check-capture --image PNG [--orientation N] [--aspect R] [--columns LEFT,RIGHT]|hardening --binary PATH --output NEW|measure --binary PATH --output NEW [--samples N]|probe --candidate iced|egui --output NEW"
         ),
         _ => return Err("Unknown command; use cargo xtask help".into()),
     }
