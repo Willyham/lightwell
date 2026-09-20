@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
+    cell::RefCell,
     fs::Metadata,
     path::{Path, PathBuf},
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -99,9 +100,25 @@ pub struct HistoryPage {
     pub next_before_sequence: Option<u64>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct SourceSignature {
+    byte_len: u64,
+    modified: Option<SystemTime>,
+    file_identity: String,
+    change_marker: Option<(i128, i128)>,
+}
+
+#[derive(Clone, Debug)]
+struct CachedSource {
+    asset_id: AssetId,
+    signature: SourceSignature,
+    source: SourceImage,
+}
+
 #[derive(Debug)]
 pub struct EditorService {
     connection: Connection,
+    source_cache: RefCell<Option<CachedSource>>,
 }
 
 impl EditorService {
@@ -138,7 +155,10 @@ impl EditorService {
                 format!("catalog format {version} is not supported; expected {CATALOG_FORMAT}"),
             ));
         }
-        Ok(Self { connection })
+        Ok(Self {
+            connection,
+            source_cache: RefCell::new(None),
+        })
     }
 
     fn create_schema(connection: &Connection) -> Result<(), Error> {
@@ -232,7 +252,7 @@ impl EditorService {
         let after = canonical
             .metadata()
             .map_err(|e| Error::new(ErrorKind::FileAccess, e.to_string()))?;
-        if metadata_signature(&before) != metadata_signature(&after) {
+        if source_signature(&canonical, &before) != source_signature(&canonical, &after) {
             return Err(Error::new(
                 ErrorKind::Conflict,
                 "source changed while it was being imported",
@@ -294,6 +314,11 @@ impl EditorService {
         )
         .map_err(catalog_error)?;
         tx.commit().map_err(catalog_error)?;
+        self.source_cache.replace(Some(CachedSource {
+            asset_id: asset.id.clone(),
+            signature: source_signature(&canonical, &after),
+            source,
+        }));
         Ok(EditorState {
             asset,
             revision: 0,
@@ -365,7 +390,7 @@ impl EditorService {
             None => state.current_entry,
         };
         Ok(PreviewJob {
-            source: verified_source(&state.asset)?,
+            source: self.verified_source(&state.asset)?,
             entry,
         })
     }
@@ -373,7 +398,7 @@ impl EditorService {
     pub fn render_entry(&self, asset_id: &AssetId, entry_id: &EntryId) -> Result<Raster, Error> {
         let state = self.state(asset_id)?;
         let entry = self.entry(asset_id, entry_id)?;
-        let source = verified_source(&state.asset)?;
+        let source = self.verified_source(&state.asset)?;
         render(&source, entry.snapshot.id.clone(), &entry.snapshot.recipe)
     }
 
@@ -392,7 +417,7 @@ impl EditorService {
         }
         let state = self.state(asset_id)?;
         ensure_revision(&state, mutation.expected_revision)?;
-        let source = verified_source(&state.asset)?;
+        let source = self.verified_source(&state.asset)?;
         let current = render(
             &source,
             state.current_entry.snapshot.id.clone(),
@@ -418,6 +443,57 @@ impl EditorService {
             "set-pixel",
             json!({"x":x,"y":y,"rgb":rgb}),
         )
+    }
+
+    fn verified_source(&self, asset: &AssetRecord) -> Result<SourceImage, Error> {
+        let before = asset.locator.metadata().map_err(|_| {
+            Error::new(
+                ErrorKind::SourceUnavailable,
+                "original source is unavailable",
+            )
+        })?;
+        let signature = source_signature(&asset.locator, &before);
+        if signature.byte_len != asset.byte_len
+            || signature.byte_len > 128 * 1024 * 1024
+            || signature.file_identity != asset.file_identity
+        {
+            return Err(Error::new(
+                ErrorKind::SourceUnavailable,
+                "original source fingerprint changed",
+            ));
+        }
+        if let Some(cached) = self.source_cache.borrow().as_ref()
+            && cached.asset_id == asset.id
+            && cached.signature == signature
+        {
+            return Ok(cached.source.clone());
+        }
+
+        let source = open_source(&asset.locator).map_err(|_| {
+            Error::new(
+                ErrorKind::SourceUnavailable,
+                "original source is unavailable or changed",
+            )
+        })?;
+        let after = asset.locator.metadata().map_err(|_| {
+            Error::new(
+                ErrorKind::SourceUnavailable,
+                "original source is unavailable",
+            )
+        })?;
+        let after_signature = source_signature(&asset.locator, &after);
+        if after_signature != signature || source.fingerprint != asset.fingerprint {
+            return Err(Error::new(
+                ErrorKind::SourceUnavailable,
+                "original source fingerprint changed",
+            ));
+        }
+        self.source_cache.replace(Some(CachedSource {
+            asset_id: asset.id.clone(),
+            signature,
+            source: source.clone(),
+        }));
+        Ok(source)
     }
 
     pub fn apply_transform(
@@ -850,53 +926,33 @@ fn entry_from(
     decode("invalid history entry", json)
 }
 
-fn verified_source(asset: &AssetRecord) -> Result<SourceImage, Error> {
-    let metadata = asset.locator.metadata().map_err(|_| {
-        Error::new(
-            ErrorKind::SourceUnavailable,
-            "original source is unavailable",
-        )
-    })?;
-    if metadata.len() != asset.byte_len || metadata.len() > 128 * 1024 * 1024 {
-        return Err(Error::new(
-            ErrorKind::SourceUnavailable,
-            "original source fingerprint changed",
-        ));
+fn source_signature(path: &Path, metadata: &Metadata) -> SourceSignature {
+    SourceSignature {
+        byte_len: metadata.len(),
+        modified: metadata.modified().ok(),
+        file_identity: file_identity(metadata, path),
+        change_marker: metadata_change_marker(metadata),
     }
-    let bytes = std::fs::read(&asset.locator).map_err(|_| {
-        Error::new(
-            ErrorKind::SourceUnavailable,
-            "original source is unavailable",
-        )
-    })?;
-    let fingerprint = format!("{:x}", Sha256::digest(&bytes));
-    if fingerprint != asset.fingerprint {
-        return Err(Error::new(
-            ErrorKind::SourceUnavailable,
-            "original source fingerprint changed",
-        ));
-    }
-    let source = open_source(&asset.locator).map_err(|error| {
-        if error.kind == ErrorKind::FileAccess {
-            Error::new(
-                ErrorKind::SourceUnavailable,
-                "original source is unavailable",
-            )
-        } else {
-            error
-        }
-    })?;
-    if source.fingerprint != asset.fingerprint {
-        return Err(Error::new(
-            ErrorKind::SourceUnavailable,
-            "original source fingerprint changed",
-        ));
-    }
-    Ok(source)
 }
 
-fn metadata_signature(metadata: &Metadata) -> (u64, Option<SystemTime>) {
-    (metadata.len(), metadata.modified().ok())
+#[cfg(unix)]
+fn metadata_change_marker(metadata: &Metadata) -> Option<(i128, i128)> {
+    use std::os::unix::fs::MetadataExt;
+    Some((
+        i128::from(metadata.ctime()),
+        i128::from(metadata.ctime_nsec()),
+    ))
+}
+
+#[cfg(windows)]
+fn metadata_change_marker(metadata: &Metadata) -> Option<(i128, i128)> {
+    use std::os::windows::fs::MetadataExt;
+    Some((i128::from(metadata.last_write_time()), 0))
+}
+
+#[cfg(not(any(unix, windows)))]
+fn metadata_change_marker(_: &Metadata) -> Option<(i128, i128)> {
+    None
 }
 
 #[cfg(unix)]
@@ -1064,6 +1120,52 @@ mod tests {
         std::fs::write(&source, b"changed").unwrap();
         assert_eq!(
             service.render_current(&a).unwrap_err().kind,
+            ErrorKind::SourceUnavailable
+        );
+        drop(service);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn unchanged_sources_reuse_one_decoded_pixel_allocation() {
+        let catalog = temp("source-cache.sqlite");
+        let mut service = EditorService::open(&catalog).unwrap();
+        let state = service.import(&fixture()).unwrap();
+        let first = service.preview_job(&state.asset.id, None).unwrap();
+        let second = service.preview_job(&state.asset.id, None).unwrap();
+        assert!(std::sync::Arc::ptr_eq(
+            &first.source.rgba,
+            &second.source.rgba
+        ));
+        let raster = render(
+            &first.source,
+            first.entry.snapshot.id.clone(),
+            &first.entry.snapshot.recipe,
+        )
+        .unwrap();
+        assert!(std::sync::Arc::ptr_eq(&first.source.rgba, &raster.rgba));
+        drop(service);
+        std::fs::remove_file(catalog).unwrap();
+    }
+
+    #[test]
+    fn same_length_source_replacement_invalidates_the_decode_cache() {
+        let dir = temp("source-cache-invalidation");
+        std::fs::create_dir_all(&dir).unwrap();
+        let source = dir.join("source.jpg");
+        std::fs::copy(fixture(), &source).unwrap();
+        let mut service = EditorService::open(&dir.join("catalog.sqlite")).unwrap();
+        let asset = service.import(&source).unwrap().asset.id;
+        service.preview_job(&asset, None).unwrap();
+        let replacement =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/s0/orientation-2.jpg");
+        assert_eq!(
+            std::fs::metadata(&source).unwrap().len(),
+            std::fs::metadata(&replacement).unwrap().len()
+        );
+        std::fs::copy(replacement, &source).unwrap();
+        assert_eq!(
+            service.preview_job(&asset, None).unwrap_err().kind,
             ErrorKind::SourceUnavailable
         );
         drop(service);

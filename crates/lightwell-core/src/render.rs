@@ -1,13 +1,17 @@
 use crate::{
-    EFFECT_FORMAT, Error, ErrorKind, PIXEL_EFFECT, PixelReplace, Recipe, SnapshotId, SourceImage,
-    TRANSFORM_EFFECT, Transform,
+    EFFECT_FORMAT, Error, ErrorKind, PIXEL_EFFECT, PixelReplace, RECIPE_FORMAT, Recipe, SnapshotId,
+    SourceImage, TRANSFORM_EFFECT, Transform,
 };
+use rayon::prelude::*;
+use std::{collections::HashSet, sync::Arc};
+
+const PARALLEL_RENDER_PIXELS: u64 = 1_000_000;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Raster {
     pub width: u32,
     pub height: u32,
-    pub rgba: Vec<u8>,
+    pub rgba: Arc<[u8]>,
     pub source_fingerprint: String,
     pub snapshot_id: SnapshotId,
 }
@@ -32,22 +36,6 @@ impl Raster {
         })
     }
 
-    fn from_source(source: &SourceImage, snapshot_id: SnapshotId) -> Result<Self, Error> {
-        if source.rgba.len() != Self::expected_len(source.width, source.height)? {
-            return Err(Error::new(
-                ErrorKind::Validation,
-                "source pixel buffer has the wrong length",
-            ));
-        }
-        Ok(Self {
-            width: source.width,
-            height: source.height,
-            rgba: source.rgba.clone(),
-            source_fingerprint: source.fingerprint.clone(),
-            snapshot_id,
-        })
-    }
-
     pub fn pixel(&self, x: u32, y: u32) -> Option<[u8; 4]> {
         if x >= self.width || y >= self.height {
             return None;
@@ -59,14 +47,201 @@ impl Raster {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Geometry {
+    input_width: u32,
+    input_height: u32,
+    output_width: u32,
+    output_height: u32,
+    a: i64,
+    b: i64,
+    c: i64,
+    d: i64,
+    tx: i64,
+    ty: i64,
+}
+
+impl Geometry {
+    fn identity(width: u32, height: u32) -> Self {
+        Self {
+            input_width: width,
+            input_height: height,
+            output_width: width,
+            output_height: height,
+            a: 1,
+            b: 0,
+            c: 0,
+            d: 1,
+            tx: 0,
+            ty: 0,
+        }
+    }
+
+    fn transform(transform: Transform, width: u32, height: u32) -> Self {
+        match transform {
+            Transform::RotateRight => Self {
+                input_width: width,
+                input_height: height,
+                output_width: height,
+                output_height: width,
+                a: 0,
+                b: -1,
+                c: 1,
+                d: 0,
+                tx: i64::from(height) - 1,
+                ty: 0,
+            },
+            Transform::RotateLeft => Self {
+                input_width: width,
+                input_height: height,
+                output_width: height,
+                output_height: width,
+                a: 0,
+                b: 1,
+                c: -1,
+                d: 0,
+                tx: 0,
+                ty: i64::from(width) - 1,
+            },
+            Transform::MirrorHorizontal => Self {
+                input_width: width,
+                input_height: height,
+                output_width: width,
+                output_height: height,
+                a: -1,
+                b: 0,
+                c: 0,
+                d: 1,
+                tx: i64::from(width) - 1,
+                ty: 0,
+            },
+            Transform::FlipVertical => Self {
+                input_width: width,
+                input_height: height,
+                output_width: width,
+                output_height: height,
+                a: 1,
+                b: 0,
+                c: 0,
+                d: -1,
+                tx: 0,
+                ty: i64::from(height) - 1,
+            },
+        }
+    }
+
+    /// Compose `self` followed by `next`.
+    fn then(self, next: Self) -> Self {
+        debug_assert_eq!(self.output_width, next.input_width);
+        debug_assert_eq!(self.output_height, next.input_height);
+        Self {
+            input_width: self.input_width,
+            input_height: self.input_height,
+            output_width: next.output_width,
+            output_height: next.output_height,
+            a: next.a * self.a + next.b * self.c,
+            b: next.a * self.b + next.b * self.d,
+            c: next.c * self.a + next.d * self.c,
+            d: next.c * self.b + next.d * self.d,
+            tx: next.a * self.tx + next.b * self.ty + next.tx,
+            ty: next.c * self.tx + next.d * self.ty + next.ty,
+        }
+    }
+
+    fn map(self, x: u32, y: u32) -> (u32, u32) {
+        let out_x = self.a * i64::from(x) + self.b * i64::from(y) + self.tx;
+        let out_y = self.c * i64::from(x) + self.d * i64::from(y) + self.ty;
+        debug_assert!(out_x >= 0 && out_x < i64::from(self.output_width));
+        debug_assert!(out_y >= 0 && out_y < i64::from(self.output_height));
+        (out_x as u32, out_y as u32)
+    }
+
+    fn unmap(self, x: u32, y: u32) -> (u32, u32) {
+        let translated_x = i64::from(x) - self.tx;
+        let translated_y = i64::from(y) - self.ty;
+        let input_x = self.a * translated_x + self.c * translated_y;
+        let input_y = self.b * translated_x + self.d * translated_y;
+        debug_assert!(input_x >= 0 && input_x < i64::from(self.input_width));
+        debug_assert!(input_y >= 0 && input_y < i64::from(self.input_height));
+        (input_x as u32, input_y as u32)
+    }
+
+    fn is_identity(self) -> bool {
+        self.input_width == self.output_width
+            && self.input_height == self.output_height
+            && (self.a, self.b, self.c, self.d, self.tx, self.ty) == (1, 0, 0, 1, 0, 0)
+    }
+}
+
+#[derive(Clone, Debug)]
+enum Operation {
+    Pixel(PixelReplace),
+    Transform {
+        transform: Transform,
+        input_width: u32,
+        input_height: u32,
+    },
+}
+
+fn copy_transformed(source: &SourceImage, geometry: Geometry) -> Result<Vec<u8>, Error> {
+    let width = geometry.output_width;
+    let height = geometry.output_height;
+    let mut output = vec![0; Raster::expected_len(width, height)?];
+    let row_bytes = usize::try_from(u64::from(width) * 4)
+        .map_err(|_| Error::new(ErrorKind::ResourceLimit, "image row is not addressable"))?;
+    let copy_row = |out_y: usize, row: &mut [u8]| {
+        for out_x in 0..width {
+            let (input_x, input_y) = geometry.unmap(out_x, out_y as u32);
+            let from =
+                ((u64::from(input_y) * u64::from(source.width) + u64::from(input_x)) * 4) as usize;
+            let to = out_x as usize * 4;
+            row[to..to + 4].copy_from_slice(&source.rgba[from..from + 4]);
+        }
+    };
+    if u64::from(width) * u64::from(height) >= PARALLEL_RENDER_PIXELS {
+        output
+            .par_chunks_exact_mut(row_bytes)
+            .enumerate()
+            .for_each(|(out_y, row)| copy_row(out_y, row));
+    } else {
+        output
+            .chunks_exact_mut(row_bytes)
+            .enumerate()
+            .for_each(|(out_y, row)| copy_row(out_y, row));
+    }
+    Ok(output)
+}
+
 pub fn render(
     source: &SourceImage,
     snapshot_id: SnapshotId,
     recipe: &Recipe,
 ) -> Result<Raster, Error> {
-    recipe.validate()?;
-    let mut raster = Raster::from_source(source, snapshot_id)?;
+    if source.rgba.len() != Raster::expected_len(source.width, source.height)? {
+        return Err(Error::new(
+            ErrorKind::Validation,
+            "source pixel buffer has the wrong length",
+        ));
+    }
+    if recipe.format != RECIPE_FORMAT {
+        return Err(Error::new(
+            ErrorKind::Incompatible,
+            format!("unsupported recipe format {}", recipe.format),
+        ));
+    }
+
+    let mut layer_ids = HashSet::with_capacity(recipe.layers.len());
+    let mut operations = Vec::with_capacity(recipe.layers.len());
+    let mut geometry = Geometry::identity(source.width, source.height);
+    let mut width = source.width;
+    let mut height = source.height;
     for layer in &recipe.layers {
+        if !layer_ids.insert(&layer.id) {
+            return Err(Error::new(
+                ErrorKind::Validation,
+                "duplicate layer identity",
+            ));
+        }
         if layer.effect_format != EFFECT_FORMAT {
             return Err(Error::new(
                 ErrorKind::Incompatible,
@@ -79,7 +254,16 @@ pub fn render(
                     serde_json::from_value(layer.payload.clone()).map_err(|e| {
                         Error::new(ErrorKind::Validation, format!("invalid pixel payload: {e}"))
                     })?;
-                replace(&mut raster, pixel)?;
+                if pixel.x >= width || pixel.y >= height {
+                    return Err(Error::new(
+                        ErrorKind::Validation,
+                        format!(
+                            "pixel ({}, {}) is outside {}x{} input stage",
+                            pixel.x, pixel.y, width, height
+                        ),
+                    ));
+                }
+                operations.push(Operation::Pixel(pixel));
             }
             TRANSFORM_EFFECT => {
                 let transform: Transform =
@@ -89,7 +273,15 @@ pub fn render(
                             format!("invalid transform payload: {e}"),
                         )
                     })?;
-                raster = transformed(raster, transform)?;
+                let step = Geometry::transform(transform, width, height);
+                operations.push(Operation::Transform {
+                    transform,
+                    input_width: width,
+                    input_height: height,
+                });
+                geometry = geometry.then(step);
+                width = step.output_width;
+                height = step.output_height;
             }
             other => {
                 return Err(Error::new(
@@ -99,47 +291,51 @@ pub fn render(
             }
         }
     }
-    Ok(raster)
-}
 
-fn replace(raster: &mut Raster, pixel: PixelReplace) -> Result<(), Error> {
-    if pixel.x >= raster.width || pixel.y >= raster.height {
-        return Err(Error::new(
-            ErrorKind::Validation,
-            format!(
-                "pixel ({}, {}) is outside {}x{} input stage",
-                pixel.x, pixel.y, raster.width, raster.height
-            ),
-        ));
-    }
-    let offset = ((u64::from(pixel.y) * u64::from(raster.width) + u64::from(pixel.x)) * 4) as usize;
-    raster.rgba[offset..offset + 3].copy_from_slice(&pixel.rgb);
-    Ok(())
-}
-
-fn transformed(mut input: Raster, transform: Transform) -> Result<Raster, Error> {
-    let (out_width, out_height) = match transform {
-        Transform::RotateLeft | Transform::RotateRight => (input.height, input.width),
-        Transform::MirrorHorizontal | Transform::FlipVertical => (input.width, input.height),
+    let has_pixels = operations
+        .iter()
+        .any(|operation| matches!(operation, Operation::Pixel(_)));
+    let mut output = if geometry.is_identity() && !has_pixels {
+        None
+    } else if geometry.is_identity() {
+        Some(source.rgba.as_ref().to_vec())
+    } else {
+        Some(copy_transformed(source, geometry)?)
     };
-    let mut output = vec![0; Raster::expected_len(out_width, out_height)?];
-    for y in 0..input.height {
-        for x in 0..input.width {
-            let (out_x, out_y) = match transform {
-                Transform::RotateRight => (input.height - 1 - y, x),
-                Transform::RotateLeft => (y, input.width - 1 - x),
-                Transform::MirrorHorizontal => (input.width - 1 - x, y),
-                Transform::FlipVertical => (x, input.height - 1 - y),
-            };
-            let from = ((u64::from(y) * u64::from(input.width) + u64::from(x)) * 4) as usize;
-            let to = ((u64::from(out_y) * u64::from(out_width) + u64::from(out_x)) * 4) as usize;
-            output[to..to + 4].copy_from_slice(&input.rgba[from..from + 4]);
+
+    if has_pixels {
+        let pixels = output.as_mut().expect("pixel recipes have writable output");
+        let mut suffix = Geometry::identity(width, height);
+        let mut replaced = HashSet::new();
+        for operation in operations.iter().rev() {
+            match operation {
+                Operation::Transform {
+                    transform,
+                    input_width,
+                    input_height,
+                } => {
+                    suffix =
+                        Geometry::transform(*transform, *input_width, *input_height).then(suffix);
+                }
+                Operation::Pixel(pixel) => {
+                    let (x, y) = suffix.map(pixel.x, pixel.y);
+                    if replaced.insert((x, y)) {
+                        let offset =
+                            ((u64::from(y) * u64::from(width) + u64::from(x)) * 4) as usize;
+                        pixels[offset..offset + 3].copy_from_slice(&pixel.rgb);
+                    }
+                }
+            }
         }
     }
-    input.width = out_width;
-    input.height = out_height;
-    input.rgba = output;
-    Ok(input)
+
+    Ok(Raster {
+        width,
+        height,
+        rgba: output.map_or_else(|| source.rgba.clone(), |pixels| pixels.into()),
+        source_fingerprint: source.fingerprint.clone(),
+        snapshot_id,
+    })
 }
 
 #[cfg(test)]
@@ -155,7 +351,7 @@ mod tests {
         SourceImage {
             width,
             height,
-            rgba,
+            rgba: rgba.into(),
             fingerprint: "sha256:test".into(),
             orientation: 1,
         }
@@ -165,6 +361,49 @@ mod tests {
     }
     fn rendered(source: &SourceImage, layers: Vec<Layer>) -> Raster {
         render(source, SnapshotId::new(), &Recipe { format: 1, layers }).unwrap()
+    }
+
+    fn reference(source: &SourceImage, layers: &[Layer]) -> (u32, u32, Vec<u8>) {
+        let mut width = source.width;
+        let mut height = source.height;
+        let mut rgba = source.rgba.as_ref().to_vec();
+        for layer in layers {
+            match layer.effect_id.as_str() {
+                PIXEL_EFFECT => {
+                    let pixel: PixelReplace =
+                        serde_json::from_value(layer.payload.clone()).unwrap();
+                    let offset = ((pixel.y * width + pixel.x) * 4) as usize;
+                    rgba[offset..offset + 3].copy_from_slice(&pixel.rgb);
+                }
+                TRANSFORM_EFFECT => {
+                    let transform: Transform =
+                        serde_json::from_value(layer.payload.clone()).unwrap();
+                    let (next_width, next_height) = match transform {
+                        Transform::RotateLeft | Transform::RotateRight => (height, width),
+                        Transform::MirrorHorizontal | Transform::FlipVertical => (width, height),
+                    };
+                    let mut next = vec![0; (next_width * next_height * 4) as usize];
+                    for y in 0..height {
+                        for x in 0..width {
+                            let (next_x, next_y) = match transform {
+                                Transform::RotateRight => (height - 1 - y, x),
+                                Transform::RotateLeft => (y, width - 1 - x),
+                                Transform::MirrorHorizontal => (width - 1 - x, y),
+                                Transform::FlipVertical => (x, height - 1 - y),
+                            };
+                            let from = ((y * width + x) * 4) as usize;
+                            let to = ((next_y * next_width + next_x) * 4) as usize;
+                            next[to..to + 4].copy_from_slice(&rgba[from..from + 4]);
+                        }
+                    }
+                    width = next_width;
+                    height = next_height;
+                    rgba = next;
+                }
+                other => panic!("unexpected test effect {other}"),
+            }
+        }
+        (width, height, rgba)
     }
 
     #[test]
@@ -246,6 +485,36 @@ mod tests {
     }
 
     #[test]
+    fn compiled_recipes_match_stepwise_evaluation_for_interleaved_operations() {
+        let source = source(5, 3);
+        let transforms = [
+            Transform::RotateLeft,
+            Transform::RotateRight,
+            Transform::MirrorHorizontal,
+            Transform::FlipVertical,
+        ];
+        for first in transforms {
+            for second in transforms {
+                for third in transforms {
+                    let layers = vec![
+                        Layer::pixel(1, 1, [201, 1, 2]),
+                        Layer::transform(first),
+                        Layer::pixel(0, 0, [3, 202, 4]),
+                        Layer::transform(second),
+                        Layer::pixel(1, 1, [5, 6, 203]),
+                        Layer::transform(third),
+                        Layer::pixel(0, 0, [204, 8, 9]),
+                    ];
+                    let expected = reference(&source, &layers);
+                    let actual = rendered(&source, layers);
+                    assert_eq!((actual.width, actual.height), (expected.0, expected.1));
+                    assert_eq!(actual.rgba.as_ref(), expected.2);
+                }
+            }
+        }
+    }
+
+    #[test]
     fn invalid_coordinates_and_buffers_fail_without_panicking() {
         let source = source(3, 2);
         let snapshot = Snapshot::original(AssetId::new());
@@ -261,7 +530,7 @@ mod tests {
             .is_err()
         );
         let malformed = SourceImage {
-            rgba: vec![0],
+            rgba: vec![0].into(),
             ..source
         };
         assert!(render(&malformed, snapshot.id, &Recipe::default()).is_err());

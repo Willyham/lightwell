@@ -200,7 +200,7 @@ mod tests {
             source: SourceImage {
                 width: 1,
                 height: 1,
-                rgba: vec![0, 0, 0, 255],
+                rgba: vec![0, 0, 0, 255].into(),
                 fingerprint: "test".into(),
                 orientation: 1,
             },

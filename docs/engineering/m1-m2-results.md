@@ -58,6 +58,25 @@ cargo run --release --locked --package xtask -- editor-acceptance \
 
 The run finished at revision 209 with a 320×480 image, stable original/A identities and the original source hash unchanged. Timings use a warm filesystem cache on this host and are diagnostic observations, not cross-platform budgets. Use a new output directory for every rerun.
 
+## Preview latency optimization
+
+The later preview optimization working tree based on `c01f4c83ac3636a5c3a660ebcaacbb2bab2c6939` keeps one signature-validated decoded source, shares immutable source/render/upload bytes, composes exact transform stacks into one pass, parallelizes large transforms and avoids full state/history reloads for selection-only UI actions. Mutations now refresh current state and merge its entry into the bounded UI page instead of querying the complete page again. Zoom changes no longer decode or rerender unchanged pixels. Source replacement checks include byte length, modification/change timestamps and file identity; a cache miss still verifies the decoded SHA-256 against the catalog.
+
+A solo release acceptance rerun reduced the 203-layer render from a same-session pre-change baseline of 25.364 ms to 0.244 ms. Historical preview in that small exact journey measured 0.035 ms. A separate generated 24 MP (6000×4000, SHA-256 `b54c2a158a3d384674f5d731f940d553039d61f51b83a0e7b1e3b0247aa056eb`) release diagnostic recorded 30 samples:
+
+| Core measurement | Result |
+| --- | ---: |
+| Import | 57.652 ms |
+| Cached preview-job lookup | 0.086 ms |
+| Original render using shared pixels | 0.0003 ms |
+| One transform | p50 11.650 ms; p95 13.641 ms |
+| 200 composed transforms | p50 13.375 ms; p95 14.375 ms |
+| Reopen, decode and construct preview job | 30.169 ms |
+
+The generated 60 MP workload (10000×6000, SHA-256 `b9e0118ab69b5d889b62087759be0b33f41b010f8d5bf14d2864dd9e47340221`) also used 30 samples. One transform measured 24.615 ms p50 / 27.778 ms p95; 200 composed transforms measured 27.106 ms p50 / 29.689 ms p95. Import measured 125.793 ms and reopen/decode/job construction measured 74.417 ms.
+
+`cargo xtask check` passed with 31 core tests, including exhaustive three-transform/pixel interleavings and source-cache invalidation. These measurements cover core request-to-render work on the native M4 with a warm filesystem cache; they exclude desktop task scheduling, GPU upload and presentation. A fresh packaged GUI journey and end-to-end input-to-present capture have not been run for this optimization, and Windows/Linux performance remains unverified.
+
 ## Exact geometry contract
 
 Coordinates use a top-left origin, x right and y down. Every layer addresses its input stage after EXIF orientation is applied once.
@@ -75,6 +94,6 @@ These mappings are integer-exact. Four matching quarter-turns and two matching r
 
 - Native Windows/Linux desktop behavior and performance remain deferred; automated portable compilation/tests are not native GPU evidence.
 - The custom Iced controls have visible labels and verified keyboard shortcuts, but native screen-reader exposure is not yet verified.
-- Rendering currently evaluates full decoded RGBA buffers. Inputs are bounded to 128 MiB JPEG files and 64 megapixels; render estimates are capped at 512 MiB, and preview work is one active plus one replaceable pending job.
+- Rendering still uses full decoded RGBA buffers, but unchanged sources are cached once, immutable pixels are shared and an exact transform stack evaluates in at most one full-image pass. Inputs are bounded to 128 MiB JPEG files and 64 megapixels; render estimates are capped at 512 MiB, and preview work is one active plus one replaceable pending job.
 - Catalogs are internal v0 data with an explicit format marker. Incompatible data, changed/missing sources and unknown operations fail explicitly instead of being discarded. A catalog is not a backup of the original.
 - Export, manual Locate, MCP, crop, a generic module host, RAW and broader color-management work are not implemented. Manual license/native/asset review also remains deferred.

@@ -26,6 +26,8 @@ Fit shows the whole image. Enter a percentage from 10–1600 and choose Set, or 
 
 History shows Original and committed actions with sequence and actor. The filled marker is current; selecting another row previews that immutable snapshot without changing current state or revision. Use Return to current to leave preview, or Restore to append a new action containing the selected recipe. Editing is disabled during historical preview.
 
+For an unchanged active source, Lightwell reuses one decoded pixel allocation while browsing history. Exact rotate/reflect stacks are composed before rendering instead of rewriting the image once per history layer. This is transparent to recipes and does not weaken changed-source detection.
+
 Undo and Redo navigate saved states without appending artificial history rows. Cmd+Z / Ctrl+Z and Shift+Cmd+Z / Shift+Ctrl+Z invoke the same service as the buttons. A new edit clears shortcut redo while every older entry remains available for preview or Restore. Layers, history, current/redo navigation and stable IDs survive reopening the catalog.
 
 Missing or changed sources preserve their catalog data and report why rendering is unavailable. Incompatible catalogs or operation payloads fail explicitly; Lightwell does not silently reset or drop them.

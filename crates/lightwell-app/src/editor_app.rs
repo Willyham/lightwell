@@ -5,8 +5,9 @@ use iced::{
 };
 use iced_runtime::image as image_memory;
 use lightwell_core::{
-    ApiRequest, ClientSession, EditorState, EntryId, EventsResult, HistoryPage, HistorySelection,
-    LocalServer, Mutation, OwnerHandle, PreviewJob, PreviewQueue, Transform, Zoom,
+    ApiRequest, ClientSession, EditorState, EntryId, EventsResult, HistoryEntry, HistoryPage,
+    HistorySelection, LocalServer, Mutation, OwnerHandle, PreviewJob, PreviewQueue, Transform,
+    Zoom,
 };
 use serde_json::{Value, json};
 use std::{
@@ -17,11 +18,27 @@ use std::{
 };
 
 static REQUEST_NUMBER: AtomicU64 = AtomicU64::new(1);
+const HISTORY_PAGE_SIZE: usize = 50;
 
 #[derive(Clone, Debug)]
 struct Payload {
     state: EditorState,
     history: HistoryPage,
+    job: PreviewJob,
+    session: ClientSession,
+    sequence: u64,
+}
+
+#[derive(Clone, Debug)]
+struct PreviewPayload {
+    job: PreviewJob,
+    session: ClientSession,
+    sequence: u64,
+}
+
+#[derive(Clone, Debug)]
+struct StatePayload {
+    state: EditorState,
     job: PreviewJob,
     session: ClientSession,
     sequence: u64,
@@ -51,6 +68,9 @@ enum Message {
     Open,
     Picked(Option<PathBuf>),
     Loaded(Result<Box<Payload>, String>),
+    StateLoaded(Result<Box<StatePayload>, String>),
+    PreviewLoaded(Result<Box<PreviewPayload>, String>),
+    SessionUpdated(Result<(ClientSession, u64), String>),
     Synced(Result<SyncResult, String>),
     OlderLoaded(Result<(HistoryPage, ClientSession, u64), String>),
     Sync,
@@ -217,6 +237,47 @@ impl Editor {
                     Err(error) => self.status = error,
                 }
             }
+            Message::StateLoaded(result) => {
+                self.busy = false;
+                match result {
+                    Ok(payload) => {
+                        let payload = *payload;
+                        self.api_sequence = payload.sequence;
+                        self.session = payload.session;
+                        merge_current_entry(&mut self.history, payload.state.current_entry.clone());
+                        self.state = Some(payload.state);
+                        self.display_entry = Some(payload.job.entry.id.clone());
+                        self.preview_generation = self.preview_queue.request(payload.job);
+                        self.status = "Rendering current state…".into();
+                    }
+                    Err(error) => self.status = error,
+                }
+            }
+            Message::PreviewLoaded(result) => {
+                self.busy = false;
+                match result {
+                    Ok(payload) => {
+                        let payload = *payload;
+                        self.api_sequence = payload.sequence;
+                        self.session = payload.session;
+                        self.display_entry = Some(payload.job.entry.id.clone());
+                        self.preview_generation = self.preview_queue.request(payload.job);
+                        self.status = "Rendering selected history state…".into();
+                    }
+                    Err(error) => self.status = error,
+                }
+            }
+            Message::SessionUpdated(result) => {
+                self.busy = false;
+                match result {
+                    Ok((session, sequence)) => {
+                        self.session = session;
+                        self.api_sequence = sequence;
+                        self.status = "View updated".into();
+                    }
+                    Err(error) => self.status = error,
+                }
+            }
             Message::Sync => {
                 if self.syncing || self.busy || self.state.is_none() {
                     return Task::none();
@@ -272,8 +333,11 @@ impl Editor {
                                 snapshot_id: raster.snapshot_id.to_string(),
                                 source_fingerprint: raster.source_fingerprint,
                             };
-                            let handle =
-                                image::Handle::from_rgba(raster.width, raster.height, raster.rgba);
+                            let handle = image::Handle::from_rgba(
+                                raster.width,
+                                raster.height,
+                                iced_runtime::core::Bytes::from_owner(raster.rgba),
+                            );
                             return image_memory::allocate(handle)
                                 .map(move |result| Message::Uploaded(upload.clone(), result));
                         }
@@ -364,9 +428,38 @@ impl Editor {
                     return Task::none();
                 };
                 let params = json!({"asset_id":state.asset.id,"entry_id":entry_id});
-                return self.command("preview.select", params);
+                if self.busy {
+                    return Task::none();
+                }
+                self.busy = true;
+                self.status = "Selecting history state…".into();
+                return preview_task(
+                    self.owner.clone(),
+                    self.session.clone(),
+                    state.asset.id.clone(),
+                    Some(entry_id),
+                    "preview.select",
+                    params,
+                );
             }
-            Message::ReturnCurrent => return self.command("preview.return-current", json!({})),
+            Message::ReturnCurrent => {
+                let Some(state) = &self.state else {
+                    return Task::none();
+                };
+                if self.busy {
+                    return Task::none();
+                }
+                self.busy = true;
+                self.status = "Returning to current state…".into();
+                return preview_task(
+                    self.owner.clone(),
+                    self.session.clone(),
+                    state.asset.id.clone(),
+                    None,
+                    "preview.return-current",
+                    json!({}),
+                );
+            }
             Message::Restore => {
                 let (Some(state), HistorySelection::Entry(entry_id)) =
                     (&self.state, &self.session.preview.selection)
@@ -394,18 +487,20 @@ impl Editor {
             }
             Message::Fit => {
                 self.zoom = "Fit".into();
-                return self.command("view.set", json!({"zoom":{"mode":"fit"}}));
+                return self.session_command("view.set", json!({"zoom":{"mode":"fit"}}));
             }
             Message::HundredPercent => {
                 self.zoom = "100".into();
-                return self.command("view.set", json!({"zoom":{"mode":"percent","value":100.0}}));
+                return self
+                    .session_command("view.set", json!({"zoom":{"mode":"percent","value":100.0}}));
             }
             Message::ApplyZoom => {
                 let Ok(value) = self.zoom.parse::<f32>() else {
                     self.status = "Zoom must be Fit or a percentage from 10 to 1600".into();
                     return Task::none();
                 };
-                return self.command("view.set", json!({"zoom":{"mode":"percent","value":value}}));
+                return self
+                    .session_command("view.set", json!({"zoom":{"mode":"percent","value":value}}));
             }
             Message::ScaleFactor(scale) => {
                 if scale.is_finite() && scale > 0.0 {
@@ -442,9 +537,6 @@ impl Editor {
 
     fn command(&mut self, method: &'static str, params: Value) -> Task<Message> {
         let Some(state) = &self.state else {
-            if method != "preview.return-current" && method != "view.set" {
-                return Task::none();
-            }
             return Task::none();
         };
         if self.busy {
@@ -452,13 +544,22 @@ impl Editor {
         }
         self.busy = true;
         self.status = format!("Running {method}…");
-        command_task(
+        state_task(
             self.owner.clone(),
             self.session.clone(),
             state.asset.id.clone(),
             method,
             params,
         )
+    }
+
+    fn session_command(&mut self, method: &'static str, params: Value) -> Task<Message> {
+        if self.state.is_none() || self.busy {
+            return Task::none();
+        }
+        self.busy = true;
+        self.status = format!("Running {method}…");
+        session_task(self.owner.clone(), self.session.clone(), method, params)
     }
 
     fn view(&self) -> Element<'_, Message> {
@@ -696,6 +797,17 @@ fn short(value: &str) -> &str {
     value.get(..value.len().min(12)).unwrap_or(value)
 }
 
+fn merge_current_entry(history: &mut HistoryPage, entry: HistoryEntry) {
+    history.entries.retain(|existing| existing.id != entry.id);
+    let position = history
+        .entries
+        .partition_point(|existing| existing.sequence > entry.sequence);
+    history.entries.insert(position, entry);
+    history.entries.truncate(HISTORY_PAGE_SIZE);
+    history.next_before_sequence = (history.entries.len() == HISTORY_PAGE_SIZE)
+        .then(|| history.entries.last().expect("page is not empty").sequence);
+}
+
 fn mutation(revision: u64, actor: &str) -> Mutation {
     Mutation {
         expected_revision: revision,
@@ -747,7 +859,7 @@ fn load_payload(
         owner,
         &mut session,
         "history.list",
-        json!({"asset_id":asset_id,"before_sequence":null,"limit":50}),
+        json!({"asset_id":asset_id,"before_sequence":null,"limit":HISTORY_PAGE_SIZE}),
     )?;
     let history: HistoryPage =
         serde_json::from_value(history).map_err(|error| error.to_string())?;
@@ -781,7 +893,7 @@ fn import_task(owner: OwnerHandle, mut session: ClientSession, path: PathBuf) ->
     )
 }
 
-fn command_task(
+fn state_task(
     owner: OwnerHandle,
     mut session: ClientSession,
     asset_id: lightwell_core::AssetId,
@@ -791,9 +903,64 @@ fn command_task(
     Task::perform(
         async move {
             let (_, sequence) = call(&owner, &mut session, method, params)?;
-            load_payload(&owner, session, asset_id, sequence)
+            let (state, state_sequence) = call(
+                &owner,
+                &mut session,
+                "asset.state",
+                json!({"asset_id":asset_id}),
+            )?;
+            let state: EditorState =
+                serde_json::from_value(state).map_err(|error| error.to_string())?;
+            let job = owner
+                .preview_job(asset_id, None)
+                .map_err(|error| error.to_string())?;
+            Ok(StatePayload {
+                state,
+                job,
+                session,
+                sequence: sequence.max(state_sequence),
+            })
         },
-        |result| Message::Loaded(result.map(Box::new)),
+        |result| Message::StateLoaded(result.map(Box::new)),
+    )
+}
+
+fn preview_task(
+    owner: OwnerHandle,
+    mut session: ClientSession,
+    asset_id: lightwell_core::AssetId,
+    entry_id: Option<EntryId>,
+    method: &'static str,
+    params: Value,
+) -> Task<Message> {
+    Task::perform(
+        async move {
+            let (_, sequence) = call(&owner, &mut session, method, params)?;
+            let job = owner
+                .preview_job(asset_id, entry_id)
+                .map_err(|error| error.to_string())?;
+            Ok(PreviewPayload {
+                job,
+                session,
+                sequence,
+            })
+        },
+        |result| Message::PreviewLoaded(result.map(Box::new)),
+    )
+}
+
+fn session_task(
+    owner: OwnerHandle,
+    mut session: ClientSession,
+    method: &'static str,
+    params: Value,
+) -> Task<Message> {
+    Task::perform(
+        async move {
+            let (_, sequence) = call(&owner, &mut session, method, params)?;
+            Ok((session, sequence))
+        },
+        Message::SessionUpdated,
     )
 }
 
@@ -833,7 +1000,7 @@ fn older_task(
                 &owner,
                 &mut session,
                 "history.list",
-                json!({"asset_id":asset_id,"before_sequence":before_sequence,"limit":50}),
+                json!({"asset_id":asset_id,"before_sequence":before_sequence,"limit":HISTORY_PAGE_SIZE}),
             )?;
             let page = serde_json::from_value(page).map_err(|error| error.to_string())?;
             Ok((page, session, sequence))
@@ -864,5 +1031,37 @@ mod tests {
     fn short_ids_are_safe_for_status_display() {
         assert_eq!(short("abc"), "abc");
         assert_eq!(short("123456789012345"), "123456789012");
+    }
+
+    #[test]
+    fn current_entry_merge_is_newest_first_and_bounded() {
+        let asset = lightwell_core::AssetId::new();
+        let make_entry = |sequence| HistoryEntry {
+            id: EntryId::new(),
+            asset_id: asset.clone(),
+            sequence,
+            action_id: "test".into(),
+            parameters: json!({}),
+            actor: "test".into(),
+            timestamp_ms: 0,
+            request_id: None,
+            base_revision: sequence,
+            result_revision: sequence,
+            snapshot: lightwell_core::Snapshot::original(asset.clone()),
+            undo_parent: None,
+            restore_target: None,
+        };
+        let mut history = HistoryPage {
+            entries: (0..HISTORY_PAGE_SIZE as u64)
+                .rev()
+                .map(make_entry)
+                .collect(),
+            next_before_sequence: None,
+        };
+        merge_current_entry(&mut history, make_entry(HISTORY_PAGE_SIZE as u64));
+        assert_eq!(history.entries.len(), HISTORY_PAGE_SIZE);
+        assert_eq!(history.entries[0].sequence, HISTORY_PAGE_SIZE as u64);
+        assert_eq!(history.entries.last().unwrap().sequence, 1);
+        assert_eq!(history.next_before_sequence, Some(1));
     }
 }

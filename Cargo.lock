@@ -1871,6 +1871,7 @@ version = "0.0.0"
 dependencies = [
  "image",
  "moxcms",
+ "rayon",
  "rusqlite",
  "serde",
  "serde_json",

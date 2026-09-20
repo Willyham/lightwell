@@ -18,6 +18,7 @@ As of 2026-09-20, S0 is owner-accepted and M1/M2 are implemented and locally ver
 | Fit, numeric zoom, 100% source detail and pan | Implemented M1 | Physical-pixel 100%, independent per-client session state |
 | Live external JSON API and one-owner IPC | Implemented M1 | Same service/history while GUI is open |
 | Rotate left/right, Mirror horizontal, Flip vertical | Implemented M2 | Exact discrete mappings and shared history |
+| Cached source and compiled preview rendering | Implemented M1/M2 optimization | One decoded active source; exact transform stacks use at most one parallel raster pass |
 | Declarative tool-module interface | Planned M3 | Action/API/control descriptions, validation and processing |
 | Pixel and transform tool modules | Planned M3 | Preserve previous effect identities, snapshots and pixels |
 | Lightroom-style crop/straighten module | Planned M4 | Free handles, ratios, angle/guide, Apply/Cancel and reset |

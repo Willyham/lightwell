@@ -18,6 +18,7 @@ use std::{
     fs::File,
     io::{Cursor, Read},
     path::Path,
+    sync::Arc,
     time::Instant,
 };
 
@@ -47,7 +48,7 @@ pub struct Photo {
 pub struct SourceImage {
     pub width: u32,
     pub height: u32,
-    pub rgba: Vec<u8>,
+    pub rgba: Arc<[u8]>,
     pub fingerprint: String,
     pub orientation: u8,
 }
@@ -225,7 +226,7 @@ fn decode_source(path: &Path) -> Result<SourceImage, String> {
     Ok(SourceImage {
         width: rgba.width(),
         height: rgba.height(),
-        rgba: rgba.into_raw(),
+        rgba: rgba.into_raw().into(),
         fingerprint,
         orientation: orientation.to_exif(),
     })

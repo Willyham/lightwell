@@ -16,6 +16,7 @@ cargo xtask develop --catalog /tmp/lightwell-catalog.sqlite --open fixtures/s0/o
 # Explicit unoptimized debugging (unsuitable for timing):
 cargo xtask develop --debug --open fixtures/s0/orientation-6.jpg
 cargo run --release --locked --package xtask -- editor-acceptance --output artifacts/new-editor-acceptance
+cargo run --release --locked --package xtask -- editor-performance --source fixtures/generated/24mp.jpg --output artifacts/new-editor-performance --samples 10
 cargo xtask smoke --scenario load --output artifacts/new-load
 cargo xtask smoke --scenario replacement --output artifacts/new-replacement
 cargo xtask smoke --scenario empty --output artifacts/new-empty
@@ -25,7 +26,7 @@ cargo xtask package --output artifacts/new-package
 
 Smoke scenarios are `empty`, `load`, `replacement`, `invalid`, `repeated`, `alternating`, `large24` and `large60`; generate large fixtures with `cargo xtask generate-fixtures` into a new `fixtures/generated` directory before the last two.
 
-Smoke requires a native graphical session; image checks are built into Rust xtask. Use a fresh output directory each time; refusing existing directories prevents stale evidence. `editor-acceptance` is display-independent and exercises the complete persistent M1/M2 journey with exact buffers, 208 paged entries and catalog reopen. Run it in release mode when recording timings. `fmt`, `lint`, `test` and `build` are individually callable through xtask. `check` runs plan/link checks, formatting, Clippy and tests; it explicitly does not imply graphical or dependency-audit acceptance. Doctor reports missing tools without installing them. Setup installation commands remain explicit in [development](development.md).
+Smoke requires a native graphical session; image checks are built into Rust xtask. Use a fresh output directory each time; refusing existing directories prevents stale evidence. `editor-acceptance` is display-independent and exercises the complete persistent M1/M2 journey with exact buffers, 208 paged entries and catalog reopen. `editor-performance` records core source-cache and one/200-transform timings for an explicit JPEG; it excludes desktop scheduling, GPU upload and presentation. Run timing commands in release mode. `fmt`, `lint`, `test` and `build` are individually callable through xtask. `check` runs plan/link checks, formatting, Clippy and tests; it explicitly does not imply graphical or dependency-audit acceptance. Doctor reports missing tools without installing them. Setup installation commands remain explicit in [development](development.md).
 
 The application accepts `--catalog FILE`, `--data-root DIRECTORY`, `--open PATH`, `--window-size WIDTH HEIGHT` (logical dimensions 320..4096), and `--evidence-dir NEW_DIRECTORY`. Repeat `--open` only in S0 evidence mode to run a bounded development sequence. Normal mode is the M1/M2 editor: it owns the catalog, shows native Open with Cmd+O on macOS and Ctrl+O on Windows/Linux, and starts an authenticated loopback JSON service. Source paths stay native OS paths. The working JSON API is internal v0 and is not MCP.
 

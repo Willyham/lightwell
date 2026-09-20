@@ -1,5 +1,6 @@
 mod diagnostics;
 mod editor_acceptance;
+mod editor_performance;
 mod fixtures;
 mod package;
 mod policy;
@@ -265,6 +266,17 @@ fn main_result() -> Result {
             a.done()?;
             editor_acceptance::run(&root, &out)?;
         }
+        "editor-performance" => {
+            let source = absolute(&root, &a.path("--source")?);
+            let out = absolute(&root, &a.path("--output")?);
+            let samples = a
+                .value("--samples")?
+                .map(|s| s.to_string_lossy().parse::<usize>())
+                .transpose()?
+                .unwrap_or(10);
+            a.done()?;
+            editor_performance::run(&root, &source, &out, samples)?;
+        }
         "smoke" => {
             let out = absolute(&root, &a.path("--output")?);
             let scenario = a
@@ -327,7 +339,7 @@ fn main_result() -> Result {
         }
         "__hang" => std::thread::sleep(std::time::Duration::from_secs(60)),
         "help" => println!(
-            "cargo xtask doctor|check|check-repository|fmt|lint|test|build [--release]|develop [--debug] [app args]|fixtures|generate-fixtures [--output NEW]|audit|editor-acceptance --output NEW|inventory --output NEW|package --output NEW|smoke --output NEW [--scenario NAME] [--binary PATH]|check-capture --image PNG [--orientation N] [--aspect R]|hardening --binary PATH --output NEW|measure --binary PATH --output NEW [--samples N]|probe --candidate iced|egui --output NEW"
+            "cargo xtask doctor|check|check-repository|fmt|lint|test|build [--release]|develop [--debug] [app args]|fixtures|generate-fixtures [--output NEW]|audit|editor-acceptance --output NEW|editor-performance --source JPEG --output NEW [--samples N]|inventory --output NEW|package --output NEW|smoke --output NEW [--scenario NAME] [--binary PATH]|check-capture --image PNG [--orientation N] [--aspect R]|hardening --binary PATH --output NEW|measure --binary PATH --output NEW [--samples N]|probe --candidate iced|egui --output NEW"
         ),
         _ => return Err("Unknown command; use cargo xtask help".into()),
     }
