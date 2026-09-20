@@ -594,6 +594,10 @@ mod tests {
             assert!(index < layers.len(), "the crop layer is in the stack");
             Ok(INPUT)
         };
+        let insertion_index = |_: EffectStage| layers.len();
+        let sample_before = |_: usize, _: u32, _: u32| -> Result<Option<[u8; 4]>, Error> {
+            panic!("planning a crop never samples a pixel")
+        };
         module.plan(
             &input,
             &StageContext {
@@ -601,6 +605,8 @@ mod tests {
                 layers,
                 sampler: &sampler,
                 stage_before: &stage_before,
+                insertion_index: &insertion_index,
+                sample_before: &sample_before,
             },
         )
     }

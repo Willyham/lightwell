@@ -1,8 +1,8 @@
 //! The provider index: descriptors validated once at registration, then hash lookups by effect
 //! and action identity. Registration touches no image or catalog resource.
 use super::{
-    ActionDescriptor, CropModule, EffectDescriptor, ModuleDescriptor, PixelModule, Processing,
-    Stage, ToolModule, TransformModule,
+    ActionDescriptor, CropModule, EffectDescriptor, EffectStage, ModuleDescriptor, PixelModule,
+    Processing, Stage, ToolModule, TransformModule,
 };
 use crate::{
     Error, ErrorKind, Layer, RECIPE_FORMAT, Recipe,
@@ -127,6 +127,27 @@ impl ModuleRegistry {
         let (module, position) = self.effects.get(id)?;
         let module = self.modules[*module].as_ref();
         Some((module, &module.descriptor().effects[*position]))
+    }
+
+    /// The stage an effect's payload addresses, or `None` when no provider declares it.
+    pub fn effect_stage(&self, effect_id: &str) -> Option<EffectStage> {
+        self.effect(effect_id).map(|(_, effect)| effect.stage)
+    }
+
+    /// Where a committed layer of this stage joins a stack. A pixel-stage layer is inserted
+    /// immediately before the first geometry-stage layer, so the quarter-turns, reflections and
+    /// crop that form the geometry tail carry it and no later geometry change moves or invalidates
+    /// it; a geometry-stage layer appends, extending that tail. A layer whose effect no provider
+    /// declares does not open the tail: such a stack cannot compile at all, and the host reports
+    /// that rather than guessing a position. Cost is `O(layers)` and reads no pixels.
+    pub fn insertion_index(&self, layers: &[Layer], stage: EffectStage) -> usize {
+        if stage == EffectStage::Geometry {
+            return layers.len();
+        }
+        layers
+            .iter()
+            .position(|layer| self.effect_stage(&layer.effect_id) == Some(EffectStage::Geometry))
+            .unwrap_or(layers.len())
     }
 
     /// The provider that can evaluate this effect, or `None` when none is registered or the
@@ -259,7 +280,8 @@ pub(crate) mod tests {
         AssetId, CROP_EFFECT, EFFECT_FORMAT, LayerId, PIXEL_EFFECT, SnapshotId, SourceImage,
         TRANSFORM_EFFECT, Transform,
         modules::{
-            ActionInput, ActionPlan, Availability, EffectStage, ModuleDescriptor, StageContext,
+            ActionInput, ActionPlan, Availability, CropPayload, EffectStage, ModuleDescriptor,
+            StageContext,
         },
         render, sample,
     };
@@ -510,5 +532,58 @@ pub(crate) mod tests {
                 .validate_layer(&Layer::pixel(0, 0, [1, 2, 3]))
                 .is_ok()
         );
+    }
+
+    #[test]
+    fn a_pixel_layer_joins_the_stack_before_the_first_geometry_layer() {
+        let registry = ModuleRegistry::builtin();
+        let pixel = || Layer::pixel(0, 0, [1, 2, 3]);
+        let turn = || Layer::transform(Transform::RotateRight);
+        let crop = || {
+            Layer::crop(CropPayload {
+                angle: 0.0,
+                x: 0.0,
+                y: 0.0,
+                width: 1.0,
+                height: 1.0,
+            })
+        };
+        for (case, layers, expected) in [
+            ("an empty stack", vec![], 0),
+            ("geometry only", vec![turn(), crop()], 0),
+            ("pixels only", vec![pixel(), pixel()], 2),
+            ("a pixel before the tail", vec![pixel(), crop(), turn()], 1),
+            (
+                // Such a stack renders as it always did; a new edit still joins the content stage.
+                "an interleaved pixel after geometry",
+                vec![pixel(), turn(), pixel(), crop()],
+                1,
+            ),
+            (
+                "a layer no provider declares does not open the tail",
+                vec![test_layer("test.absent"), turn()],
+                1,
+            ),
+        ] {
+            assert_eq!(
+                registry.insertion_index(&layers, EffectStage::Pixel),
+                expected,
+                "{case}"
+            );
+            assert_eq!(
+                registry.insertion_index(&layers, EffectStage::Geometry),
+                layers.len(),
+                "{case}: geometry extends the tail"
+            );
+        }
+        assert_eq!(
+            registry.effect_stage(PIXEL_EFFECT),
+            Some(EffectStage::Pixel)
+        );
+        assert_eq!(
+            registry.effect_stage(CROP_EFFECT),
+            Some(EffectStage::Geometry)
+        );
+        assert_eq!(registry.effect_stage("test.absent"), None);
     }
 }

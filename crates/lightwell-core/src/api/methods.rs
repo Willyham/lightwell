@@ -327,7 +327,7 @@ pub fn schemas(registry: &ModuleRegistry) -> Value {
     }
     json!({
         "protocol": PROTOCOL,
-        "coordinate_space": "Each edit uses integer coordinates in its input image stage after EXIF orientation. A number parameter carries a finite JSON number within its declared range, such as an angle in degrees or a rectangle normalized to its stage; a JSON integer is accepted and passed through unchanged.",
+        "coordinate_space": "Each edit uses integer coordinates in its own input image stage after EXIF orientation. A pixel edit addresses the content stage, the source after EXIF orientation, because the host places it before the quarter-turns, reflections and crop that carry it. A number parameter carries a finite JSON number within its declared range, such as an angle in degrees or a rectangle normalized to its stage; a JSON integer is accepted and passed through unchanged.",
         "methods": methods,
         "modules": descriptors,
         "mutation": {"required": ["expected_revision", "request_id", "actor"]},

@@ -1,5 +1,5 @@
 use crate::{
-    Error, ErrorKind, Recipe, SnapshotId, SourceImage,
+    Error, ErrorKind, Layer, Recipe, SnapshotId, SourceImage,
     modules::{ExactGeometry, ModuleRegistry, Processing, Resample, Stage},
 };
 use rayon::prelude::*;
@@ -497,6 +497,21 @@ impl<'a> Evaluation<'a> {
         Ok(Self {
             source,
             compiled: registry.compile(source.width, source.height, recipe)?,
+        })
+    }
+
+    /// One evaluation over an ordered prefix of a stack, for planning a layer against the stage it
+    /// will be inserted at. The recipe format is the caller's to check; compiling the prefix costs
+    /// `O(layers)` and allocates no frame, so sampling that stage still rasterizes nothing.
+    pub(crate) fn over_layers(
+        registry: &ModuleRegistry,
+        source: &'a SourceImage,
+        layers: &[Layer],
+    ) -> Result<Self, Error> {
+        check_source(source)?;
+        Ok(Self {
+            source,
+            compiled: registry.compile_layers(source.width, source.height, layers)?,
         })
     }
 

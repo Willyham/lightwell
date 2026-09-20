@@ -332,6 +332,37 @@ fn crop_actions_are_discoverable_and_identical_through_actions_and_the_api() {
     };
     let schema = call("schema.list", json!({}));
     let methods = schema["methods"].as_object().unwrap();
+    // The published contract says which stage a pixel edit's coordinates address.
+    for name in ["x", "y"] {
+        let coordinate = methods["edit.set-pixel"]["parameters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|parameter| parameter["name"] == json!(name))
+            .expect("a declared coordinate")
+            .clone();
+        assert!(
+            coordinate["notes"]
+                .as_str()
+                .unwrap()
+                .contains("content stage"),
+            "{coordinate}"
+        );
+    }
+    assert!(
+        methods["edit.set-pixel"]["notes"]
+            .as_str()
+            .unwrap()
+            .contains("content stage"),
+        "the action notes describe the content stage"
+    );
+    assert!(
+        schema["coordinate_space"]
+            .as_str()
+            .unwrap()
+            .contains("content stage"),
+        "the coordinate note describes the content stage"
+    );
     for method in ["edit.crop", "edit.crop-fit", "edit.crop-reset"] {
         assert!(methods.contains_key(method), "{method} is not listed");
         assert!(methods[method]["mutates"].as_bool().unwrap(), "{method}");
