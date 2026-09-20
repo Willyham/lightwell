@@ -8,19 +8,53 @@ Fit, an editable zoom percentage, 100% and pan are session operations available 
 
 ## Geometry contract
 
-EXIF orientation is applied once before layer evaluation. Quarter-turns and reflections are exact integer mappings. The crop layer combines fine straightening and crop with explicit input and output geometry; transforms before or after it keep their sequence.
+EXIF orientation is applied once before layer evaluation. Quarter-turns and reflections are exact integer mappings. The crop layer (effect `lightwell.geometry.crop`, format 1, geometry stage) combines fine straightening and crop with explicit input and output geometry; transforms before or after it keep their sequence. A stack holds at most one crop layer; editing it keeps its identity.
 
-Within the crop layer, fine straightening rotates the input around the image center and the crop is axis-aligned in the transformed bounding box. Normalize x, y, width and height to that box with a top-left origin; values are finite, extents positive, and every corner lies inside valid transformed source coverage. Before implementation, M4 defines output-size rounding, pixel-center sampling, inverse mapping, interpolation filter and color domain, and tolerances. Candidate convention: floor positive extents to whole pixels, sample through the inverse transform, reject extents below one pixel, and give locked-ratio rounding a documented tolerance. Geometry may be fused only when intervening effect order is preserved.
+### Rotated box and payload
+
+Let the layer's input stage be `W × H` pixels with a top-left origin, x right and y down, and let `θ` be the angle in degrees, finite and within −45 to +45. Positive `θ` turns the image clockwise on screen. The rotated box is the axis-aligned bounding box of the input rotated about its center:
+
+```text
+BW = W·|cos θ| + H·|sin θ|      BH = W·|sin θ| + H·|cos θ|
+input → box:  x = cos θ·(u − W/2) − sin θ·(v − H/2) + BW/2
+              y = sin θ·(u − W/2) + cos θ·(v − H/2) + BH/2
+box → input:  u = cos θ·(x − BW/2) + sin θ·(y − BH/2) + W/2
+              v = −sin θ·(x − BW/2) + cos θ·(y − BH/2) + H/2
+```
+
+The persisted payload is `{"angle": θ, "x", "y", "width", "height"}` with the rectangle normalized to the box: `x`, `y` in 0..1 from the box's top-left corner, `width`, `height` in 0..1, all finite, extents positive, `x + width ≤ 1` and `y + height ≤ 1`. Normalization keeps the payload independent of how the box was computed; the layer still acts on one fixed input stage.
+
+### Output rounding and validity
+
+The output stage is whole pixels: `ox = round(x·BW)`, `oy = round(y·BH)`, `ow = max(1, round(width·BW))`, `oh = max(1, round(height·BH))`, rounding half away from zero. A payload is valid only when the four corners of that rounded rectangle, `(ox, oy)`, `(ox + ow, oy)`, `(ox, oy + oh)` and `(ox + ow, oy + oh)`, map through box → input to points inside `[0, W] × [0, H]` with a tolerance of 0.001 source pixels. Because the source is convex, covered corners mean every output pixel samples real source content: there are no empty corners, ever, and the module rejects any payload that would need them with a validation error naming the offending corner. The desktop and the fitting functions only ever produce whole-pixel box rectangles, so rounding never changes what was validated.
+
+### Sampling
+
+Output pixel `(i, j)` has its center at box `(ox + i + 0.5, oy + j + 0.5)`. That center maps to input `(u, v)` and samples the input raster at index coordinates `(u − 0.5, v − 0.5)`: pixel-center convention, bilinear interpolation of the four surrounding pixels with indices clamped to the raster edge. Interpolation weights are applied in linear light: each 8-bit sRGB channel is decoded with the sRGB transfer function, blended, encoded back and rounded to the nearest 8-bit value; alpha is blended linearly. The reference is an f64 evaluation of the same formula; the production path must match it within one 8-bit step per channel.
+
+When `θ = 0` the box equals the input, the mapping is an integer translation, and the crop compiles to the host's exact geometry primitive: an exact copy of the source rectangle with no interpolation, composable with neighbouring exact transforms into one raster pass. Any other angle compiles to the host's `Resample` primitive, which is a stage boundary: exact layers before it render into a bounded intermediate frame, the resample writes the output frame, and exact layers after it compose as before. At most two full frames exist at once and each is subject to the 512 MiB frame limit. Point queries evaluate through the resample recursively and never allocate a frame.
+
+### Fitting
+
+Fitting keeps the composition and trims only what an empty corner would require. Given a box rectangle with center `c` and half extents `(hw, hh)`, and the rotated source as a convex polygon in box space:
+
+1. If `c` lies outside the polygon, move it to the nearest point inside; otherwise keep it.
+2. Find the largest scale `s ≥ 0` such that every corner `c + s·(±hw, ±hh)` lies inside the polygon. Each corner and each polygon edge gives one linear bound, so `s` is exact.
+3. Scale the rectangle about `c` by `min(1, s)` and snap it inward to whole box pixels.
+
+Angle changes are always evaluated against the last frame gesture: the draft keeps the rectangle and angle that the last handle, move or ratio change produced, and every later angle value refits that reference at the new angle. Sweeping the angle away and back therefore returns the exact reference rectangle with no cumulative trim. Moving the rectangle clamps the horizontal delta and then the vertical delta against the polygon so it slides along a boundary instead of stopping. Locked-ratio and Option scaling use the same corner bounds with the anchor fixed. Golden cases cover off-center, near-boundary, portrait and landscape inputs and ±45°.
 
 ## Crop module
 
-Ratios: Free, Original, 1:1, 3:2, 4:3, 16:9 and custom, with a locked ratio able to swap orientation. Original means the upright original's ratio adjusted for preceding quarter-turns. Angle from −45° to +45°, a drag-to-straighten guide, Apply, Cancel and reset; quarter-turn controls handle larger rotation. A later quarter-turn carries the visible crop and swaps its ratio orientation; reflections carry an off-center composition with the image.
+Ratios: Free, Original, 1:1, 3:2, 4:3, 16:9 and custom, with a locked ratio able to swap orientation. Original means the crop layer's input stage ratio, so it already reflects preceding quarter-turns. Angle from −45° to +45°, a drag-to-straighten guide, Apply, Cancel and reset; quarter-turn controls handle larger rotation. A later quarter-turn carries the visible crop and swaps its ratio orientation; reflections carry an off-center composition with the image, because those layers act on the crop's output stage.
 
-Free edge and corner handles, crop movement and a thirds overlay. In Free mode a side moves independently and a corner changes width and height. Holding Option (Alt on Windows/Linux) applies one scale factor about the fixed center, preserving the current ratio even in Free mode, clamped at the first source boundary without shifting the center or stretching an axis.
+The module declares three actions. `crop` takes `angle`, `x`, `y`, `width` and `height` exactly as persisted. `crop-fit` takes `aspect` (`free`, `original`, `1:1`, `3:2`, `4:3`, `16:9` or `custom` with `aspect-width` and `aspect-height`), `angle` and an optional normalized `center-x`/`center-y`, and commits the largest covered rectangle with that ratio about that center (default: the existing crop's center, else the box center); `free` keeps the existing crop's ratio or the input ratio. `crop-reset` returns an existing crop layer to the neutral payload `angle 0, x 0, y 0, width 1, height 1` and is a no-op without one. All three update the existing crop layer in place, keeping its identity, or append one when none exists; a neutral crop appended to a stack without one is a no-op, and so is a request equal to the saved payload. Updating a crop earlier in the stack changes the stage of every later layer, so the host compiles the whole new stack before persisting and rejects a change that would push a later layer out of its stage.
 
-Straightening preserves composition as closely as possible, keeping the selected center and ratio where feasible and trimming only enough to avoid empty corners. M4 defines the fitting objective and tie-breaks with off-center and near-edge fixtures. Each pointer update evaluates against the gesture's starting crop and angle so dragging away and back never cumulatively shrinks the crop.
+Free edge and corner handles, crop movement and a thirds overlay. In Free mode a side moves independently and a corner changes width and height. Holding Option (Alt on Windows/Linux) applies one scale factor about the fixed center, preserving the current ratio even in Free mode, clamped at the first source boundary without shifting the center or stretching an axis. Choosing a ratio keeps the center and fits the largest rectangle of that ratio inside the current one; swap uses the inverse ratio the same way. The guide takes a dragged line and rotates by the angle that makes it horizontal or vertical, whichever is nearer, within ±45°.
 
-A draft is transient. Apply or Enter commits one semantic action and one new snapshot; Cancel or Escape discards. Adjusting an existing crop layer keeps its ID. Reset restores the tool's neutral state through the history service; whole-recipe reset is a separate explicit action. No pointer event commits history or resamples a saved image. Every parameter and action is in the module's API; gesture simulation is unnecessary.
+While drafting, the canvas shows the crop layer's input stage rotated by the draft angle, dimmed outside the rectangle, with the frame, thirds and handles drawn in box space and mapped through the view transform; 100% keeps one input pixel per physical pixel. The preview rotation is the GPU's display filter, not the reference sampler; the committed render is. Layers after an existing crop layer are not shown during its draft. Space-drag pans, ordinary drag inside the frame moves the composition.
+
+A draft is transient. Apply or Enter commits one semantic action and one new snapshot; Cancel or Escape discards. Adjusting an existing crop layer keeps its ID. Reset commits `crop-reset` through the history service and ends the draft; whole-recipe reset is a separate explicit action. No pointer event commits history or resamples a saved image. Every parameter and action is in the module's API; gesture simulation is unnecessary.
 
 ## Conflicts
 
