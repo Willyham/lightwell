@@ -1,7 +1,7 @@
 use crate::{
-    AssetId, EntryId, Error, ErrorKind, HistoryEntry, Layer, ModuleRegistry, Mutation, PreviewJob,
-    Raster, Snapshot, SnapshotId, SourceImage, Transform,
-    modules::{ActionPlan, StageContext, check_parameters},
+    AssetId, EntryId, Error, ErrorKind, HistoryEntry, ModuleRegistry, Mutation, PreviewJob, Raster,
+    Snapshot, SnapshotId, SourceImage, Transform,
+    modules::{ActionInput, ActionPlan, StageContext, check_parameters},
     open_source, render,
     render::Evaluation,
     sample,
@@ -504,20 +504,32 @@ impl EditorService {
         self.render_entry(asset_id, &state.current_entry.id)
     }
 
+    /// A preview job for one entry. `layer_count` truncates the rendered stack to its first `n`
+    /// layers, which the desktop uses to show a layer's input stage while drafting it; it must not
+    /// exceed the entry's layer count.
     pub fn preview_job(
         &self,
         asset_id: &AssetId,
         entry_id: Option<&EntryId>,
+        layer_count: Option<usize>,
     ) -> Result<PreviewJob, Error> {
         let state = self.state(asset_id)?;
         let entry = match entry_id {
             Some(entry_id) => self.entry(asset_id, entry_id)?,
             None => state.current_entry,
         };
+        let layers = entry.snapshot.recipe.layers.len();
+        if let Some(count) = layer_count.filter(|count| *count > layers) {
+            return Err(Error::new(
+                ErrorKind::Validation,
+                format!("preview layer count {count} exceeds the {layers} layers of this entry"),
+            ));
+        }
         Ok(PreviewJob {
             source: self.verified_source(&state.asset)?,
             entry,
             registry: self.registry.clone(),
+            layer_count,
         })
     }
 
@@ -595,22 +607,19 @@ impl EditorService {
             |x: u32, y: u32| -> Result<Option<[u8; 4]>, Error> { Ok(evaluation.pixel(x, y)) };
         let context = StageContext {
             stage: evaluation.stage(),
+            layers: &state.current_entry.snapshot.recipe.layers,
             sampler: &sampler,
         };
-        match module.plan(&input, &context)? {
-            ActionPlan::NoOp => self.persist_noop(asset_id, &mutation, &request, &state),
-            ActionPlan::Commit(layer) => {
-                let parameters = Value::Object(input.parameters);
-                self.commit_layer(
-                    asset_id,
-                    mutation,
-                    request,
-                    layer,
-                    &input.action_id,
-                    parameters,
-                )
+        let snapshot = match module.plan(&input, &context)? {
+            ActionPlan::NoOp => {
+                return self.persist_noop(asset_id, &mutation, &request, &state);
             }
-        }
+            ActionPlan::Commit(layer) => state.current_entry.snapshot.append(layer)?,
+            // An update keeps the layer's identity and position; a missing identity is rejected
+            // before anything is written.
+            ActionPlan::Update(layer) => state.current_entry.snapshot.with_layer_replaced(layer)?,
+        };
+        self.commit_snapshot(asset_id, mutation, request, snapshot, &source, input)
     }
 
     pub fn apply_pixel(
@@ -694,25 +703,29 @@ impl EditorService {
         )
     }
 
-    fn commit_layer(
+    /// Persist one resulting stack: the same path for an appended and an updated layer. The
+    /// resulting recipe is validated and compiled against the cached verified source first, so a
+    /// stack that leaves a later layer addressing a stage that no longer exists is rejected with
+    /// the compile error and nothing is written. Compiling is O(layers) and rasterizes nothing.
+    fn commit_snapshot(
         &mut self,
         asset_id: &AssetId,
         mutation: Mutation,
-        input: Value,
-        layer: Layer,
-        action_id: &str,
-        parameters: Value,
+        request: Value,
+        snapshot: Snapshot,
+        source: &SourceImage,
+        action: ActionInput,
     ) -> Result<MutationResult, Error> {
         let mut state = self.state(asset_id)?;
         ensure_revision(&state, mutation.expected_revision)?;
-        let snapshot = state.current_entry.snapshot.append(layer)?;
         self.registry.validate_recipe(&snapshot.recipe)?;
+        Evaluation::new(&self.registry, source, &snapshot.recipe)?;
         let entry = HistoryEntry {
             id: EntryId::new(),
             asset_id: asset_id.clone(),
             sequence: next_sequence(&self.connection, asset_id)?,
-            action_id: action_id.into(),
-            parameters,
+            action_id: action.action_id,
+            parameters: Value::Object(action.parameters),
             actor: mutation.actor.clone(),
             timestamp_ms: now_ms(),
             request_id: Some(mutation.request_id.clone()),
@@ -736,7 +749,7 @@ impl EditorService {
         ensure_request_absent(&tx, asset_id, &mutation.request_id)?;
         insert_entry(&self.registry, &tx, &entry)?;
         tx.execute("UPDATE asset_state SET current_entry_id=?2,revision=?3,redo_json='[]' WHERE asset_id=?1", params![asset_id.as_str(), entry.id.as_str(), entry.result_revision as i64]).map_err(catalog_error)?;
-        insert_request(&tx, asset_id, &mutation.request_id, &input, &result)?;
+        insert_request(&tx, asset_id, &mutation.request_id, &request, &result)?;
         tx.commit().map_err(catalog_error)?;
         state.current_entry = entry;
         Ok(result)
@@ -1135,7 +1148,7 @@ fn ensure_revision(state: &EditorState, expected: u64) -> Result<(), Error> {
 
 /// The deduplicated request identity: the durable action, the mutation envelope and the parsed
 /// parameters as top-level fields. Unchanged for actions that kept their M1/M2 parameter shape.
-fn request_input(input: &crate::modules::ActionInput, mutation: &Mutation) -> Result<Value, Error> {
+fn request_input(input: &ActionInput, mutation: &Mutation) -> Result<Value, Error> {
     let mut request = serde_json::Map::new();
     request.insert("action".into(), Value::from(input.action_id.as_str()));
     request.insert(
@@ -1361,7 +1374,16 @@ fn file_identity(_: &Metadata, canonical: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicU64, Ordering};
+    use crate::{
+        ActionDescriptor, Availability, EFFECT_FORMAT, EffectDescriptor, EffectStage,
+        ExactGeometry, Layer, LayerId, ModuleDescriptor, PIXEL_EFFECT, ParameterDescriptor,
+        ParameterKind, PreviewQueue, Processing, Stage, ToolModule,
+    };
+    use serde_json::Map;
+    use std::{
+        sync::atomic::{AtomicU64, Ordering},
+        time::Instant,
+    };
 
     static NEXT: AtomicU64 = AtomicU64::new(1);
     fn temp(name: &str) -> PathBuf {
@@ -1522,8 +1544,8 @@ mod tests {
         let catalog = temp("source-cache.sqlite");
         let mut service = EditorService::open(&catalog).unwrap();
         let state = service.import(&fixture()).unwrap();
-        let first = service.preview_job(&state.asset.id, None).unwrap();
-        let second = service.preview_job(&state.asset.id, None).unwrap();
+        let first = service.preview_job(&state.asset.id, None, None).unwrap();
+        let second = service.preview_job(&state.asset.id, None, None).unwrap();
         assert!(std::sync::Arc::ptr_eq(
             &first.source.rgba,
             &second.source.rgba
@@ -1548,7 +1570,7 @@ mod tests {
         std::fs::copy(fixture(), &source).unwrap();
         let mut service = EditorService::open(&dir.join("catalog.sqlite")).unwrap();
         let asset = service.import(&source).unwrap().asset.id;
-        service.preview_job(&asset, None).unwrap();
+        service.preview_job(&asset, None, None).unwrap();
         let replacement =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/s0/orientation-2.jpg");
         assert_eq!(
@@ -1557,7 +1579,7 @@ mod tests {
         );
         std::fs::copy(replacement, &source).unwrap();
         assert_eq!(
-            service.preview_job(&asset, None).unwrap_err().kind,
+            service.preview_job(&asset, None, None).unwrap_err().kind,
             ErrorKind::SourceUnavailable
         );
         drop(service);
@@ -2038,6 +2060,364 @@ mod tests {
             .unwrap();
         assert!(retry.deduplicated);
         assert_eq!(retry.current_entry_id, rotated.current_entry_id);
+        drop(service);
+        std::fs::remove_file(catalog).unwrap();
+    }
+
+    const SHRINK_EFFECT: &str = "test.geometry.shrink";
+    const SHRINK_ACTION: &str = "test-shrink";
+    const MISSING_ACTION: &str = "test-shrink-missing";
+
+    /// A test-only geometry module that proves the host's in-place update path: `test-shrink`
+    /// updates its own layer when the stack already has one and appends one otherwise, and
+    /// `test-shrink-missing` plans an update for an identity that is not in the stack.
+    struct ShrinkModule(ModuleDescriptor);
+
+    impl ShrinkModule {
+        fn new() -> Self {
+            let extent = |name: &str| ParameterDescriptor {
+                name: name.into(),
+                kind: ParameterKind::Integer { min: 1, max: 16383 },
+                required: true,
+                default: None,
+                unit: Some("px".into()),
+                notes: "test".into(),
+            };
+            let action = |id: &str| ActionDescriptor {
+                id: id.into(),
+                title: "Shrink".into(),
+                notes: "test".into(),
+                parameters: vec![extent("width"), extent("height")],
+            };
+            Self(ModuleDescriptor {
+                id: "test.shrink".into(),
+                title: "Shrink".into(),
+                effects: vec![EffectDescriptor {
+                    id: SHRINK_EFFECT.into(),
+                    format: EFFECT_FORMAT,
+                    stage: EffectStage::Geometry,
+                }],
+                actions: vec![action(SHRINK_ACTION), action(MISSING_ACTION)],
+                controls: Vec::new(),
+                canvas: None,
+                availability: Availability::Available,
+            })
+        }
+
+        fn layer(id: LayerId, width: u32, height: u32) -> Layer {
+            Layer {
+                id,
+                effect_id: SHRINK_EFFECT.into(),
+                effect_format: EFFECT_FORMAT,
+                payload: json!({"width": width, "height": height}),
+            }
+        }
+
+        fn extents(value: &Value) -> Result<(u32, u32), Error> {
+            let read = |name: &str| {
+                value
+                    .get(name)
+                    .and_then(Value::as_u64)
+                    .filter(|extent| (1..=16383).contains(extent))
+                    .map(|extent| extent as u32)
+                    .ok_or_else(|| {
+                        Error::new(
+                            ErrorKind::Validation,
+                            format!("parameter {name} must be an integer within 1..=16383"),
+                        )
+                    })
+            };
+            Ok((read("width")?, read("height")?))
+        }
+
+        /// The registry the update tests use: the built-ins plus this module.
+        fn registry() -> Arc<ModuleRegistry> {
+            let mut registry = ModuleRegistry::builtin();
+            registry.register(Arc::new(Self::new())).unwrap();
+            Arc::new(registry)
+        }
+    }
+
+    impl ToolModule for ShrinkModule {
+        fn descriptor(&self) -> &ModuleDescriptor {
+            &self.0
+        }
+
+        fn parse(
+            &self,
+            action_id: &str,
+            parameters: &Map<String, Value>,
+        ) -> Result<ActionInput, Error> {
+            let (width, height) = Self::extents(&Value::Object(parameters.clone()))?;
+            Ok(ActionInput {
+                action_id: action_id.into(),
+                parameters: json!({"width": width, "height": height})
+                    .as_object()
+                    .expect("an object")
+                    .clone(),
+            })
+        }
+
+        fn plan(&self, input: &ActionInput, stage: &StageContext<'_>) -> Result<ActionPlan, Error> {
+            let (width, height) = Self::extents(&Value::Object(input.parameters.clone()))?;
+            if input.action_id == MISSING_ACTION {
+                return Ok(ActionPlan::Update(Self::layer(
+                    LayerId::new(),
+                    width,
+                    height,
+                )));
+            }
+            match stage
+                .layers
+                .iter()
+                .find(|layer| layer.effect_id == SHRINK_EFFECT)
+            {
+                Some(existing) => Ok(ActionPlan::Update(Self::layer(
+                    existing.id.clone(),
+                    width,
+                    height,
+                ))),
+                None => Ok(ActionPlan::Commit(Self::layer(
+                    LayerId::new(),
+                    width,
+                    height,
+                ))),
+            }
+        }
+
+        fn validate_payload(&self, _: &str, _: u32, payload: &Value) -> Result<(), Error> {
+            Self::extents(payload).map(|_| ())
+        }
+
+        fn compile(
+            &self,
+            _: &str,
+            _: u32,
+            payload: &Value,
+            stage: Stage,
+        ) -> Result<Processing, Error> {
+            let (width, height) = Self::extents(payload)?;
+            if width > stage.width || height > stage.height {
+                return Err(Error::new(
+                    ErrorKind::Validation,
+                    format!(
+                        "shrink {width}x{height} is larger than the {}x{} input stage",
+                        stage.width, stage.height
+                    ),
+                ));
+            }
+            Ok(Processing::ExactGeometry(ExactGeometry {
+                a: 1,
+                b: 0,
+                c: 0,
+                d: 1,
+                tx: 0,
+                ty: 0,
+                output_width: width,
+                output_height: height,
+            }))
+        }
+    }
+
+    fn shrink(width: u32, height: u32) -> Value {
+        json!({"width": width, "height": height})
+    }
+
+    fn rows(service: &EditorService, table: &str) -> i64 {
+        service
+            .connection
+            .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                row.get(0)
+            })
+            .unwrap()
+    }
+
+    #[test]
+    fn an_update_replaces_its_layer_in_place_and_leaves_earlier_snapshots_alone() {
+        let catalog = temp("update.sqlite");
+        let mut service = EditorService::open_with(&catalog, ShrinkModule::registry()).unwrap();
+        let asset = service.import(&fixture()).unwrap().asset.id;
+        let appended = service
+            .apply_action(
+                &asset,
+                mutation(0, "append"),
+                SHRINK_ACTION,
+                shrink(100, 100),
+            )
+            .unwrap();
+        let first = service.entry(&asset, &appended.current_entry_id).unwrap();
+        let layer_id = first.snapshot.recipe.layers[0].id.clone();
+        // A later pixel layer addresses the shrunk stage, so it must keep its position.
+        service
+            .apply_pixel(&asset, mutation(1, "pixel"), 10, 10, [1, 2, 3])
+            .unwrap();
+        let updated = service
+            .apply_action(&asset, mutation(2, "update"), SHRINK_ACTION, shrink(50, 50))
+            .unwrap();
+        assert_eq!(updated.outcome, MutationOutcome::Applied);
+        let entry = service.entry(&asset, &updated.current_entry_id).unwrap();
+        assert_eq!(
+            entry.snapshot.recipe.layers.len(),
+            2,
+            "an update adds no layer"
+        );
+        assert_eq!(
+            entry.snapshot.recipe.layers[0].id, layer_id,
+            "the updated layer keeps its identity and position"
+        );
+        assert_eq!(entry.snapshot.recipe.layers[0].payload, shrink(50, 50));
+        assert_eq!(
+            entry.snapshot.recipe.layers[1].effect_id, PIXEL_EFFECT,
+            "the later layer keeps its position"
+        );
+        assert_ne!(
+            entry.snapshot.id, first.snapshot.id,
+            "an update produces a new snapshot identity"
+        );
+        assert_eq!(service.history(&asset, None, 10).unwrap().entries.len(), 4);
+        assert_eq!(
+            service
+                .entry(&asset, &first.id)
+                .unwrap()
+                .snapshot
+                .recipe
+                .layers[0]
+                .payload,
+            shrink(100, 100),
+            "the earlier entry keeps its own stack"
+        );
+        let raster = service.render_current(&asset).unwrap();
+        assert_eq!((raster.width, raster.height), (50, 50));
+        drop(service);
+        std::fs::remove_file(catalog).unwrap();
+    }
+
+    #[test]
+    fn an_update_that_invalidates_a_later_layer_is_rejected_atomically() {
+        let catalog = temp("update-invalid.sqlite");
+        let mut service = EditorService::open_with(&catalog, ShrinkModule::registry()).unwrap();
+        let asset = service.import(&fixture()).unwrap().asset.id;
+        service
+            .apply_action(
+                &asset,
+                mutation(0, "append"),
+                SHRINK_ACTION,
+                shrink(100, 100),
+            )
+            .unwrap();
+        service
+            .apply_pixel(&asset, mutation(1, "pixel"), 90, 90, [1, 2, 3])
+            .unwrap();
+        let before = service.state(&asset).unwrap();
+        let (entries, requests) = (rows(&service, "entries"), rows(&service, "requests"));
+        let error = service
+            .apply_action(
+                &asset,
+                mutation(2, "shrink-too-far"),
+                SHRINK_ACTION,
+                shrink(50, 50),
+            )
+            .expect_err("the pixel layer would fall outside the new stage");
+        assert_eq!(error.kind, ErrorKind::Validation);
+        assert!(
+            error
+                .detail
+                .contains("pixel (90, 90) is outside 50x50 input stage"),
+            "{error}"
+        );
+        assert_eq!(service.state(&asset).unwrap(), before);
+        assert_eq!(
+            rows(&service, "entries"),
+            entries,
+            "no history row was written"
+        );
+        assert_eq!(
+            rows(&service, "requests"),
+            requests,
+            "no request result was recorded"
+        );
+        drop(service);
+        std::fs::remove_file(catalog).unwrap();
+    }
+
+    #[test]
+    fn an_update_naming_a_layer_that_is_not_in_the_stack_is_rejected() {
+        let catalog = temp("update-missing.sqlite");
+        let mut service = EditorService::open_with(&catalog, ShrinkModule::registry()).unwrap();
+        let asset = service.import(&fixture()).unwrap().asset.id;
+        let before = service.state(&asset).unwrap();
+        let error = service
+            .apply_action(
+                &asset,
+                mutation(0, "missing"),
+                MISSING_ACTION,
+                shrink(10, 10),
+            )
+            .expect_err("the planned identity is not in the stack");
+        assert_eq!(error.kind, ErrorKind::Validation);
+        assert_eq!(
+            error.detail,
+            "plan updates a layer that is not in the stack"
+        );
+        assert_eq!(service.state(&asset).unwrap(), before);
+        assert_eq!(service.history(&asset, None, 10).unwrap().entries.len(), 1);
+        drop(service);
+        std::fs::remove_file(catalog).unwrap();
+    }
+
+    #[test]
+    fn a_truncated_preview_job_renders_the_layer_prefix_and_rejects_an_out_of_range_count() {
+        let catalog = temp("truncated-preview.sqlite");
+        let mut service = EditorService::open_with(&catalog, ShrinkModule::registry()).unwrap();
+        let asset = service.import(&fixture()).unwrap().asset.id;
+        let original = service.render_current(&asset).unwrap().pixel(0, 0).unwrap();
+        service
+            .apply_pixel(&asset, mutation(0, "pixel"), 0, 0, [1, 2, 3])
+            .unwrap();
+        service
+            .apply_action(
+                &asset,
+                mutation(1, "shrink"),
+                SHRINK_ACTION,
+                shrink(100, 100),
+            )
+            .unwrap();
+        let rendered = |service: &EditorService, layer_count: Option<usize>| -> Raster {
+            let job = service.preview_job(&asset, None, layer_count).unwrap();
+            let mut queue = PreviewQueue::default();
+            queue.request(job);
+            let deadline = Instant::now() + Duration::from_secs(5);
+            loop {
+                if let Some(result) = queue.poll() {
+                    return result.result.unwrap();
+                }
+                assert!(Instant::now() < deadline, "the preview worker answered");
+                std::thread::yield_now();
+            }
+        };
+        let full = rendered(&service, None);
+        assert_eq!((full.width, full.height), (100, 100));
+        let prefix = rendered(&service, Some(1));
+        assert_eq!(
+            (prefix.width, prefix.height),
+            (480, 320),
+            "one layer renders the crop's input stage"
+        );
+        assert_eq!(prefix.pixel(0, 0), Some([1, 2, 3, 255]));
+        let none = rendered(&service, Some(0));
+        assert_eq!((none.width, none.height), (480, 320));
+        assert_eq!(none.pixel(0, 0), Some(original), "no layer, no edit");
+        assert_ne!(none.pixel(0, 0), prefix.pixel(0, 0));
+        let error = service
+            .preview_job(&asset, None, Some(3))
+            .expect_err("an out-of-range layer count");
+        assert_eq!(error.kind, ErrorKind::Validation);
+        assert!(
+            error
+                .detail
+                .contains("preview layer count 3 exceeds the 2 layers"),
+            "{error}"
+        );
         drop(service);
         std::fs::remove_file(catalog).unwrap();
     }

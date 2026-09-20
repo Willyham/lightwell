@@ -32,13 +32,21 @@ pub struct ActionInput {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ActionPlan {
     NoOp,
+    /// Append a new layer to the end of the stack.
     Commit(Layer),
+    /// Replace the layer with the same identity in place, keeping its position and every other
+    /// layer. The host rejects an identity that is not in the stack.
+    Update(Layer),
 }
 
-/// The current output stage and a point sampler over the current stack. The sampler evaluates one
-/// pixel without rasterizing, so planning an action never allocates a frame.
+/// The current output stage, the current ordered layers and a point sampler over the current
+/// stack. The sampler evaluates one pixel without rasterizing, so planning an action never
+/// allocates a frame.
 pub struct StageContext<'a> {
     pub stage: Stage,
+    /// The current recipe's layers in evaluation order, so a module can find its own layer to
+    /// update. Planning never mutates them.
+    pub layers: &'a [Layer],
     #[allow(clippy::type_complexity)]
     pub sampler: &'a dyn Fn(u32, u32) -> Result<Option<[u8; 4]>, Error>,
 }

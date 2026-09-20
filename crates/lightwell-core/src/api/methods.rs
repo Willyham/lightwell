@@ -316,7 +316,7 @@ pub fn schemas(registry: &ModuleRegistry) -> Value {
     }
     json!({
         "protocol": PROTOCOL,
-        "coordinate_space": "Each edit uses integer coordinates in its input image stage after EXIF orientation.",
+        "coordinate_space": "Each edit uses integer coordinates in its input image stage after EXIF orientation. A number parameter carries a finite JSON number within its declared range, such as an angle in degrees or a rectangle normalized to its stage; a JSON integer is accepted and passed through unchanged.",
         "methods": methods,
         "modules": descriptors,
         "mutation": {"required": ["expected_revision", "request_id", "actor"]},
@@ -650,7 +650,16 @@ fn value(value: impl Serialize) -> Result<Value, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashSet;
+    use crate::{
+        ActionInput, ActionPlan, Availability, EFFECT_FORMAT, EffectDescriptor, EffectStage,
+        ModuleDescriptor, ParameterDescriptor, ParameterKind, Processing, Stage, StageContext,
+        ToolModule,
+    };
+    use std::{
+        collections::HashSet,
+        path::Path,
+        sync::{Arc, Mutex},
+    };
 
     #[test]
     fn host_and_generated_methods_are_unique_complete_and_match_the_schema() {
@@ -721,6 +730,128 @@ mod tests {
         }
         assert!(find(&service, "edit.missing").is_none());
         assert!(find(&service, "set-pixel").is_none());
+        assert!(
+            schema["coordinate_space"]
+                .as_str()
+                .expect("the coordinate note")
+                .contains("number parameter"),
+            "the schema describes number parameters"
+        );
+        drop(service);
+        std::fs::remove_file(catalog).unwrap();
+    }
+
+    /// A module with one number parameter that records what dispatch handed it.
+    struct NumberModule {
+        descriptor: ModuleDescriptor,
+        seen: Arc<Mutex<Option<Map<String, Value>>>>,
+    }
+
+    impl ToolModule for NumberModule {
+        fn descriptor(&self) -> &ModuleDescriptor {
+            &self.descriptor
+        }
+        fn parse(
+            &self,
+            action_id: &str,
+            parameters: &Map<String, Value>,
+        ) -> Result<ActionInput, Error> {
+            *self.seen.lock().expect("the recorded parameters") = Some(parameters.clone());
+            Ok(ActionInput {
+                action_id: action_id.into(),
+                parameters: parameters.clone(),
+            })
+        }
+        fn plan(&self, _: &ActionInput, _: &StageContext<'_>) -> Result<ActionPlan, Error> {
+            Ok(ActionPlan::NoOp)
+        }
+        fn validate_payload(&self, _: &str, _: u32, _: &Value) -> Result<(), Error> {
+            Ok(())
+        }
+        fn compile(&self, _: &str, _: u32, _: &Value, _: Stage) -> Result<Processing, Error> {
+            Err(Error::new(ErrorKind::Internal, "test module never renders"))
+        }
+    }
+
+    #[test]
+    fn a_generated_edit_method_passes_a_number_parameter_through_unchanged() {
+        let seen = Arc::new(Mutex::new(None));
+        let module = NumberModule {
+            descriptor: ModuleDescriptor {
+                id: "test.angle".into(),
+                title: "Angle".into(),
+                effects: vec![EffectDescriptor {
+                    id: "test.angle.effect".into(),
+                    format: EFFECT_FORMAT,
+                    stage: EffectStage::Geometry,
+                }],
+                actions: vec![ActionDescriptor {
+                    id: "test-angle".into(),
+                    title: "Set angle".into(),
+                    notes: "test".into(),
+                    parameters: vec![ParameterDescriptor {
+                        name: "angle".into(),
+                        kind: ParameterKind::Number {
+                            min: -45.0,
+                            max: 45.0,
+                        },
+                        required: true,
+                        default: None,
+                        unit: Some("deg".into()),
+                        notes: "test".into(),
+                    }],
+                }],
+                controls: Vec::new(),
+                canvas: None,
+                availability: Availability::Available,
+            },
+            seen: seen.clone(),
+        };
+        let mut registry = ModuleRegistry::builtin();
+        registry.register(Arc::new(module)).unwrap();
+        let catalog = std::env::temp_dir().join(format!(
+            "lightwell-methods-number-{}.sqlite",
+            std::process::id()
+        ));
+        let mut service = EditorService::open_with(&catalog, Arc::new(registry)).unwrap();
+        let asset = service
+            .import(
+                &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/s0/orientation-1.jpg"),
+            )
+            .unwrap()
+            .asset
+            .id;
+        let mut session = ClientSession::default();
+        let listed = schemas(service.registry());
+        assert_eq!(
+            listed["methods"]["edit.test-angle"]["parameters"][0]["kind"],
+            json!("number")
+        );
+        let response = dispatch(
+            &mut service,
+            &mut session,
+            &ApiRequest {
+                id: "angle".into(),
+                method: "edit.test-angle".into(),
+                params: json!({
+                    "asset_id": asset,
+                    "mutation": {"expected_revision":0,"request_id":"angle","actor":"test"},
+                    "angle": -3.5,
+                }),
+                token: None,
+            },
+            0,
+        );
+        assert!(response.error.is_none(), "{:?}", response.error);
+        assert_eq!(response.result.unwrap()["outcome"], json!("no-op"));
+        assert_eq!(
+            seen.lock()
+                .expect("the recorded parameters")
+                .as_ref()
+                .expect("a parsed request")["angle"],
+            json!(-3.5),
+            "the number reached the module exactly as sent"
+        );
         drop(service);
         std::fs::remove_file(catalog).unwrap();
     }

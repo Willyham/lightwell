@@ -30,6 +30,8 @@ enum OwnerMessage {
     Preview {
         asset_id: AssetId,
         entry_id: Option<EntryId>,
+        /// `Some(n)` renders the entry's first `n` layers only.
+        layer_count: Option<usize>,
         response: SyncSender<Result<PreviewJob, Error>>,
     },
     Disconnect(ClientId),
@@ -87,16 +89,20 @@ impl OwnerHandle {
         let _ = self.sender.send(OwnerMessage::Stop);
     }
 
+    /// A preview job from the catalog owner. `layer_count` truncates the rendered stack to its
+    /// first `n` layers; this is a desktop-internal path, not a JSON method.
     pub fn preview_job(
         &self,
         asset_id: AssetId,
         entry_id: Option<EntryId>,
+        layer_count: Option<usize>,
     ) -> Result<PreviewJob, Error> {
         let (response, receiver) = sync_channel(1);
         self.sender
             .send(OwnerMessage::Preview {
                 asset_id,
                 entry_id,
+                layer_count,
                 response,
             })
             .map_err(|_| Error::new(ErrorKind::Protocol, "catalog owner is unavailable"))?;
@@ -119,9 +125,11 @@ fn owner_loop(mut service: EditorService, receiver: Receiver<OwnerMessage>) {
             OwnerMessage::Preview {
                 asset_id,
                 entry_id,
+                layer_count,
                 response,
             } => {
-                let _ = response.send(service.preview_job(&asset_id, entry_id.as_ref()));
+                let _ =
+                    response.send(service.preview_job(&asset_id, entry_id.as_ref(), layer_count));
             }
             OwnerMessage::Call(call) => {
                 let session = sessions.entry(call.client).or_default();

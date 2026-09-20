@@ -181,6 +181,25 @@ impl Recipe {
         next.validate()?;
         Ok(next)
     }
+    /// Replace the layer with the same identity in place, keeping every other layer and every
+    /// position. An identity that is not in this recipe is a validation error.
+    pub fn with_layer_replaced(&self, layer: Layer) -> Result<Self, Error> {
+        layer.validate()?;
+        let position = self
+            .layers
+            .iter()
+            .position(|existing| existing.id == layer.id)
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorKind::Validation,
+                    "plan updates a layer that is not in the stack",
+                )
+            })?;
+        let mut next = self.clone();
+        next.layers[position] = layer;
+        next.validate()?;
+        Ok(next)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -204,6 +223,15 @@ impl Snapshot {
             id: SnapshotId::new(),
             asset_id: self.asset_id.clone(),
             recipe: self.recipe.appended(layer)?,
+        })
+    }
+    /// A new snapshot whose stack differs only in the layer with this identity. Earlier snapshots
+    /// keep their own recipe, so history stays immutable.
+    pub fn with_layer_replaced(&self, layer: Layer) -> Result<Self, Error> {
+        Ok(Self {
+            id: SnapshotId::new(),
+            asset_id: self.asset_id.clone(),
+            recipe: self.recipe.with_layer_replaced(layer)?,
         })
     }
 }

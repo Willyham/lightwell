@@ -1,4 +1,4 @@
-use crate::{EntryId, Error, HistoryEntry, ModuleRegistry, Raster, SourceImage, render};
+use crate::{EntryId, Error, HistoryEntry, ModuleRegistry, Raster, Recipe, SourceImage, render};
 use serde::{Deserialize, Serialize};
 use std::sync::{
     Arc,
@@ -104,6 +104,9 @@ pub struct PreviewJob {
     pub entry: HistoryEntry,
     /// The providers the worker evaluates this stack with; shared, never rebuilt per job.
     pub registry: Arc<ModuleRegistry>,
+    /// `Some(n)` renders only the entry's first `n` layers, which is how the desktop shows the
+    /// input stage of the layer it is drafting. `None` renders the whole stack.
+    pub layer_count: Option<usize>,
 }
 
 #[derive(Debug)]
@@ -147,11 +150,24 @@ impl PreviewQueue {
         let (sender, receiver) = sync_channel(1);
         std::thread::spawn(move || {
             let entry_id = job.entry.id.clone();
+            // A truncated job copies the layer prefix only; the whole stack is rendered in place.
+            let prefix = job.layer_count.map(|count| Recipe {
+                format: job.entry.snapshot.recipe.format,
+                layers: job
+                    .entry
+                    .snapshot
+                    .recipe
+                    .layers
+                    .iter()
+                    .take(count)
+                    .cloned()
+                    .collect(),
+            });
             let result = render(
                 &job.registry,
                 &job.source,
-                job.entry.snapshot.id,
-                &job.entry.snapshot.recipe,
+                job.entry.snapshot.id.clone(),
+                prefix.as_ref().unwrap_or(&job.entry.snapshot.recipe),
             );
             let _ = sender.send(PreviewResult {
                 generation,
@@ -211,6 +227,7 @@ mod tests {
                 orientation: 1,
             },
             registry: Arc::new(ModuleRegistry::builtin()),
+            layer_count: None,
             entry: HistoryEntry {
                 id: EntryId::new(),
                 asset_id: asset,

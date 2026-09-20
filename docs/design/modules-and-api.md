@@ -40,7 +40,7 @@ validate_payload(effect_id, format, payload)
 compile(effect_id, format, payload, Stage{width,height}) -> Processing
 ```
 
-- `parse` validates the request against the schema only and normalizes it. The returned `action_id` is the durable history action identity (`set-pixel`, `rotate-left`, `mirror-horizontal`, ...) and `parameters` is the object stored on the history entry. The host also checks required parameters, integer ranges and enum options generically before calling `parse`, so every caller gets the same structured `validation` error.
+- `parse` validates the request against the schema only and normalizes it. The returned `action_id` is the durable history action identity (`set-pixel`, `rotate-left`, `mirror-horizontal`, ...) and `parameters` is the object stored on the history entry. The host also checks required parameters, integer and number ranges, colors and enum options generically before calling `parse`, so every caller gets the same structured `validation` error.
 - `plan` sees the current output stage (`width`, `height`), the current ordered layers and a point sampler over the current stack. It rejects out-of-stage coordinates and reports no-ops; it allocates no frame and mutates nothing. `Commit` appends a new layer; `Update` replaces the layer with the same identity in place, which is how the crop module edits its existing layer without changing history identities. The host rejects an `Update` whose identity is not in the stack.
 - `validate_payload` accepts or rejects a persisted payload structurally. `compile` turns it into a host processing primitive at its input stage.
 

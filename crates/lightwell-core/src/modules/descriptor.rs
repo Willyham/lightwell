@@ -52,13 +52,19 @@ pub struct EffectDescriptor {
     pub stage: EffectStage,
 }
 
-/// The closed set of parameter types v0 modules may declare.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// The closed set of parameter types v0 modules may declare. `f64` bounds rule out `Eq` here and
+/// on every descriptor that contains a parameter.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum ParameterKind {
     Integer {
         min: i64,
         max: i64,
+    },
+    /// A finite `f64` within the closed range. A JSON integer is accepted as a number.
+    Number {
+        min: f64,
+        max: f64,
     },
     Enum {
         options: Vec<String>,
@@ -69,7 +75,7 @@ pub enum ParameterKind {
 
 /// Serialized flat: `{"name": "x", "kind": "integer", "min": 0, "max": 16383, ...}`. Flattening
 /// the kind rules out `deny_unknown_fields` here; unknown fields are ignored on read.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ParameterDescriptor {
     pub name: String,
     #[serde(flatten)]
@@ -80,7 +86,7 @@ pub struct ParameterDescriptor {
     pub notes: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ActionDescriptor {
     pub id: String,
@@ -123,14 +129,28 @@ pub enum Control {
     },
 }
 
-/// A pointer pick on the image fills declared integer parameters; it never commits.
+/// How a module lets the canvas drive its action. Neither kind commits by itself.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum CanvasInteraction {
+    /// A pointer pick on the image fills the named integer parameters of `action`.
     PointPick {
         action: String,
         x: String,
         y: String,
+    },
+    /// The host's crop-frame editor edits a transient draft of the named number parameters of
+    /// `action` and derives its ratio presets from the `aspect` enum of `fit_action`. Only Apply
+    /// calls an action.
+    CropFrame {
+        action: String,
+        angle: String,
+        x: String,
+        y: String,
+        width: String,
+        height: String,
+        fit_action: String,
+        aspect: String,
     },
 }
 
@@ -142,7 +162,7 @@ pub enum Availability {
     Unavailable { reason: String },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModuleDescriptor {
     pub id: String,
@@ -224,6 +244,14 @@ impl ModuleDescriptor {
                             parameter.name
                         )));
                     }
+                    ParameterKind::Number { min, max }
+                        if !min.is_finite() || !max.is_finite() || min > max =>
+                    {
+                        return Err(validation(format!(
+                            "parameter {} declares an empty range {min}..={max}",
+                            parameter.name
+                        )));
+                    }
                     ParameterKind::Enum { options } if options.is_empty() => {
                         return Err(validation(format!(
                             "parameter {} declares no options",
@@ -252,9 +280,45 @@ impl ModuleDescriptor {
                     }
                 }
             }
+            Some(CanvasInteraction::CropFrame {
+                action,
+                angle,
+                x,
+                y,
+                width,
+                height,
+                fit_action,
+                aspect,
+            }) => {
+                let declared = self.declared_action(action)?;
+                for name in [angle, x, y, width, height] {
+                    self.canvas_number(declared, name)?;
+                }
+                let fit = self.declared_action(fit_action)?;
+                let chosen = self.declared_parameter(fit, aspect)?;
+                if !matches!(chosen.kind, ParameterKind::Enum { .. }) {
+                    return Err(validation(format!(
+                        "canvas parameter {aspect} of action {fit_action} is not an enum"
+                    )));
+                }
+                // Fitting a ratio needs the draft angle, so the fit action declares one too.
+                self.canvas_number(fit, angle)?;
+            }
             None => {}
         }
         Ok(())
+    }
+
+    fn canvas_number(&self, action: &ActionDescriptor, name: &str) -> Result<(), Error> {
+        let parameter = self.declared_parameter(action, name)?;
+        if matches!(parameter.kind, ParameterKind::Number { .. }) {
+            Ok(())
+        } else {
+            Err(validation(format!(
+                "canvas parameter {name} of action {} is not a number",
+                action.id
+            )))
+        }
     }
 
     fn declared_action(&self, id: &str) -> Result<&ActionDescriptor, Error> {
@@ -300,9 +364,12 @@ impl ModuleDescriptor {
             } => {
                 let declared = self.declared_action(action)?;
                 let declared = self.declared_parameter(declared, parameter)?;
-                if !matches!(declared.kind, ParameterKind::Integer { .. }) {
+                if !matches!(
+                    declared.kind,
+                    ParameterKind::Integer { .. } | ParameterKind::Number { .. }
+                ) {
                     return Err(validation(format!(
-                        "number control for {parameter} of action {action} is not an integer"
+                        "number control for {parameter} of action {action} is not an integer or a number"
                     )));
                 }
             }
@@ -338,6 +405,19 @@ fn check_value(parameter: &ParameterDescriptor, value: &Value) -> Result<(), Err
             if number < *min || number > *max {
                 return Err(validation(format!(
                     "parameter {name} must be an integer within {min}..={max}"
+                )));
+            }
+        }
+        ParameterKind::Number { min, max } => {
+            // `as_f64` accepts a JSON integer; NaN and infinities are not JSON numbers, and a
+            // value built in process that is not finite is rejected here too.
+            let number = value
+                .as_f64()
+                .filter(|number| number.is_finite())
+                .ok_or_else(|| validation(format!("parameter {name} must be a number")))?;
+            if number < *min || number > *max {
+                return Err(validation(format!(
+                    "parameter {name} must be a number within {min}..={max}"
                 )));
             }
         }
@@ -430,6 +510,90 @@ mod tests {
             unit: Some("px".into()),
             notes: "test".into(),
         }
+    }
+
+    fn number(name: &str, min: f64, max: f64) -> ParameterDescriptor {
+        ParameterDescriptor {
+            name: name.into(),
+            kind: ParameterKind::Number { min, max },
+            required: true,
+            default: None,
+            unit: None,
+            notes: "test".into(),
+        }
+    }
+
+    fn enumerated(name: &str) -> ParameterDescriptor {
+        ParameterDescriptor {
+            name: name.into(),
+            kind: ParameterKind::Enum {
+                options: vec!["free".into(), "1:1".into()],
+            },
+            required: true,
+            default: None,
+            unit: None,
+            notes: "test".into(),
+        }
+    }
+
+    fn frame_canvas(action: &str, fit_action: &str) -> CanvasInteraction {
+        CanvasInteraction::CropFrame {
+            action: action.into(),
+            angle: "angle".into(),
+            x: "x".into(),
+            y: "y".into(),
+            width: "width".into(),
+            height: "height".into(),
+            fit_action: fit_action.into(),
+            aspect: "aspect".into(),
+        }
+    }
+
+    /// A frame action, a fit action and the canvas that binds them: the shape the crop module
+    /// declares, used here to prove every crop-frame rejection.
+    fn frame_descriptor() -> ModuleDescriptor {
+        ModuleDescriptor {
+            actions: vec![
+                ActionDescriptor {
+                    id: "set-frame".into(),
+                    title: "Set frame".into(),
+                    notes: "test".into(),
+                    parameters: vec![
+                        number("angle", -45.0, 45.0),
+                        number("x", 0.0, 1.0),
+                        number("y", 0.0, 1.0),
+                        number("width", 0.0, 1.0),
+                        number("height", 0.0, 1.0),
+                    ],
+                },
+                ActionDescriptor {
+                    id: "fit-frame".into(),
+                    title: "Fit frame".into(),
+                    notes: "test".into(),
+                    parameters: vec![enumerated("aspect"), number("angle", -45.0, 45.0)],
+                },
+            ],
+            controls: vec![Control::Number {
+                action: "set-frame".into(),
+                parameter: "angle".into(),
+                label: "Angle".into(),
+            }],
+            canvas: Some(frame_canvas("set-frame", "fit-frame")),
+            ..descriptor()
+        }
+    }
+
+    /// The frame descriptor with one action's parameter list replaced and no controls, so only the
+    /// canvas rule under test can fail.
+    fn frame_with(action_id: &str, parameters: Vec<ParameterDescriptor>) -> ModuleDescriptor {
+        let mut descriptor = frame_descriptor();
+        descriptor.controls = Vec::new();
+        for action in &mut descriptor.actions {
+            if action.id == action_id {
+                action.parameters = parameters.clone();
+            }
+        }
+        descriptor
     }
 
     fn action() -> ActionDescriptor {
@@ -527,6 +691,10 @@ mod tests {
     #[test]
     fn descriptors_reject_malformed_identities_duplicates_and_invalid_controls() {
         assert!(descriptor().validate().is_ok());
+        assert!(
+            frame_descriptor().validate().is_ok(),
+            "a crop frame over declared number parameters is accepted"
+        );
         let cases: Vec<(&str, ModuleDescriptor)> = vec![
             (
                 "module identity",
@@ -706,6 +874,109 @@ mod tests {
                     ..descriptor()
                 },
             ),
+            (
+                "empty number range",
+                ModuleDescriptor {
+                    actions: vec![ActionDescriptor {
+                        parameters: vec![number("angle", 5.0, 1.0)],
+                        ..action()
+                    }],
+                    controls: Vec::new(),
+                    ..descriptor()
+                },
+            ),
+            (
+                "non-finite number range",
+                ModuleDescriptor {
+                    actions: vec![ActionDescriptor {
+                        parameters: vec![number("angle", 0.0, f64::INFINITY)],
+                        ..action()
+                    }],
+                    controls: Vec::new(),
+                    ..descriptor()
+                },
+            ),
+            (
+                "number default out of range",
+                ModuleDescriptor {
+                    actions: vec![ActionDescriptor {
+                        parameters: vec![ParameterDescriptor {
+                            default: Some(json!(2.5)),
+                            ..number("angle", -1.0, 1.0)
+                        }],
+                        ..action()
+                    }],
+                    controls: Vec::new(),
+                    ..descriptor()
+                },
+            ),
+            (
+                "number control on a color parameter",
+                ModuleDescriptor {
+                    controls: vec![Control::Number {
+                        action: "set-thing".into(),
+                        parameter: "rgb".into(),
+                        label: "RGB".into(),
+                    }],
+                    ..descriptor()
+                },
+            ),
+            (
+                "crop frame names an undeclared action",
+                ModuleDescriptor {
+                    canvas: Some(frame_canvas("missing", "fit-frame")),
+                    controls: Vec::new(),
+                    ..frame_descriptor()
+                },
+            ),
+            (
+                "crop frame names an undeclared fit action",
+                ModuleDescriptor {
+                    canvas: Some(frame_canvas("set-frame", "missing")),
+                    controls: Vec::new(),
+                    ..frame_descriptor()
+                },
+            ),
+            (
+                "crop frame parameter is missing",
+                frame_with(
+                    "set-frame",
+                    vec![
+                        number("angle", -45.0, 45.0),
+                        number("x", 0.0, 1.0),
+                        number("y", 0.0, 1.0),
+                        number("width", 0.0, 1.0),
+                    ],
+                ),
+            ),
+            (
+                "crop frame parameter is not a number",
+                frame_with(
+                    "set-frame",
+                    vec![
+                        integer("angle"),
+                        number("x", 0.0, 1.0),
+                        number("y", 0.0, 1.0),
+                        number("width", 0.0, 1.0),
+                        number("height", 0.0, 1.0),
+                    ],
+                ),
+            ),
+            (
+                "crop frame aspect is not an enum",
+                frame_with(
+                    "fit-frame",
+                    vec![number("aspect", 0.0, 1.0), number("angle", -45.0, 45.0)],
+                ),
+            ),
+            (
+                "crop frame fit action has no angle",
+                frame_with("fit-frame", vec![enumerated("aspect")]),
+            ),
+            (
+                "crop frame fit angle is not a number",
+                frame_with("fit-frame", vec![enumerated("aspect"), integer("angle")]),
+            ),
         ];
         for (case, descriptor) in cases {
             let error = descriptor
@@ -732,6 +1003,109 @@ mod tests {
             ModuleDescriptor::parse(&serde_json::to_value(descriptor()).unwrap()).unwrap(),
             descriptor()
         );
+    }
+
+    #[test]
+    fn number_parameters_and_the_crop_frame_canvas_keep_their_serialized_form() {
+        assert_eq!(
+            serde_json::to_value(number("angle", -45.0, 45.0)).unwrap(),
+            json!({
+                "name": "angle",
+                "kind": "number",
+                "min": -45.0,
+                "max": 45.0,
+                "required": true,
+                "default": null,
+                "unit": null,
+                "notes": "test",
+            })
+        );
+        let canvas = serde_json::to_value(frame_canvas("set-frame", "fit-frame")).unwrap();
+        assert_eq!(
+            canvas,
+            json!({
+                "kind": "crop-frame",
+                "action": "set-frame",
+                "angle": "angle",
+                "x": "x",
+                "y": "y",
+                "width": "width",
+                "height": "height",
+                "fit_action": "fit-frame",
+                "aspect": "aspect",
+            })
+        );
+        let descriptor = frame_descriptor();
+        assert_eq!(
+            ModuleDescriptor::parse(&serde_json::to_value(&descriptor).unwrap()).unwrap(),
+            descriptor,
+            "a crop-frame descriptor round-trips through JSON"
+        );
+    }
+
+    #[test]
+    fn number_parameters_accept_finite_values_in_range_and_reject_everything_else() {
+        let action = ActionDescriptor {
+            parameters: vec![
+                number("angle", -45.0, 45.0),
+                ParameterDescriptor {
+                    required: false,
+                    default: Some(json!(1.0)),
+                    ..number("width", 0.0, 1.0)
+                },
+            ],
+            ..action()
+        };
+        let checked = check_parameters(&action, &json!({"angle": -3.5})).unwrap();
+        assert_eq!(checked["angle"], json!(-3.5), "a number passes through");
+        assert_eq!(checked["width"], json!(1.0), "declared default applied");
+        assert_eq!(
+            check_parameters(&action, &json!({"angle": 0})).unwrap()["angle"],
+            json!(0),
+            "a JSON integer is accepted as a number and kept as written"
+        );
+        assert_eq!(
+            check_parameters(&action, &json!({"angle": 45})).unwrap()["angle"],
+            json!(45),
+            "the range is closed"
+        );
+        for (case, input, fragment) in [
+            (
+                "above the range",
+                json!({"angle": 45.0001}),
+                "parameter angle must be a number within -45..=45",
+            ),
+            (
+                "below the range",
+                json!({"angle": -90}),
+                "parameter angle must be a number within -45..=45",
+            ),
+            (
+                "not a number",
+                json!({"angle": "0"}),
+                "parameter angle must be a number",
+            ),
+            (
+                "a boolean",
+                json!({"angle": true}),
+                "parameter angle must be a number",
+            ),
+            (
+                // NaN and the infinities are not JSON numbers; serde_json encodes them as null.
+                "not finite",
+                json!({"angle": f64::NAN}),
+                "parameter angle must be a number",
+            ),
+            (
+                "infinite",
+                json!({"angle": f64::INFINITY}),
+                "parameter angle must be a number",
+            ),
+        ] {
+            let error = check_parameters(&action, &input).expect_err(case);
+            assert_eq!(error.kind, ErrorKind::Validation, "{case}");
+            assert!(error.detail.contains(fragment), "{case}: {error}");
+        }
     }
 
     #[test]

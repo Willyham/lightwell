@@ -1588,6 +1588,14 @@ fn seed_text(parameter: &ParameterDescriptor) -> String {
             .and_then(Value::as_i64)
             .unwrap_or(*min)
             .to_string(),
+        ParameterKind::Number { min, .. } => number_text(
+            parameter
+                .default
+                .as_ref()
+                .and_then(Value::as_f64)
+                .filter(|value| value.is_finite())
+                .unwrap_or(*min),
+        ),
         ParameterKind::Color => parameter
             .default
             .as_ref()
@@ -1615,6 +1623,19 @@ fn range_message(name: &str, min: i64, max: i64) -> String {
     format!("{name} must be an integer within {min}..={max}")
 }
 
+fn number_range_message(name: &str, min: f64, max: f64) -> String {
+    format!(
+        "{name} must be a number from {} to {}",
+        number_text(min),
+        number_text(max)
+    )
+}
+
+/// A number as a field would hold it: `0`, `-3.5`, no trailing zeros or exponent noise.
+fn number_text(value: f64) -> String {
+    format!("{value}")
+}
+
 /// One field's text read as the value its parameter declares, or the message naming what it needs.
 fn parse_field(parameter: &ParameterDescriptor, text: &str) -> Result<Value, String> {
     let name = &parameter.name;
@@ -1626,6 +1647,13 @@ fn parse_field(parameter: &ParameterDescriptor, text: &str) -> Result<Value, Str
             .filter(|value| (min..=max).contains(&value))
             .map(Value::from)
             .ok_or_else(|| range_message(name, *min, *max)),
+        ParameterKind::Number { min, max } => text
+            .trim()
+            .parse::<f64>()
+            .ok()
+            .filter(|value| value.is_finite() && (min..=max).contains(&value))
+            .map(Value::from)
+            .ok_or_else(|| number_range_message(name, *min, *max)),
         ParameterKind::Color => parse_color(text)
             .map(|rgb| Value::from(rgb.to_vec()))
             .ok_or_else(|| format!("{name} must be three channels 0..=255")),
@@ -1815,12 +1843,15 @@ fn control_preset<'a>(controls: &'a [Control], action: &str) -> Option<&'a Map<S
 }
 
 /// The first available module that declares a canvas pick: its action and coordinate parameters.
+/// A crop frame is a different adapter and is ignored here rather than treated as a pick.
 fn point_pick(modules: &[ModuleDescriptor]) -> Option<(&str, &str, &str)> {
     modules.iter().find_map(|module| match &module.canvas {
         Some(CanvasInteraction::PointPick { action, x, y }) if module.is_available() => {
             Some((action.as_str(), x.as_str(), y.as_str()))
         }
-        _ => None,
+        Some(CanvasInteraction::PointPick { .. })
+        | Some(CanvasInteraction::CropFrame { .. })
+        | None => None,
     })
 }
 
@@ -1968,7 +1999,7 @@ fn refresh(
         HistorySelection::Entry(entry_id) => Some(entry_id.clone()),
     };
     let job = owner
-        .preview_job(asset_id, selected)
+        .preview_job(asset_id, selected, None)
         .map_err(|error| error.to_string())?;
     Ok(Refresh {
         state,
@@ -2033,7 +2064,7 @@ fn preview_task(
             let (mut result, sequence) = call(&owner, client, method, params)?;
             let session: ClientSession = parse(result["session"].take())?;
             let job = owner
-                .preview_job(asset_id, entry_id)
+                .preview_job(asset_id, entry_id, None)
                 .map_err(|error| error.to_string())?;
             Ok(PreviewPayload {
                 job,
@@ -2224,6 +2255,7 @@ mod tests {
                     orientation: 1,
                 },
                 entry: current.clone(),
+                layer_count: None,
             },
             session: ClientSession::default(),
             sequence: 7,
@@ -2281,6 +2313,32 @@ mod tests {
             "7",
             "a declared default wins over the minimum"
         );
+        assert_eq!(
+            seed_text(&number_parameter(None)),
+            "-45",
+            "a number without a default seeds at its min"
+        );
+        assert_eq!(
+            seed_text(&number_parameter(Some(json!(0)))),
+            "0",
+            "a whole number default seeds without trailing noise"
+        );
+        assert_eq!(seed_text(&number_parameter(Some(json!(-3.5)))), "-3.5");
+    }
+
+    /// A declared number parameter: the kind the crop module's angle and rectangle use.
+    fn number_parameter(default: Option<Value>) -> ParameterDescriptor {
+        ParameterDescriptor {
+            name: "angle".into(),
+            kind: ParameterKind::Number {
+                min: -45.0,
+                max: 45.0,
+            },
+            required: true,
+            default,
+            unit: Some("deg".into()),
+            notes: "test".into(),
+        }
     }
 
     #[test]
@@ -2303,6 +2361,21 @@ mod tests {
         for text in ["255,0", "256,0,0", "255,0,0,0", "a,b,c", ""] {
             let message = parse_field(color, text).expect_err(text);
             assert!(message.contains("0..=255"), "{text}: {message}");
+        }
+        let angle = number_parameter(None);
+        for (text, expected) in [
+            (" -3.5 ", json!(-3.5)),
+            ("0", json!(0.0)),
+            ("45", json!(45.0)),
+        ] {
+            assert_eq!(parse_field(&angle, text).unwrap(), expected, "{text}");
+        }
+        for text in ["", "45.1", "-45.1", "three", "1e400", "nan", "inf"] {
+            let message = parse_field(&angle, text).expect_err(text);
+            assert_eq!(
+                message, "angle must be a number from -45 to 45",
+                "{text}: {message}"
+            );
         }
         let choice = modules
             .iter()
