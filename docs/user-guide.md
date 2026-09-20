@@ -26,7 +26,7 @@ The tool panel is generated from the registered tool modules: each module declar
 
 Pixel proof accepts integer x/y coordinates and RGB values from 0 to 255. Coordinates are content coordinates: the photograph after EXIF orientation, with a top-left origin, x right and y down, regardless of any crop or rotation applied afterwards. Clicking the photo at Fit or any zoom fills X and Y with the content pixel shown under the pointer without committing anything, so a click in the corner of a cropped view names the pixel of the photograph that is drawn there. Changing the crop later never moves an edit; it only changes what is visible. Apply pixel creates one layer and one attributed history action when the resulting pixel changes. Invalid, out-of-bounds and same-value requests add nothing.
 
-Exact transforms are Rotate left, Rotate right, Mirror horizontal and Flip vertical. Quarter-turns swap dimensions. Pixel edits always sit before the transforms and crop, so they move with the image.
+Exact transforms are Rotate left, Rotate right, Mirror horizontal and Flip vertical. Quarter-turns swap dimensions. Repeated transforms fold into one orientation layer while it is the last layer of the stack, so four Rotate right actions leave one neutral layer and four history actions to undo through; a transform made after a crop starts a new orientation layer so the crop is carried with it. Pixel edits always sit before the transforms and crop, so they move with the image.
 
 Fit shows the whole image. Enter a percentage from 10 to 1600 and choose Set, or choose 100%. On a high-DPI display, 100% maps one source pixel to one physical framebuffer pixel. Both scroll axes pan content larger than the viewport.
 

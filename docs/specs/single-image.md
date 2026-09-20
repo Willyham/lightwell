@@ -8,7 +8,7 @@ Fit, an editable zoom percentage, 100% and pan are session operations available 
 
 ## Geometry contract
 
-EXIF orientation is applied once before layer evaluation. Quarter-turns and reflections are exact integer mappings. The crop layer (effect `lightwell.geometry.crop`, format 1, geometry stage) combines fine straightening and crop with explicit input and output geometry; transforms before or after it keep their sequence. A stack holds at most one crop layer; editing it keeps its identity. Pixel-stage layers are always before the crop, so a crop change never moves or invalidates them.
+EXIF orientation is applied once before layer evaluation. Quarter-turns and reflections are exact integer mappings held in an orientation layer ([history spec](edit-history.md#exact-transforms)). The crop layer (effect `lightwell.geometry.crop`, format 1, geometry stage) combines fine straightening and crop with explicit input and output geometry; transforms before or after it keep their sequence. A stack holds at most one crop layer; editing it keeps its identity. Pixel-stage layers are always before the crop, so a crop change never moves or invalidates them.
 
 ### Rotated box and payload
 

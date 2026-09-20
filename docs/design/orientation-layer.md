@@ -1,6 +1,6 @@
 # Orientation layer: repeated exact transforms collapse into one layer
 
-Status: accepted by the owner on 2026-09-20 for immediate implementation; the task plan is [orientation layer](../../tasks/implementation-orientation-layer.json). Nothing here exists until that plan completes.
+Status: implemented and verified on the M4 Mac. The contract is in the [history spec](../specs/edit-history.md#exact-transforms); this document records the reasoning.
 
 ## Problem
 

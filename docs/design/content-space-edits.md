@@ -1,6 +1,6 @@
 # Content-space edits: pixel tools before the geometry tail
 
-Status: design accepted by the owner on 2026-09-20 for immediate implementation; the task plan is [content-space edits](../../tasks/implementation-content-space-edits.json). The proposed query method in this document does not exist until that plan completes.
+Status: implemented and verified on the M4 Mac. The contracts are in the [history spec](../specs/edit-history.md), the [crop spec](../specs/single-image.md) and the [module contract](modules-and-api.md); this document records the reasoning.
 
 ## Problem
 
@@ -27,7 +27,7 @@ The invariant that a layer's coordinates are its input stage is unchanged. Placi
 
 The desktop's point pick currently reports output-stage coordinates of the rendered raster. It must instead report content coordinates: map the output pixel back through the geometry tail. Exact geometry unmaps by integer inverse; a rotated crop resample maps the output pixel center to fractional input coordinates, which round to the nearest content pixel; the picked point is refused when it lands outside the content stage.
 
-The mapping lives in the core and is exposed as a query so API callers can do what the canvas does. Proposed method: `render.locate {asset_id, entry_id?, x, y}` returning `{content_x, content_y}` or a `validation` error for a point outside the stage. It never commits. The GUI pick and the API method share the one implementation.
+The mapping lives in the core and is exposed as a query so API callers can do what the canvas does. The method is `render.locate {asset_id, entry_id?, x, y}`, returning `{content_x, content_y, width, height}` or a `validation` error for a point outside the stage. It never commits. The GUI pick and the API method share the one implementation.
 
 ### What stays observable
 
@@ -40,7 +40,7 @@ Crop-last does not cost more here. A crop at angle zero composes into the exact 
 ## Consequences for other designs
 
 - The Basic proposal states that its layer "stays at its saved position among pixel and geometry effects" and is never hoisted ahead of a crop. Under this decision a color-stage layer also belongs before the geometry tail, since it is pointwise and its coordinates are not geometry-dependent. That proposal is updated to say so when it is implemented; nothing in it is implemented here.
-- Collapsing repeated exact transforms into one orientation layer is a separate proposal and is not required by this change.
+- Repeated exact transforms collapse into one [orientation layer](orientation-layer.md); that layer is part of the geometry tail like any other geometry layer.
 
 ## Acceptance
 
