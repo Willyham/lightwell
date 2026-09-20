@@ -15,10 +15,10 @@ use iced::{
 use iced_runtime::image as image_memory;
 use lightwell_core::{
     ActionDescriptor, ApiRequest, AssetId, Availability, CanvasInteraction, ClientId,
-    ClientSession, Control, CropPayload, CropStage, EditorState, EffectStage, EntryId, ErrorKind,
-    EventsResult, HistoryEntry, HistoryPage, HistorySelection, LayerId, Lineage, LocalServer,
-    MAX_ANGLE, MIN_ANGLE, ModuleDescriptor, Mutation, OwnerHandle, ParameterDescriptor,
-    ParameterKind, PreviewJob, PreviewQueue, Version, Zoom,
+    ClientSession, ContentPoint, Control, CropPayload, CropStage, EditorState, EffectStage,
+    EntryId, ErrorKind, EventsResult, HistoryEntry, HistoryPage, HistorySelection, LayerId,
+    Lineage, LocalServer, MAX_ANGLE, MIN_ANGLE, ModuleDescriptor, Mutation, OwnerHandle,
+    ParameterDescriptor, ParameterKind, PreviewJob, PreviewQueue, Version, Zoom,
 };
 use serde_json::{Map, Value, json};
 use std::{
@@ -302,12 +302,22 @@ pub(crate) enum Message {
         action: String,
         preset: Map<String, Value>,
     },
-    /// The last pointer position over the photo, already mapped to image pixels.
+    /// The last pointer position over the photo, already mapped to the displayed raster's pixels.
+    /// That is the view pixel; the content pixel behind it is asked for only when a pick happens.
     PointerMoved(Option<(u32, u32)>),
-    /// A canvas pick fills the declared coordinate fields; it never commits.
+    /// A canvas pick asks the core where that view pixel lands in the content stage; it never
+    /// commits and it fills nothing until the answer arrives.
     PointPicked {
         x: u32,
         y: u32,
+    },
+    /// The content pixel one picked view pixel shows, as the core's mapping answered it. The entry
+    /// it was located in travels with it so an answer for a stack that has since been replaced is
+    /// dropped instead of filling the fields with a coordinate from another image.
+    PointLocated {
+        entry: EntryId,
+        view: (u32, u32),
+        result: Result<ContentPoint, String>,
     },
     FocusNext,
     FocusPrevious,
@@ -434,7 +444,8 @@ struct Editor {
     modules_ready: bool,
     /// The text typed into each generated field, by (action id, parameter name).
     fields: Fields,
-    /// The last pointer position over the photo in image pixels; a pick commits nothing.
+    /// The last pointer position over the photo in the displayed raster's pixels. Hovering asks the
+    /// core nothing; only a pick is mapped to the content stage, and it commits nothing either.
     pointer: Option<(u32, u32)>,
     zoom: String,
     version_name: String,
@@ -1378,6 +1389,36 @@ impl Editor {
             }
             Message::PointerMoved(point) => self.pointer = point,
             Message::PointPicked { x, y } => {
+                // The widget hands over a pixel of the raster on screen. Which content pixel that
+                // is belongs to the core, so the pick leaves here as a read and fills nothing yet.
+                if point_pick(&self.modules).is_none() {
+                    return Task::none();
+                }
+                let Some(state) = &self.state else {
+                    return Task::none();
+                };
+                let entry = self
+                    .display_entry
+                    .clone()
+                    .unwrap_or_else(|| state.current_entry.id.clone());
+                return locate_task(
+                    self.owner.clone(),
+                    self.client,
+                    state.asset.id.clone(),
+                    entry,
+                    x,
+                    y,
+                );
+            }
+            Message::PointLocated {
+                entry,
+                view: (view_x, view_y),
+                result,
+            } => {
+                if self.displayed_entry() != Some(entry) {
+                    // The canvas has moved to another stack; this answer describes the old one.
+                    return Task::none();
+                }
                 let Some((action, x_parameter, y_parameter)) = point_pick(&self.modules) else {
                     return Task::none();
                 };
@@ -1386,10 +1427,28 @@ impl Editor {
                     x_parameter.to_owned(),
                     y_parameter.to_owned(),
                 );
-                self.fields.set(&action, &x_parameter, x.to_string());
-                self.fields.set(&action, &y_parameter, y.to_string());
-                self.event("canvas_pick", json!({"action":action,"x":x,"y":y}));
-                self.status = format!("Picked ({x}, {y}) into {action}");
+                match result {
+                    Ok(point) => {
+                        let (x, y) = (point.content_x, point.content_y);
+                        self.fields.set(&action, &x_parameter, x.to_string());
+                        self.fields.set(&action, &y_parameter, y.to_string());
+                        self.event(
+                            "canvas_pick",
+                            json!({"action":action,"view_x":view_x,"view_y":view_y,"x":x,"y":y}),
+                        );
+                        self.status = format!(
+                            "Picked ({x}, {y}) from view ({view_x}, {view_y}) into {action}"
+                        );
+                    }
+                    Err(error) => {
+                        // Outside the content stage: say so and leave the fields as they were.
+                        self.event(
+                            "canvas_pick",
+                            json!({"action":action,"view_x":view_x,"view_y":view_y,"error":error}),
+                        );
+                        self.status = error;
+                    }
+                }
             }
             Message::FocusNext => return operation::focus_next(),
             Message::FocusPrevious => return operation::focus_previous(),
@@ -1668,6 +1727,16 @@ impl Editor {
     /// request is in flight.
     fn editable(&self) -> bool {
         self.state.is_some() && self.session.preview.can_edit() && !self.busy
+    }
+
+    /// The entry whose stack the canvas is showing: the uploaded preview's entry, or the current
+    /// one before the first preview has arrived. A pick is answered against exactly this stack.
+    fn displayed_entry(&self) -> Option<EntryId> {
+        self.display_entry.clone().or_else(|| {
+            self.state
+                .as_ref()
+                .map(|state| state.current_entry.id.clone())
+        })
     }
 
     // ---- crop draft ----------------------------------------------------------------------------
@@ -2316,7 +2385,8 @@ impl Editor {
             .align_y(iced::Alignment::Center);
 
         // A pick is only meaningful while the current state can be edited, and only when a module
-        // declares one; the adapter maps a click to image pixels and fills that module's fields.
+        // declares one. The widget's whole share of the work is turning the reported point into a
+        // pixel of the raster on screen; the core maps that to the content stage.
         let picking = editable && point_pick(&self.modules).is_some();
         let pointer = self.pointer;
         // While a draft has its own input stage on the GPU the crop frame replaces the plain image;
@@ -3495,6 +3565,37 @@ fn session_task(
     )
 }
 
+/// Where one picked view pixel lands in the content stage. This is `render.locate`, the same method
+/// an API client calls, so the canvas and the API share one mapping and the desktop holds none of
+/// it. It reads only, costs `O(layers)` in the core and rasterizes nothing, so it runs off the
+/// update loop like every other owner call and no pick blocks the pointer.
+fn locate_task(
+    owner: OwnerHandle,
+    client: ClientId,
+    asset_id: AssetId,
+    entry: EntryId,
+    x: u32,
+    y: u32,
+) -> Task<Message> {
+    let picked = entry.clone();
+    Task::perform(
+        async move {
+            let (located, _) = call(
+                &owner,
+                client,
+                "render.locate",
+                json!({"asset_id":asset_id,"entry_id":entry,"x":x,"y":y}),
+            )?;
+            parse::<ContentPoint>(located)
+        },
+        move |result| Message::PointLocated {
+            entry: picked.clone(),
+            view: (x, y),
+            result,
+        },
+    )
+}
+
 fn pan_task(owner: OwnerHandle, client: ClientId, x: f32, y: f32) -> Task<Message> {
     Task::perform(
         async move {
@@ -4103,23 +4204,90 @@ mod tests {
         );
     }
 
-    #[test]
-    fn a_canvas_pick_fills_the_declared_coordinate_fields_without_committing() {
-        let (mut editor, catalog) = boot();
+    /// An editor with the registered modules discovered and one empty-stack asset open, which is
+    /// what a canvas pick needs: a declared pick action, a stack to locate in and a displayed entry.
+    fn picking() -> (Editor, PathBuf, EntryId) {
+        let (mut editor, catalog, _, entry_id) = opened(Vec::new(), 4);
         let _ = editor.update(Message::ModulesLoaded(Ok(descriptors())));
         assert!(editor.modules_ready);
+        assert_eq!(editor.displayed_entry(), Some(entry_id.clone()));
+        (editor, catalog, entry_id)
+    }
+
+    /// The names the pick action declares for its coordinate fields.
+    fn pick_fields(editor: &Editor) -> (String, String, String) {
         let (action, x, y) = point_pick(&editor.modules).expect("a canvas pick");
-        let (action, x, y) = (action.to_owned(), x.to_owned(), y.to_owned());
+        (action.to_owned(), x.to_owned(), y.to_owned())
+    }
+
+    /// Attach a real diagnostics log so the evidence records a pick writes can be read back.
+    fn attach_log(editor: &mut Editor) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "lightwell-pick-{}-{}.jsonl",
+            std::process::id(),
+            REQUEST_NUMBER.fetch_add(1, Ordering::Relaxed)
+        ));
+        editor.diagnostics = Some(Diagnostics::start(&path).expect("a fresh log"));
+        path
+    }
+
+    /// Close the attached log and return the records the harness would read.
+    fn logged(editor: &mut Editor, path: &PathBuf) -> Vec<Value> {
+        assert!(
+            editor.diagnostics.take().expect("an attached log").finish(),
+            "the log flushed"
+        );
+        let text = std::fs::read_to_string(path).expect("the log file");
+        std::fs::remove_file(path).expect("the log is removed");
+        text.lines()
+            .map(|line| serde_json::from_str(line).expect("a JSON record"))
+            .collect()
+    }
+
+    fn pick_events(records: &[Value]) -> Vec<&Value> {
+        records
+            .iter()
+            .filter(|record| record["event"] == json!("canvas_pick"))
+            .map(|record| &record["detail"])
+            .collect()
+    }
+
+    #[test]
+    fn a_canvas_pick_fills_the_located_content_coordinate_without_committing() {
+        let (mut editor, catalog, entry_id) = picking();
+        let (action, x, y) = pick_fields(&editor);
+        let log = attach_log(&mut editor);
         let _ = editor.update(Message::PointerMoved(Some((7, 9))));
         assert_eq!(editor.pointer, Some((7, 9)));
+        // The click itself fills nothing: which content pixel it is is the core's answer.
         let _ = editor.update(Message::PointPicked { x: 7, y: 9 });
-        assert_eq!(editor.fields.get(&action, &x), Some("7"));
-        assert_eq!(editor.fields.get(&action, &y), Some("9"));
-        assert!(
-            editor.state.is_none(),
-            "a pick opens no asset and commits nothing"
+        assert_eq!(editor.fields.get(&action, &x), Some("0"));
+        assert_eq!(editor.fields.get(&action, &y), Some("0"));
+        let _ = editor.update(Message::PointLocated {
+            entry: entry_id,
+            view: (7, 9),
+            result: Ok(ContentPoint {
+                content_x: 100,
+                content_y: 42,
+                width: 400,
+                height: 300,
+            }),
+        });
+        assert_eq!(editor.fields.get(&action, &x), Some("100"));
+        assert_eq!(editor.fields.get(&action, &y), Some("42"));
+        assert_eq!(
+            editor.status,
+            format!("Picked (100, 42) from view (7, 9) into {action}")
         );
-        assert_eq!(editor.api_sequence, 0);
+        // The evidence carries both pixels, so a capture can be read against the view and the stack.
+        assert_eq!(
+            pick_events(&logged(&mut editor, &log)),
+            vec![&json!({"action":action,"view_x":7,"view_y":9,"x":100,"y":42})]
+        );
+        // A pick commits nothing: the open stack and its revision are untouched.
+        let state = editor.state.as_ref().expect("the open asset");
+        assert_eq!(state.revision, 4);
+        assert!(state.current_entry.snapshot.recipe.layers.is_empty());
         let _ = editor.update(Message::ControlChanged {
             action: action.clone(),
             parameter: x.clone(),
@@ -4133,7 +4301,60 @@ mod tests {
             snapshot["modules"].as_array().map(Vec::len),
             Some(editor.modules.len())
         );
-        assert!(!editor.editable(), "nothing is open");
+        finish(editor, catalog);
+    }
+
+    #[test]
+    fn a_located_point_for_another_entry_is_dropped() {
+        let (mut editor, catalog, _) = picking();
+        let (action, x, y) = pick_fields(&editor);
+        let log = attach_log(&mut editor);
+        let before = editor.status.clone();
+        // The canvas moved to another stack while the mapping was in flight.
+        let _ = editor.update(Message::PointLocated {
+            entry: EntryId::new(),
+            view: (7, 9),
+            result: Ok(ContentPoint {
+                content_x: 100,
+                content_y: 42,
+                width: 400,
+                height: 300,
+            }),
+        });
+        assert_eq!(editor.fields.get(&action, &x), Some("0"));
+        assert_eq!(editor.fields.get(&action, &y), Some("0"));
+        assert_eq!(editor.status, before);
+        assert!(pick_events(&logged(&mut editor, &log)).is_empty());
+        finish(editor, catalog);
+    }
+
+    #[test]
+    fn a_point_outside_the_content_stage_reports_and_fills_nothing() {
+        let (mut editor, catalog, entry_id) = picking();
+        let (action, x, y) = pick_fields(&editor);
+        let _ = editor.update(Message::ControlChanged {
+            action: action.clone(),
+            parameter: x.clone(),
+            text: "5".into(),
+        });
+        let log = attach_log(&mut editor);
+        let refusal = "validation: point (7, 9) is outside the 4x3 rendered image";
+        let _ = editor.update(Message::PointLocated {
+            entry: entry_id,
+            view: (7, 9),
+            result: Err(refusal.into()),
+        });
+        assert_eq!(
+            editor.fields.get(&action, &x),
+            Some("5"),
+            "nothing is filled"
+        );
+        assert_eq!(editor.fields.get(&action, &y), Some("0"));
+        assert_eq!(editor.status, refusal);
+        assert_eq!(
+            pick_events(&logged(&mut editor, &log)),
+            vec![&json!({"action":action,"view_x":7,"view_y":9,"error":refusal})]
+        );
         finish(editor, catalog);
     }
 
