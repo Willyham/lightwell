@@ -10,6 +10,12 @@ pub enum ErrorKind {
     ResourceLimit,
     Render,
     Diagnostics,
+    Validation,
+    Conflict,
+    Catalog,
+    Incompatible,
+    SourceUnavailable,
+    Protocol,
     Internal,
 }
 impl ErrorKind {
@@ -24,6 +30,12 @@ impl ErrorKind {
             Self::ResourceLimit => "resource-limit",
             Self::Render => "render",
             Self::Diagnostics => "diagnostics",
+            Self::Validation => "validation",
+            Self::Conflict => "conflict",
+            Self::Catalog => "catalog",
+            Self::Incompatible => "incompatible",
+            Self::SourceUnavailable => "source-unavailable",
+            Self::Protocol => "protocol",
             Self::Internal => "internal",
         }
     }

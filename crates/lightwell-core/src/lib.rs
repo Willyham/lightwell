@@ -1,8 +1,19 @@
 //! Read-only image decoding and bounded request scheduling, independent of the UI.
+mod api;
+mod editor;
 mod error;
+mod model;
+mod preview;
 mod profile;
+mod render;
+pub use api::*;
+pub use editor::*;
 pub use error::{Error, ErrorKind};
 use image::{ImageDecoder, ImageReader, Limits};
+pub use model::*;
+pub use preview::*;
+pub use render::{Raster, render};
+use sha2::{Digest, Sha256};
 use std::{
     fs::File,
     io::{Cursor, Read},
@@ -11,7 +22,7 @@ use std::{
 };
 
 /// Wall-clock stages on the image worker; excludes scheduling and GPU upload.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct DecodeTimings {
     pub read_ms: f64,
     pub validate_ms: f64,
@@ -29,6 +40,15 @@ pub struct Photo {
     pub preview_height: u32,
     pub decode_ms: f64,
     pub timings: DecodeTimings,
+    pub orientation: u8,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SourceImage {
+    pub width: u32,
+    pub height: u32,
+    pub rgba: Vec<u8>,
+    pub fingerprint: String,
     pub orientation: u8,
 }
 
@@ -150,6 +170,67 @@ fn decode(path: &Path) -> Result<Photo, String> {
     })
 }
 
+/// Decode the complete upright source once for non-destructive recipe evaluation.
+pub fn open_source(path: &Path) -> Result<SourceImage, Error> {
+    decode_source(path).map_err(Error::decoder)
+}
+
+fn decode_source(path: &Path) -> Result<SourceImage, String> {
+    if !path
+        .metadata()
+        .map_err(|e| format!("read-error: {}", e.kind()))?
+        .is_file()
+    {
+        return Err("unsupported-input: expected a regular file".into());
+    }
+    let mut bytes = Vec::new();
+    File::open(path)
+        .map_err(|e| format!("read-error: {}", e.kind()))?
+        .take(128 * 1024 * 1024 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| format!("read-error: {}", e.kind()))?;
+    if bytes.len() > 128 * 1024 * 1024 {
+        return Err("resource-limit: encoded bytes".into());
+    }
+    let fingerprint = format!("{:x}", Sha256::digest(&bytes));
+    let (w, h, components) = header(&bytes)?;
+    if w == 0 || h == 0 || w > 16384 || h > 16384 || u64::from(w) * u64::from(h) > 64_000_000 {
+        return Err("resource-limit: dimensions".into());
+    }
+    if ![1, 3].contains(&components) {
+        return Err("unsupported-color: only RGB/greyscale".into());
+    }
+    let mut reader = ImageReader::with_format(Cursor::new(bytes), image::ImageFormat::Jpeg);
+    let mut limits = Limits::default();
+    limits.max_image_width = Some(16384);
+    limits.max_image_height = Some(16384);
+    limits.max_alloc = Some(512 * 1024 * 1024);
+    reader.limits(limits);
+    let mut decoder = reader
+        .into_decoder()
+        .map_err(|_| "invalid-input: decoder header")?;
+    if let Some(profile) = decoder
+        .icc_profile()
+        .map_err(|_| "unsupported-profile: unreadable ICC")?
+    {
+        profile::check(&profile, components)?;
+    }
+    let orientation = decoder
+        .orientation()
+        .map_err(|_| "invalid-input: orientation")?;
+    let mut decoded =
+        image::DynamicImage::from_decoder(decoder).map_err(|_| "invalid-input: decode")?;
+    decoded.apply_orientation(orientation);
+    let rgba = decoded.into_rgba8();
+    Ok(SourceImage {
+        width: rgba.width(),
+        height: rgba.height(),
+        rgba: rgba.into_raw(),
+        fingerprint,
+        orientation: orientation.to_exif(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -194,6 +275,23 @@ mod tests {
                 }
             }
             assert_eq!(std::fs::read(path).unwrap(), original);
+        }
+    }
+    #[test]
+    fn pixel_edits_use_upright_coordinates_for_every_exif_orientation() {
+        for orientation in 1..=8 {
+            let path = fixture(&format!("orientation-{orientation}.jpg"));
+            let bytes = std::fs::read(&path).unwrap();
+            let source = open_source(&path).unwrap();
+            let snapshot = Snapshot::original(AssetId::new())
+                .append(Layer::pixel(source.width - 1, source.height - 1, [1, 2, 3]))
+                .unwrap();
+            let raster = render(&source, snapshot.id, &snapshot.recipe).unwrap();
+            assert_eq!(
+                raster.pixel(source.width - 1, source.height - 1),
+                Some([1, 2, 3, 255])
+            );
+            assert_eq!(std::fs::read(path).unwrap(), bytes);
         }
     }
     #[test]

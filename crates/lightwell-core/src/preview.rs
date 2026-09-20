@@ -1,0 +1,264 @@
+use crate::{EntryId, Error, HistoryEntry, Raster, SourceImage, render};
+use serde::{Deserialize, Serialize};
+use std::sync::mpsc::{Receiver, TryRecvError, sync_channel};
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum HistorySelection {
+    Current,
+    Entry(EntryId),
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "mode", rename_all = "kebab-case")]
+pub enum Zoom {
+    Fit,
+    Percent { value: f32 },
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ViewState {
+    pub zoom: Zoom,
+    pub pan_x: f32,
+    pub pan_y: f32,
+}
+
+impl Default for ViewState {
+    fn default() -> Self {
+        Self {
+            zoom: Zoom::Fit,
+            pan_x: 0.0,
+            pan_y: 0.0,
+        }
+    }
+}
+
+impl ViewState {
+    pub fn set_zoom(&mut self, zoom: Zoom) -> Result<(), crate::Error> {
+        if let Zoom::Percent { value } = zoom
+            && (!value.is_finite() || !(10.0..=1600.0).contains(&value))
+        {
+            return Err(crate::Error::new(
+                crate::ErrorKind::Validation,
+                "zoom percent must be finite and within 10..=1600",
+            ));
+        }
+        self.zoom = zoom;
+        Ok(())
+    }
+    pub fn pan_to(&mut self, x: f32, y: f32) -> Result<(), crate::Error> {
+        if !x.is_finite() || !y.is_finite() {
+            return Err(crate::Error::new(
+                crate::ErrorKind::Validation,
+                "pan coordinates must be finite",
+            ));
+        }
+        self.pan_x = x;
+        self.pan_y = y;
+        Ok(())
+    }
+    pub fn source_detail_required(&self) -> bool {
+        matches!(self.zoom, Zoom::Percent { value } if value >= 100.0)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PreviewSession {
+    pub selection: HistorySelection,
+    pub view: ViewState,
+    pub generation: u64,
+}
+
+impl Default for PreviewSession {
+    fn default() -> Self {
+        Self {
+            selection: HistorySelection::Current,
+            view: ViewState::default(),
+            generation: 0,
+        }
+    }
+}
+
+impl PreviewSession {
+    pub fn select(&mut self, selection: HistorySelection) -> u64 {
+        self.selection = selection;
+        self.generation = self.generation.saturating_add(1);
+        self.generation
+    }
+    pub fn return_current(&mut self) -> u64 {
+        self.select(HistorySelection::Current)
+    }
+    pub fn can_edit(&self) -> bool {
+        self.selection == HistorySelection::Current
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct PreviewJob {
+    pub source: SourceImage,
+    pub entry: HistoryEntry,
+}
+
+#[derive(Debug)]
+pub struct PreviewResult {
+    pub generation: u64,
+    pub entry_id: EntryId,
+    pub result: Result<Raster, Error>,
+}
+
+struct Active {
+    generation: u64,
+    receiver: Receiver<PreviewResult>,
+}
+
+#[derive(Default)]
+pub struct PreviewQueue {
+    generation: u64,
+    active: Option<Active>,
+    pending: Option<(u64, PreviewJob)>,
+}
+
+impl PreviewQueue {
+    pub fn request(&mut self, job: PreviewJob) -> u64 {
+        self.generation = self.generation.saturating_add(1);
+        let generation = self.generation;
+        if self.active.is_some() {
+            self.pending = Some((generation, job));
+        } else {
+            self.start(generation, job);
+        }
+        generation
+    }
+
+    pub fn cancel(&mut self) -> u64 {
+        self.generation = self.generation.saturating_add(1);
+        self.pending = None;
+        self.generation
+    }
+
+    fn start(&mut self, generation: u64, job: PreviewJob) {
+        let (sender, receiver) = sync_channel(1);
+        std::thread::spawn(move || {
+            let entry_id = job.entry.id.clone();
+            let result = render(
+                &job.source,
+                job.entry.snapshot.id,
+                &job.entry.snapshot.recipe,
+            );
+            let _ = sender.send(PreviewResult {
+                generation,
+                entry_id,
+                result,
+            });
+        });
+        self.active = Some(Active {
+            generation,
+            receiver,
+        });
+    }
+
+    pub fn is_busy(&self) -> bool {
+        self.active.is_some() || self.pending.is_some()
+    }
+
+    pub fn poll(&mut self) -> Option<PreviewResult> {
+        let active = self.active.as_ref()?;
+        let result = match active.receiver.try_recv() {
+            Ok(result) => result,
+            Err(TryRecvError::Empty) => return None,
+            Err(TryRecvError::Disconnected) => {
+                self.active = None;
+                if let Some((generation, job)) = self.pending.take() {
+                    self.start(generation, job);
+                }
+                return None;
+            }
+        };
+        let was_current = active.generation == self.generation;
+        self.active = None;
+        if let Some((generation, job)) = self.pending.take() {
+            self.start(generation, job);
+        }
+        if was_current { Some(result) } else { None }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{AssetId, Layer, Snapshot};
+    use serde_json::json;
+    use std::time::{Duration, Instant};
+
+    fn entry(color: u8) -> PreviewJob {
+        let asset = AssetId::new();
+        let original = Snapshot::original(asset.clone());
+        let snapshot = original.append(Layer::pixel(0, 0, [color, 0, 0])).unwrap();
+        PreviewJob {
+            source: SourceImage {
+                width: 1,
+                height: 1,
+                rgba: vec![0, 0, 0, 255],
+                fingerprint: "test".into(),
+                orientation: 1,
+            },
+            entry: HistoryEntry {
+                id: EntryId::new(),
+                asset_id: asset,
+                sequence: u64::from(color),
+                action_id: "set-pixel".into(),
+                parameters: json!({}),
+                actor: "test".into(),
+                timestamp_ms: 0,
+                request_id: None,
+                base_revision: 0,
+                result_revision: 0,
+                snapshot,
+                undo_parent: None,
+                restore_target: None,
+            },
+        }
+    }
+
+    #[test]
+    fn newest_preview_wins_with_one_active_and_one_pending() {
+        let mut queue = PreviewQueue::default();
+        queue.request(entry(1));
+        queue.request(entry(2));
+        let wanted = queue.request(entry(3));
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            if let Some(result) = queue.poll() {
+                assert_eq!(result.generation, wanted);
+                assert_eq!(result.result.unwrap().pixel(0, 0), Some([3, 0, 0, 255]));
+                break;
+            }
+            assert!(Instant::now() < deadline);
+            std::thread::yield_now();
+        }
+    }
+
+    #[test]
+    fn history_selection_and_view_are_read_only_validated_session_state() {
+        let mut session = PreviewSession::default();
+        let entry = EntryId::new();
+        session.select(HistorySelection::Entry(entry.clone()));
+        assert!(!session.can_edit());
+        session
+            .view
+            .set_zoom(Zoom::Percent { value: 100.0 })
+            .unwrap();
+        assert!(session.view.source_detail_required());
+        assert!(
+            session
+                .view
+                .set_zoom(Zoom::Percent { value: f32::NAN })
+                .is_err()
+        );
+        session.return_current();
+        assert!(session.can_edit());
+        assert_eq!(session.selection, HistorySelection::Current);
+    }
+}
