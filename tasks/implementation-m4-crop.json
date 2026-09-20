@@ -1,14 +1,14 @@
 {
   "schema_version": "1.0",
   "plan_id": "m4-crop",
-  "title": "M4 — Lightroom-style crop module",
+  "title": "M4 \u2014 Lightroom-style crop module",
   "objective": "Deliver a crop/straighten module with familiar direct manipulation, semantic controls, live API parity and durable non-destructive history.",
   "context_summary": "Starts from the working M3 module host and existing saved recipes. The crop workflow follows docs/specs/single-image.md and the recorded interaction research; proprietary Adobe algorithm equivalence is not claimed.",
   "tasks": [
     {
       "id": "TASK-001",
       "description": "Specify and prove the crop module's geometry and interaction contract.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [],
       "extra_context": [],
       "context_links": [
@@ -34,7 +34,7 @@
       "test_strategy": {
         "approach": "mixed",
         "steps": [
-          "Work through off-center, near-boundary, portrait/landscape and ±45-degree cases with explicit expected geometry.",
+          "Work through off-center, near-boundary, portrait/landscape and \u00b145-degree cases with explicit expected geometry.",
           "Verify mixed pixel/transform/crop order and document independent reference methods; do not claim proprietary algorithm equivalence."
         ],
         "commands": [
@@ -48,7 +48,7 @@
     {
       "id": "TASK-002",
       "description": "Implement crop and straighten processing as module actions.",
-      "status": "pending",
+      "status": "in_progress",
       "dependencies": [
         "TASK-001"
       ],
@@ -178,7 +178,7 @@
       "test_strategy": {
         "approach": "mixed",
         "steps": [
-          "Run draft→agent edit→discard/reapply, restore while drafting, failed save and retry cases.",
+          "Run draft\u2192agent edit\u2192discard/reapply, restore while drafting, failed save and retry cases.",
           "Compare UI/API parameters, snapshot IDs, pixels and saved history before/after restart."
         ],
         "commands": [
