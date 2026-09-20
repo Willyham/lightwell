@@ -1,6 +1,6 @@
 # Lightwell v0 project plan
 
-Status: **S0 accepted; history-first editor planning complete, implementation on hold**. The owner accepted S0 on 2026-09-20 using native M4 and earlier automated portable evidence. Fresh hosted verification and deferred Windows/Linux desktop and license reviews remain unfinished follow-ups. See [working commands](engineering/scaffold-commands.md).
+Status: **S0 accepted; M1 history and M2 transforms implemented and locally verified; M3/M4 planned**. The owner accepted S0 on 2026-09-20 using native M4 and earlier automated portable evidence. M1/M2 have exact-buffer, persistence, API and native M4 evidence. Fresh hosted verification and deferred Windows/Linux desktop, accessibility and license reviews remain unfinished follow-ups. See [working commands](engineering/scaffold-commands.md) and [M1/M2 results](engineering/m1-m2-results.md).
 
 ## Next four milestones
 
@@ -8,14 +8,14 @@ The milestone sequence proves non-destructive state and history before adding in
 
 | Milestone | Working result |
 | --- | --- |
-| M1 — history foundation | Referenced JPEG, ordered edit layers, a pixel-change proof, persistent action history, undo/redo, restore, preview/select history, catalog reopen, desktop UI and live external API |
-| M2 — transforms | Exact rotate-left/right, horizontal mirror and vertical flip through the same layers/history, UI and API |
+| M1 — history foundation | **Implemented.** Referenced JPEG, ordered edit layers, a pixel-change proof, persistent action history, undo/redo, restore, preview/select history, catalog reopen, desktop UI and live external API |
+| M2 — transforms | **Implemented.** Exact rotate-left/right, horizontal mirror and vertical flip through the same layers/history, UI and API |
 | M3 — tool modules | Shared module interface for action schemas, semantic controls, validation and processing; pixel and transform tools use it |
 | M4 — crop module | Lightroom-style crop and straighten interaction as a module, with aspect controls, Apply/Cancel and UI/API parity |
 
 Every milestone begins with the working result of the previous one and ends with a native M4 demonstration plus proportional automated correctness/recovery checks. Each task file starts at TASK-001 with local dependencies. Milestones are ordered here rather than coupled through IDs.
 
-The first implementation task builds the core layer/snapshot/history model. SQLite is the initial persistence route, following the existing local catalog direction. Original files stay read-only. A history entry saves the complete layer stack produced by an action; preview reads a saved snapshot; restore appends an action retaining all later history.
+The implemented core uses SQLite for atomic layer/snapshot/history persistence. Original files stay read-only. A history entry saves the complete layer stack produced by an action; preview reads a saved snapshot; restore appends an action retaining all later history.
 
 ## Editor follow-ups
 

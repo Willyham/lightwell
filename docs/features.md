@@ -1,6 +1,6 @@
 # Feature status
 
-As of 2026-09-20, S0 is owner-accepted and the Rust/Iced viewer opens supported JPEGs at Fit on native M4 Metal. The editor milestones below are **planned and on hold**.
+As of 2026-09-20, S0 is owner-accepted and M1/M2 are implemented and locally verified on native M4. M3 modules, M4 crop and the editor follow-ups remain planned.
 
 | Capability | Status | Scope |
 | --- | --- | --- |
@@ -9,15 +9,15 @@ As of 2026-09-20, S0 is owner-accepted and the Rust/Iced viewer opens supported 
 | Native macOS package, rendered smoke and baseline measurements | Verified locally; S0 accepted | [hardening evidence](engineering/s0-hardening-results.md) |
 | Windows/Linux automated builds/packages | Earlier hosted scaffold verified; refresh remains open | Native desktop checks deferred |
 | License and dependency policy | GPL applied; policy checks implemented | Manual license/native/asset review deferred; timed maintenance exceptions remain |
-| Stable referenced assets and local catalog | Planned M1 | SQLite persistence, fingerprints, explicit missing/changed-source state |
-| Ordered non-destructive edit layers | Planned M1 | Stable layer IDs and immutable complete recipe snapshots |
-| Test pixel-change tool | Planned M1 | Integer x/y and sRGB color; exact lossless-buffer proof |
-| Persistent action history, undo/redo and append-only Restore | Planned M1 | Every real committed action; retained historical branches |
-| History list/inspect/select/preview UI and API | Planned M1 | Read-only preview, current/selected markers, Return to current |
-| Save/reopen layers, history and navigation state | Planned M1 | Atomic catalog writes and failure recovery |
-| Fit, numeric zoom, 100% source detail and pan | Planned M1 | Needed to inspect the test pixel; independent session state |
-| Live external JSON API and one-owner IPC | Planned M1 | Same service/history while GUI is open |
-| Rotate left/right, Mirror horizontal, Flip vertical | Planned M2 | Exact discrete mappings and shared history |
+| Stable referenced assets and local catalog | Implemented M1 | SQLite persistence, fingerprints, explicit missing/changed-source errors |
+| Ordered non-destructive edit layers | Implemented M1 | Stable layer IDs and immutable complete recipe snapshots |
+| Test pixel-change tool | Implemented M1 | Integer x/y and sRGB color; exact lossless-buffer proof |
+| Persistent action history, undo/redo and append-only Restore | Implemented M1 | Every real committed action; retained historical branches |
+| History list/inspect/select/preview UI and API | Implemented M1 | Read-only preview, current/selected markers, Return to current |
+| Save/reopen layers, history and navigation state | Implemented M1 | Atomic catalog writes and failure recovery |
+| Fit, numeric zoom, 100% source detail and pan | Implemented M1 | Physical-pixel 100%, independent per-client session state |
+| Live external JSON API and one-owner IPC | Implemented M1 | Same service/history while GUI is open |
+| Rotate left/right, Mirror horizontal, Flip vertical | Implemented M2 | Exact discrete mappings and shared history |
 | Declarative tool-module interface | Planned M3 | Action/API/control descriptions, validation and processing |
 | Pixel and transform tool modules | Planned M3 | Preserve previous effect identities, snapshots and pixels |
 | Lightroom-style crop/straighten module | Planned M4 | Free handles, ratios, angle/guide, Apply/Cancel and reset |

@@ -3,7 +3,7 @@
   "plan_id": "s0-implementation",
   "title": "Lightwell S0 implementation and retained follow-ups",
   "objective": "Maintain the accepted cross-platform JPEG-at-Fit skeleton, preserve its verified evidence, and complete the explicitly retained CI, packaging, platform, dependency-review and maintenance follow-ups without expanding into editor features.",
-  "context_summary": "Accepted S0 JPEG viewer with native M4 evidence and a verified portable build/package baseline. Fresh hosted verification of the closure snapshot, native Windows/Linux desktop checks and manual license reviews remain unfinished. Task IDs and dependencies are local to this file; editor implementation is on hold.",
+  "context_summary": "Accepted S0 JPEG viewer with native M4 evidence and a verified portable build/package baseline. Fresh hosted verification of the closure snapshot, native Windows/Linux desktop checks and manual license reviews remain unfinished. Task IDs and dependencies are local to this file; M1/M2 editor work is now implemented without changing S0's retained evidence-mode contract.",
   "tasks": [
     {
       "id": "TASK-001",

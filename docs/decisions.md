@@ -1,6 +1,6 @@
 # Product decisions
 
-S0 is accepted. Editor implementation is on hold. The delivery sequence is M1 history foundation, M2 transforms, M3 tool modules and M4 crop; export, Locate, MCP and complete editor verification follow. See the [project plan](plan.md) and [accepted editor behavior](design/m1-decisions.md).
+S0 is accepted. M1 history and M2 transforms are implemented and locally verified. The remaining delivery sequence is M3 tool modules and M4 crop; export, Locate, MCP and complete editor verification follow. See the [project plan](plan.md), [M1/M2 results](engineering/m1-m2-results.md) and [accepted editor behavior](design/m1-decisions.md).
 
 ## Product and platform
 
@@ -18,7 +18,7 @@ The [platform matrix](engineering/platforms.md) distinguishes target choices fro
 
 ## Implemented S0
 
-The accepted skeleton opens one supported JPEG at Fit with a dark shell, Open image action, loading/error feedback, automatic EXIF orientation and retention of the previous photo when replacement fails. Opening is transient: no catalog, edits, export or production agent API.
+The accepted S0 skeleton opens one supported JPEG at Fit with a dark shell, Open image action, loading/error feedback, automatic EXIF orientation and retention of the previous photo when replacement fails. Its deterministic evidence mode remains separate from the normal M1/M2 editor, which now owns a catalog and edit API. Export and MCP are still absent.
 
 The supported subset is 8-bit RGB/greyscale JPEG: untagged sRGB, supported standard tagged sRGB and explicit errors for unsupported/malformed profiles. Broad ICC conversion and professional monitor calibration are not established.
 
@@ -28,7 +28,7 @@ Rust/Iced is selected. Project development tooling uses Rust xtask for local and
 
 Original files remain read-only. Import references existing files, with stable asset IDs, verified fingerprints and changeable locators. SQLite is the initial local catalog direction. Folder relinking, sidecars, catalog portability, backups and sync need separately scoped workflow decisions.
 
-M1 establishes ordered non-destructive edit operations (“layers”), immutable complete recipe snapshots and durable attributed history. The pixel-change proof exercises the model before more complex tools. General bitmap compositing, blend modes and arbitrary layer reordering are not selected.
+M1 implements ordered non-destructive edit operations (“layers”), immutable complete recipe snapshots and durable attributed history. The pixel-change proof exercises the model before more complex tools. General bitmap compositing, blend modes and arbitrary layer reordering are not selected.
 
 Every committed image action enters the shared history. Undo/redo navigates saved entries without appending oscillating navigation rows. Preview/select is read-only. Restore appends an action and preserves all later entries; a new edit clears shortcut redo availability but retains historical access. Committed state survives restart; drafts do not.
 
@@ -40,7 +40,7 @@ Every application operation must be programmable, including all bundled/external
 
 The core owns recipe transactions, shared history/undo, invariants and bounded services. Tool modules own their parameters, validation, controls and algorithms through those APIs. The same command service handles human and agent actions.
 
-Live JSON/IPC access is part of M1 while the GUI is open. Agents and the GUI share revisions/history; active human drafts survive external commits and require explicit conflict resolution. MCP is an editor follow-up using the same operations.
+Live JSON/IPC access is implemented in M1 while the GUI is open. Agents and the GUI share revisions/history. Active human draft conflict behavior arrives with M4 because M1/M2 have no drafts. MCP is an editor follow-up using the same operations.
 
 M3 introduces linked tool modules. Cheap registration and lazy resource initialization are the engineering direction, not a measured performance claim. Measure before splitting basic functionality into separately loaded binaries. Actual external module loading remains required later; missing or disabled providers must never silently erase edits or produce incomplete exports.
 

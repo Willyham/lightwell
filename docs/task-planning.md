@@ -1,6 +1,6 @@
 # Task planning and milestone order
 
-Task plans use independent IDs and follow the history-first delivery sequence. S0 is accepted; editor implementation remains on hold.
+Task plans use independent IDs and follow the history-first delivery sequence. S0 is accepted; M1 and M2 are completed and locally verified, while M3 and later work remain pending.
 
 ## Local plans
 
@@ -8,15 +8,15 @@ Each active JSON plan listed in [the index](../tasks/README.md) starts with `TAS
 
 A plan contains its own behavior, context, acceptance and tests. Link Markdown specifications or code for context, and describe required existing capabilities by name. Do not link another task plan, place its ID in prose, or add a checker dependency on its completion. Product decisions become authoritative through the recorded decision/specification, not a cross-file ID lookup.
 
-Milestone sequencing belongs in the [history-first roadmap](design/history-first-roadmap.md). M1 establishes a usable history/pixel editor; M2 adds transforms; M3 introduces tool modules; M4 delivers the crop module. Each later plan begins from the named working capability. Local `ready` status is not authorization to begin a milestone or resume paused implementation.
+Milestone sequencing belongs in the [history-first roadmap](design/history-first-roadmap.md). M1 establishes a usable history/pixel editor; M2 adds transforms; M3 introduces tool modules; M4 delivers the crop module. Each later plan begins from the named working capability.
 
 ## Current plans
 
 | File | Tasks | Waves | Starting state |
 | --- | --- | --- | --- |
 | [S0](../tasks/implementation-s0.json) | 37 | 13 | Accepted milestone; follow-ups remain unfinished |
-| [M1 history](../tasks/implementation-m1-history.json) | 9 | 7 | TASK-001 ready; implementation on hold |
-| [M2 transforms](../tasks/implementation-m2-transforms.json) | 5 | 5 | Pending activation after the history foundation |
+| [M1 history](../tasks/implementation-m1-history.json) | 9 | 7 | Completed and locally verified |
+| [M2 transforms](../tasks/implementation-m2-transforms.json) | 5 | 5 | Completed and locally verified |
 | [M3 modules](../tasks/implementation-m3-modules.json) | 6 | 5 | Pending activation after transforms |
 | [M4 crop](../tasks/implementation-m4-crop.json) | 6 | 6 | Pending activation after modules |
 | [Editor follow-ups](../tasks/implementation-editor-followups.json) | 6 | 4 | Planned export, Locate, MCP and verification |

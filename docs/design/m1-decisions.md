@@ -1,6 +1,6 @@
 # Accepted editor behavior
 
-These accepted behaviors are planned across the [four editor milestones](history-first-roadmap.md) and editor follow-ups. Editor implementation is on hold.
+These accepted behaviors span the [four editor milestones](history-first-roadmap.md) and editor follow-ups. M1 history and M2 transforms are implemented; M3 modules, M4 crop and the retained follow-ups remain planned.
 
 | Area | Accepted behavior | Current scope |
 | --- | --- | --- |

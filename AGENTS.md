@@ -4,7 +4,7 @@
 
 - Build a non-destructive photo editor for macOS, Windows, and Linux, serving professional and prosumer collections.
 - Target the owner's M4 MacBook Pro first. Keep Windows/Linux portability visible; distinguish VM functional checks from native GPU performance evidence.
-- The first end-to-end build is S0: a cross-platform skeleton that opens and displays a JPEG at Fit. No editing tools, catalog, export or production MCP are required in S0. Current owner override: S0 is accepted on recorded native M4 and earlier portable evidence; fresh hosted closure-snapshot verification and manual Windows/Linux desktop checks remain unfinished follow-ups. M1 adds the editor and is currently paused by owner instruction.
+- The first end-to-end build is S0: a cross-platform skeleton that opens and displays a JPEG at Fit. No editing tools, catalog, export or production MCP are required in S0. Current owner override: S0 is accepted on recorded native M4 and earlier portable evidence; fresh hosted closure-snapshot verification and manual Windows/Linux desktop checks remain unfinished follow-ups. M1 history and M2 transforms are implemented and locally verified; M3 modules and M4 crop remain paused until requested.
 - Prefer open-source-only project code and extensions. The owner selected GPL-3.0-or-later and the repository license is applied. Manual license reviews are deferred for now; selection does not imply an audit is complete.
 - Initial RAW compatibility targets are Nikon Z6 and Fujifilm X100VI. Benchmark established libraries before proposing a new decoder; custom work requires a documented support or performance gap.
 - Preserve original files. Keep edits as data and use a common command layer for UI and programmatic operations.

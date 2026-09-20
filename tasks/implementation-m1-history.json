@@ -3,15 +3,15 @@
   "plan_id": "m1-history",
   "title": "M1 — non-destructive history foundation",
   "objective": "Prove persistent edit layers and history end to end with a single-pixel tool, undo/redo, preview/restore, catalog reopen, desktop UI and a live external API.",
-  "context_summary": "All IDs and dependencies are local to this file. Milestone order is described by named outcomes in docs/design/history-first-roadmap.md; no task in another file is a prerequisite. Implementation is on hold by owner instruction. Build on the accepted JPEG viewer. The first task implements the layer/snapshot/history model; tool modules are introduced after the working history and transform editor.",
+  "context_summary": "M1 is implemented and locally verified on the native M4 host plus automated exact-buffer, persistence, recovery, subprocess and bounded-work evidence. All IDs and dependencies are local to this file. The working foundation is documented in docs/engineering/m1-m2-results.md. M3 tool-module work remains a later milestone.",
   "tasks": [
     {
       "id": "TASK-001",
       "description": "Implement the non-destructive layer, recipe snapshot and history model.",
-      "status": "ready",
+      "status": "completed",
       "dependencies": [],
       "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
+        "Implemented in crates/lightwell-core/src/model.rs with validated stable IDs, immutable recipes/snapshots and shared mutation results; covered by model and service tests."
       ],
       "context_links": [
         {
@@ -50,12 +50,12 @@
     {
       "id": "TASK-002",
       "description": "Render immutable snapshots and implement the test pixel-change operation.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "TASK-001"
       ],
       "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
+        "Implemented in crates/lightwell-core/src/render.rs and the full-resolution upright source decoder; exact synthetic and all-EXIF-orientation tests preserve source bytes."
       ],
       "context_links": [
         {
@@ -94,12 +94,12 @@
     {
       "id": "TASK-003",
       "description": "Persist referenced assets, layer snapshots and history atomically in a catalog.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "TASK-001"
       ],
       "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
+        "Implemented with pinned rusqlite 0.40.2 and bundled SQLite in crates/lightwell-core/src/editor.rs; tests cover reopen, aliases, incompatible/competing owners and injected transaction rollback."
       ],
       "context_links": [
         {
@@ -144,13 +144,13 @@
     {
       "id": "TASK-004",
       "description": "Implement shared commit, undo/redo, restore and bounded history queries.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "TASK-002",
         "TASK-003"
       ],
       "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
+        "Implemented in the shared EditorService with atomic request deduplication, revision checks, persisted undo/redo, append-only Restore and bounded pages; the complete journey and restore-parent behavior are tested."
       ],
       "context_links": [
         {
@@ -190,12 +190,12 @@
     {
       "id": "TASK-005",
       "description": "Add bounded historical previews and source-pixel viewport inspection.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "TASK-004"
       ],
       "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
+        "Implemented in crates/lightwell-core/src/preview.rs and the desktop adapter with one active/one replaceable pending render, generation filtering, Fit, numeric physical-pixel zoom and two-axis pan session state."
       ],
       "context_links": [
         {
@@ -240,12 +240,12 @@
     {
       "id": "TASK-006",
       "description": "Expose the history foundation through external JSON sessions and live owner IPC.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "TASK-004"
       ],
       "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
+        "Implemented in crates/lightwell-core/src/api.rs and the lightwell-json binary with schema discovery, bounded JSONL, authenticated loopback IPC, per-client sessions, event gaps/reconnect, headless EOF and subprocess coverage."
       ],
       "context_links": [
         {
@@ -284,12 +284,12 @@
     {
       "id": "TASK-007",
       "description": "Build the pixel-test controls and persistent history browser in the desktop.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "TASK-005"
       ],
       "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
+        "Implemented in crates/lightwell-app/src/editor_app.rs with pixel fields, semantic Apply, paginated attributed history, layer inspection, preview/Return/Restore, keyboard undo/redo, Fit/100%/numeric zoom and native error/loading state."
       ],
       "context_links": [
         {
@@ -334,13 +334,13 @@
     {
       "id": "TASK-008",
       "description": "Verify the complete persisted history journey through UI and live API.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "TASK-006",
         "TASK-007"
       ],
       "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
+        "Verified by cargo xtask check, cargo xtask editor-acceptance and the 2026-09-20 packaged native M4 UI/live-API journey recorded in docs/engineering/m1-m2-results.md."
       ],
       "context_links": [
         {
@@ -385,12 +385,12 @@
     {
       "id": "TASK-009",
       "description": "Package and document the accepted history foundation.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "TASK-008"
       ],
       "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
+        "Packaged and reopened on native M4; repeatable commands, API examples, measured release timings, recovery limits and deferred platform checks are published in docs/engineering/m1-m2-results.md and user/developer documentation."
       ],
       "context_links": [
         {

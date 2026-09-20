@@ -1,8 +1,8 @@
 # Lightwell
 
-A planned, open-source, non-destructive desktop photo editor for macOS, Windows, and Linux, targeting an M4 MacBook Pro first. Built around a small, fast core that people, programs, and agents can operate equally.
+A developing, open-source, non-destructive desktop photo editor for macOS, Windows, and Linux, targeting an M4 MacBook Pro first. Built around a small, fast core that people, programs, and agents can operate equally.
 
-**Current state: S0 is owner-accepted, and the maintained Rust/Iced scaffold builds and displays JPEGs at Fit on the M4 Mac.** Native Metal smoke checks cover empty, load and failed replacement states. An unsigned local macOS development package is available. Local hardening and an initial M4 baseline are verified. Fresh hosted closure-snapshot verification, manual Windows/Linux desktop checks and manual license reviews remain unfinished follow-ups. Editing features are not implemented. All milestones belong to v0.
+**Current state: S0 is owner-accepted; M1 history and M2 exact transforms are implemented and locally verified on the M4 Mac.** The Rust/Iced desktop now references JPEGs in a SQLite catalog, preserves ordered edit layers and immutable history, supports pixel proof edits, undo/redo/restore and historical previews, and exposes the same operations through JSONL and authenticated live loopback sessions. Rotate left/right, Mirror horizontal and Flip vertical are exact saved operations. Fresh hosted closure-snapshot verification, manual Windows/Linux desktop checks, native screen-reader verification and manual license reviews remain unfinished follow-ups. All milestones belong to v0.
 
 Run `cargo xtask develop`, or `cargo xtask check` for repository, formatting, lint and unit checks. See [working scaffold commands](docs/engineering/scaffold-commands.md) for setup, smoke evidence and packaging.
 
@@ -13,7 +13,7 @@ Run `cargo xtask develop`, or `cargo xtask check` for repository, formatting, li
 - [Architecture](docs/design/architecture.md): catalog, image engine, commands, and extension boundaries.
 - [First build: image-loading skeleton](docs/specs/bootstrap.md): cross-platform launch, Open image and Fit display, with no editing tools.
 - [Development and agent verification](docs/engineering/development.md): setup, linting, builds, logs, screenshots, smoke checks and packaging.
-- [History-first roadmap](docs/design/history-first-roadmap.md): M1 history/pixel editing, M2 transforms, M3 tool modules and M4 crop; implementation remains on hold.
+- [History-first roadmap](docs/design/history-first-roadmap.md): implemented M1 history/pixel editing and M2 transforms, followed by planned M3 tool modules and M4 crop.
 - [Editor specification](docs/specs/single-image.md): staged editing and retained export/recovery/agent follow-ups.
 - [Source recovery](docs/specs/source-recovery.md): referenced originals, stable identity, and verified recovery after files move.
 - [Performance plan](docs/specs/performance.md): workloads, provisional budgets, and measurement rules.
@@ -27,6 +27,6 @@ Read [AGENTS.md](AGENTS.md) before working in this repository. Substantial new f
 
 The owner prefers an open-source-only project and extension ecosystem. The owner has selected GPL-3.0-or-later. The repository license is applied; manual license/native/asset review remains deferred and incomplete. Initial RAW targets are Nikon Z6 and Fujifilm X100VI.
 
-Start with [contributor instructions](CONTRIBUTING.md) and the [native S0 verification](docs/engineering/s0-hardening-results.md). `cargo xtask check-repository` is available now.
+Start with [contributor instructions](CONTRIBUTING.md), the [native S0 verification](docs/engineering/s0-hardening-results.md) and the [M1/M2 evidence](docs/engineering/m1-m2-results.md). `cargo xtask check-repository` is available now.
 
 Project code is licensed under GNU GPL version 3 or (at your option) any later version: **GPL-3.0-or-later**. See [LICENSE](LICENSE). Third-party components retain their own licenses; the configured dependency review remains in progress.

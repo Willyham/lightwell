@@ -3,15 +3,15 @@
   "plan_id": "m2-transforms",
   "title": "M2 — basic image transforms",
   "objective": "Add exact rotations and horizontal/vertical reflection using the existing persistent layer/history service through UI and API.",
-  "context_summary": "All IDs and dependencies are local to this file. Milestone order is described by named outcomes in docs/design/history-first-roadmap.md; no task in another file is a prerequisite. Implementation is on hold by owner instruction. Begin after the saved-history foundation is demonstrated. The first task remains pending until this milestone is activated.",
+  "context_summary": "M2 is implemented on the working M1 history foundation and locally verified on the native M4 host plus automated exact-buffer, persistence, API and recovery evidence. All IDs and dependencies are local to this file. Exact mappings and evidence are documented in docs/engineering/m1-m2-results.md.",
   "tasks": [
     {
       "id": "TASK-001",
       "description": "Define exact rotation and reflection layer semantics.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [],
       "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
+        "Defined and tested in crates/lightwell-core/src/model.rs and render.rs: right maps (x,y) to (h-1-y,x), left to (y,w-1-x), horizontal mirror reverses x and vertical flip reverses y."
       ],
       "context_links": [
         {
@@ -44,12 +44,12 @@
     {
       "id": "TASK-002",
       "description": "Implement basic transforms through shared layer/history commands.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "TASK-001"
       ],
       "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
+        "Implemented as exact integer layer processors through EditorService transactions; asymmetric buffers, identities, pixel ordering, undo and reopen are tested without resampling."
       ],
       "context_links": [
         {
@@ -88,12 +88,12 @@
     {
       "id": "TASK-003",
       "description": "Expose rotation and reflection in the desktop and live API.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "TASK-002"
       ],
       "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
+        "Implemented with four unambiguous desktop controls and the edit.transform schema; native UI and a simultaneous external client shared one attributed history on 2026-09-20."
       ],
       "context_links": [
         {
@@ -132,12 +132,12 @@
     {
       "id": "TASK-004",
       "description": "Verify persistence, composition and failure recovery for transforms.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "TASK-003"
       ],
       "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
+        "Verified with exact synthetic mappings, mixed persistent stacks, revision/source/write failures, the automated 208-entry acceptance journey and correlated native dimensions/entry/snapshot/source identifiers."
       ],
       "context_links": [
         {
@@ -182,12 +182,12 @@
     {
       "id": "TASK-005",
       "description": "Publish the basic-transform milestone evidence and handoff.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "TASK-004"
       ],
       "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
+        "Published in docs/engineering/m1-m2-results.md, docs/user-guide.md and docs/engineering/scaffold-commands.md; crop and generalized modules remain planned M3/M4 work."
       ],
       "context_links": [
         {

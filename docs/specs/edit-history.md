@@ -1,6 +1,6 @@
 # M1 layers and edit history
 
-Status: **planned first editor milestone; not implemented**. This is the core foundation required before transforms, the tool-module interface and the crop module. See [the roadmap](../design/history-first-roadmap.md).
+Status: **M1 implemented and locally verified**. This is the working foundation used by M2 transforms and required before the planned tool-module and crop milestones. See [the roadmap](../design/history-first-roadmap.md) and [implementation evidence](../engineering/m1-m2-results.md).
 
 ## State model
 
@@ -42,7 +42,7 @@ The pixel editor has x/y and RGB controls, Apply, and optional pointer picking, 
 
 Draft conflicts become relevant for the crop module: Restore/undo/redo may not silently discard an active draft. Agent commits preserve drafts and mark conflict. Explicit discard/reapply resolves it against the current revision.
 
-## Acceptance
+## Verified acceptance
 
 1. Import → pixel A → pixel B. Verify exactly one layer/action per real change, ordered values and unchanged original bytes. Test same-pixel overrides and no-op/invalid requests.
 2. Select Original and every entry through UI and API. Compare complete stack and exact lossless pixel buffers. Preview must leave committed state and revision unchanged.
@@ -51,4 +51,4 @@ Draft conflicts become relevant for the crop module: Restore/undo/redo may not s
 5. Interrupt writes and imports; test malformed/incompatible catalogs, locked or unwritable storage, changed/missing originals and unsupported effect payloads. Preserve the last valid state.
 6. Browse a long history rapidly with bounded queries/jobs/memory. Correlate actual native M4 pixels, entry labels, source detail and render generation using screenshots/state/logs.
 
-M2 repeats these tests with transform stacks. M3 proves unchanged saved data through module integration. M4 adds crop drafts, geometry snapshots and conflict cases. The core foundation has its own acceptance before those later tools begin.
+M1's exact-buffer, persistence, recovery, live-client and native M4 journey passed on 2026-09-20. M2 repeated the relevant cases with transform stacks. M3 must prove unchanged saved data through module integration, and M4 adds crop drafts, geometry snapshots and conflict cases.

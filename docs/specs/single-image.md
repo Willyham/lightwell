@@ -1,12 +1,12 @@
 # One-image editor and crop-module contract
 
-Status: **planned**. The editor has four milestones: history foundation, transforms, tool modules and crop. Export, Locate and MCP are editor follow-ups. See [the current roadmap](../design/history-first-roadmap.md). Application implementation remains on hold.
+Status: **M1 history and M2 transforms implemented; M3 modules and M4 crop planned**. Export, Locate and MCP are editor follow-ups. See [the current roadmap](../design/history-first-roadmap.md) and [M1/M2 results](../engineering/m1-m2-results.md).
 
 ## Staged editor scope
 
-M1 establishes by-reference JPEG import into a local catalog, an ordered non-destructive layer stack, a pixel-change proof, persistent history/undo/redo/restore, historical previews and reopen. A focused UI and live external JSON API use the same service. The [history specification](edit-history.md) owns this first acceptance journey.
+M1 establishes by-reference JPEG import into a local catalog, an ordered non-destructive layer stack, a pixel-change proof, persistent history/undo/redo/restore, historical previews and reopen. A focused UI and live external JSON API use the same service. This milestone is implemented and verified; the [history specification](edit-history.md) owns its contract.
 
-M2 adds exact rotations and both reflection axes with history and persistence. M3 adds the tool interface, API/action schemas and semantic controls, migrating the pixel and transform tools. M4 implements the crop/straighten tool through that interface.
+M2's exact rotations and both reflection axes with history and persistence are implemented. M3 adds the tool interface, API/action schemas and semantic controls, migrating the pixel and transform tools. M4 implements the crop/straighten tool through that interface.
 
 The UI uses one workspace with compact collapsible panels, a central photo and visible history. Cmd/Ctrl+O imports; Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z undo/redo. Visible controls have keyboard access and predictable focus. No full grid or placeholder future tools are required.
 

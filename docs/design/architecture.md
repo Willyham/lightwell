@@ -1,6 +1,6 @@
 # Editor architecture
 
-Status: planned, following the owner's [history-first sequence](history-first-roadmap.md). The current implementation is the accepted S0 Rust/Iced JPEG viewer. Editor implementation remains on hold.
+Status: M1/M2 implemented, following the owner's [history-first sequence](history-first-roadmap.md). The Rust/Iced desktop now uses the working core/catalog/API boundaries below. M3 modules and M4 crop remain planned.
 
 ## Ownership and stages
 
@@ -23,7 +23,7 @@ Import references a supported JPEG and creates a stable asset plus Original. Pat
 
 An edit layer is an identified, typed operation with parameters and an explicit input/output stage contract. A recipe is the ordered stack of those layers. A history entry identifies a semantic action and stores its complete resulting immutable recipe. Adding a layer and selecting a history step are different operations. Updating a layer produces a new snapshot; it never mutates an old entry.
 
-M1 proves this with single-pixel replacement. M2 adds exact transformations; the order of operations is meaningful. A pixel set before a rotation travels with that image, while a pixel set after it addresses the rotated stage. M4 crop uses its own input-stage coordinates. Optimize processing only where equivalence preserves this order.
+M1 proves this with single-pixel replacement. M2 adds exact transformations; both are implemented and retain meaningful operation order. A pixel set before a rotation travels with that image, while a pixel set after it addresses the rotated stage. M4 crop will use its own input-stage coordinates. Optimize processing only where equivalence preserves this order.
 
 ## Persistence and recovery
 

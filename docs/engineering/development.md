@@ -1,10 +1,10 @@
 # Development, builds and agent verification
 
-Status: **maintained tooling implemented; S0 accepted with outstanding hosted/platform follow-ups**. See [contributing](../../CONTRIBUTING.md) and [scaffold commands](scaffold-commands.md) for working commands. The operation table below defines the maintained-app contract. Scope: bootstrap S0, then reuse the same workflow for M1.
+Status: **maintained tooling implemented; S0 accepted and M1/M2 locally verified with outstanding hosted/platform follow-ups**. See [contributing](../../CONTRIBUTING.md), [scaffold commands](scaffold-commands.md) and [M1/M2 results](m1-m2-results.md). The operation table below defines the maintained-app contract.
 
 ## Repository and toolchain
 
-If Rust is selected, use a small Cargo workspace with an application crate and a UI-independent image/core module or crate as justified by actual code. Add persistence when M1 needs it. Commit the application lockfile, pin an exact stable Rust toolchain and required formatting/lint components, record native SDK/runtime prerequisites per OS, and avoid unpinned global tooling. Cargo workspaces support shared dependency and lint configuration; the exact layout is decided in the stack record. [Cargo workspace reference](https://doc.rust-lang.org/cargo/reference/workspaces.html).
+The selected Rust workspace has an application crate, a UI-independent core and xtask orchestration. M1 persistence uses bundled SQLite through pinned `rusqlite`. The application lockfile and Rust toolchain remain pinned; native SDK/runtime prerequisites are recorded per OS. [Cargo workspace reference](https://doc.rust-lang.org/cargo/reference/workspaces.html).
 
 Repository setup should cover `.gitignore`, line endings, editor defaults, generated-file locations, fixture provenance, contribution steps and documentation links. Do not check in private photos, build products, logs or screenshots. Keep checked-in synthetic fixtures small and reproducible. Retain only the scaffolding needed by the skeleton.
 
@@ -74,7 +74,7 @@ Automated uploads must use synthetic fixtures and the designated evidence direct
 4. Fix failures and rerun affected checks. Record native checks separately from headless evidence.
 5. Report exact commands, artifact paths, results and remaining unsupported cases; update task/feature state only when acceptance is met.
 
-No undocumented clicking or guessed screen coordinates should be required to determine whether an image loaded correctly. The development harness is not the planned editor command API or MCP server; it provides early observability while sharing production operations.
+No undocumented clicking or guessed screen coordinates should be required to determine whether an image loaded correctly. The S0 evidence harness is not the editor command API or MCP server. M1 provides a separate working JSONL owner/API and live loopback transport over the same production service; MCP remains planned.
 
 ## Maintained workspace setup
 
@@ -82,4 +82,4 @@ The selected S0 workspace uses Rust **1.94.0**, pinned in `rust-toolchain.toml`,
 
 Implemented commands and flags are listed in [scaffold commands](scaffold-commands.md): Doctor, check, fmt, lint, test, build, develop, smoke, inventory, audit and host packaging. Use `cargo xtask develop --open "path to/image.jpg"`; image/capture paths require named flags. Cargo needs network on the first locked fetch; subsequent builds can be offline. The Rust runner works on all three targets.
 
-Crates: `lightwell-core` owns image/profile/resource/request logic; `lightwell-app` owns the Iced adapter; `xtask` owns developer command orchestration. Probes remain outside this workspace. Error/state/log evidence is recorded in the S0 engineering reports. Native macOS setup has been exercised; Windows/Linux setup instructions remain unverified and are not represented as passing tests.
+Crates: `lightwell-core` owns images, recipes, rendering, SQLite history, preview scheduling and the JSON API; `lightwell-app` owns the Iced adapter plus desktop/headless binaries; `xtask` owns developer command orchestration and exact editor acceptance. Probes remain outside this workspace. Error/state/log evidence is recorded in the S0 and M1/M2 engineering reports. Native macOS setup has been exercised; Windows/Linux setup instructions remain unverified and are not represented as passing tests.

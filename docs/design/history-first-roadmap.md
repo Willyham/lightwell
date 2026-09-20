@@ -1,17 +1,17 @@
 # History-first editor milestones
 
-Status: S0 is accepted. M1–M4 are planned; implementation remains on hold until the owner resumes it.
+Status: S0 is accepted. M1 history and M2 transforms are implemented and locally verified; M3 modules and M4 crop remain planned.
 
 ## Sequence and scope
 
 | Milestone | Deliverable | Completion evidence |
 | --- | --- | --- |
-| M1 — history foundation | Non-destructive edit layers, a test pixel edit, durable history, undo/redo, restore, historical previews, catalog save/reopen, UI and live API | Original → two pixel changes → preview → undo/redo → restore → new change → reopen, through UI and API, with original bytes unchanged |
-| M2 — basic transforms | Rotate clockwise/counterclockwise and horizontal/vertical reflection, using the existing layer/history system | Asymmetric fixtures and pixel edits survive composed transforms, undo/redo, preview and reopen through UI and API |
+| M1 — history foundation | **Implemented.** Non-destructive edit layers, a test pixel edit, durable history, undo/redo, restore, historical previews, catalog save/reopen, UI and live API | Passed Original → two pixel changes → preview → undo/redo → restore → new change → reopen, through UI and API, with original bytes unchanged |
+| M2 — basic transforms | **Implemented.** Rotate clockwise/counterclockwise and horizontal/vertical reflection, using the existing layer/history system | Passed asymmetric fixture and pixel-edit compositions, undo/redo, preview and reopen through UI and API |
 | M3 — tool modules | A small tool interface declaring actions, schemas, controls and processing; pixel editor implemented as a module | Generic UI and API discover and invoke the pixel module; saved M1/M2 documents and history still render identically |
 | M4 — crop module | Lightroom-style crop workflow delivered as a tool module, including straightening and aspect constraints | Direct manipulation, numeric controls, API parity, history/reopen and composition-preserving geometry at multiple zoom/DPI settings |
 
-Milestones run in this order. Every task file owns its own IDs starting at `TASK-001`; dependencies and task references stay inside that file. Roadmap sequencing uses named outcomes, with no cross-file task IDs or checker gates. A local `ready` task means its file's dependencies are satisfied; it does not authorize starting a milestone while implementation is on hold.
+Milestones run in this order. Every task file owns its own IDs starting at `TASK-001`; dependencies and task references stay inside that file. Roadmap sequencing uses named outcomes, with no cross-file task IDs or checker gates. See [M1/M2 implementation evidence](../engineering/m1-m2-results.md).
 
 Library, tonal, RAW and external-extension work are later roadmap phases. Export, manual Locate, the MCP adapter, complete editor packaging/performance and Windows/Linux editor verification remain explicit editor follow-up work. The first milestone already requires a callable API attached to the open GUI, so later adapters do not introduce an alternate history service.
 
@@ -23,7 +23,7 @@ Applying an action creates a new immutable recipe snapshot and one attributed hi
 
 Start with ordinary small snapshots and SQLite transactions. Do not store a full rendered bitmap per edit, replay a log of potentially changed command handlers to recover state, or treat the GUI's widgets as the authority. Rendering evaluates a saved stack from verified original pixels. Pure discrete geometry can be composed exactly; interpolated geometry must have an explicit sampling contract and may only be fused when operation order is preserved.
 
-The first implementation task defines and tests this model. General module registration and declarative control rendering arrive in M3 after the core has been exercised with concrete operations. M1/M2 keep typed operation handlers behind the common service and stable operation identity, without building a plugin runtime in advance.
+The implemented M1 model follows these rules. General module registration and declarative control rendering arrive in M3 after the core has been exercised with concrete operations. M1/M2 keep typed operation handlers behind the common service and stable operation identity, without building a plugin runtime in advance.
 
 ## Pixel edit as the executable proof
 

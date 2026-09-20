@@ -17,4 +17,4 @@ Package evidence records target, binary and lockfile hashes, source revision and
 
 S0 is accepted on native M4 evidence and the verified portable run identified in [CI results](ci-results.md). The closure snapshot's expanded workflow and current Windows/Linux packages still need fresh hosted execution and artifact inspection. Source push requires authorization; this plan does not authorize publishing.
 
-The [bootstrap playbook](bootstrap-playbook.md) is locally verified using a clean checkout with a warm shared Cargo cache. Its current Windows/Linux package verification remains unfinished. Manual Windows/Linux desktop and manual license reviews are deferred. Editor implementation remains on hold.
+The [bootstrap playbook](bootstrap-playbook.md) is locally verified using a clean checkout with a warm shared Cargo cache. Its current Windows/Linux package verification remains unfinished. Manual Windows/Linux desktop and manual license reviews are deferred. M1/M2 are locally verified on macOS; fresh hosted checks for their expanded dependency graph and editor binaries remain to run.
