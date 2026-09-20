@@ -5,12 +5,11 @@ Each JSON file is an independent plan. IDs start at `TASK-001` inside every file
 | Plan | Purpose |
 | --- | --- |
 | [S0 follow-ups](implementation-s0.json) | Hosted CI refresh, Windows/Linux packaging and desktop checks, Linux VM route, license audit and expiring advisory exceptions |
-| [M4 — crop](implementation-m4-crop.json) | Lightroom-style crop and straighten module on the implemented module host |
 | [Editor follow-ups](implementation-editor-followups.json) | Export, color and metadata, Locate, MCP and full-editor verification |
 | [Later extensions](implementation-extensions.json) | External-loader measurements and proof planning after a selected use case |
 | [Product decisions](product-decisions.json) | Open product questions |
 
-M4 and later work wait until the owner asks for them.
+Editor follow-ups and later work wait until the owner asks for them.
 
 ## Conventions
 
