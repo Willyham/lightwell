@@ -299,6 +299,7 @@ fn dispatch_result(
             }
             Ok(value(service.import(&params::<P>(&request.params)?.path)?)?)
         }
+        "catalog.list" => Ok(json!({"assets":service.assets()?})),
         "asset.state" => {
             let p = asset_params(&request.params)?;
             Ok(value(service.state(&p.asset_id)?)?)
@@ -420,20 +421,13 @@ fn dispatch_result(
                 y: u32,
             }
             let p = params::<P>(&request.params)?;
-            let entry = match &session.preview.selection {
-                HistorySelection::Current => service.state(&p.asset_id)?.current_entry,
-                HistorySelection::Entry(id) => service.entry(&p.asset_id, id)?,
+            let entry_id = match &session.preview.selection {
+                HistorySelection::Current => service.state(&p.asset_id)?.current_entry.id,
+                HistorySelection::Entry(id) => id.clone(),
             };
-            let raster = service.render_entry(&p.asset_id, &entry.id)?;
-            let pixel = raster.pixel(p.x, p.y).ok_or_else(|| {
-                Error::new(
-                    ErrorKind::Validation,
-                    "sample coordinate is outside rendered image",
-                )
-            })?;
-            Ok(
-                json!({"entry_id":entry.id,"snapshot_id":raster.snapshot_id,"source_fingerprint":raster.source_fingerprint,"width":raster.width,"height":raster.height,"x":p.x,"y":p.y,"rgba":pixel,"source_detail_ready":true}),
-            )
+            let mut sampled = value(service.sample_entry(&p.asset_id, &entry_id, p.x, p.y)?)?;
+            sampled["source_detail_ready"] = json!(true);
+            Ok(sampled)
         }
         _ => Err(Error::new(
             ErrorKind::Protocol,
@@ -495,6 +489,7 @@ pub fn schemas() -> Value {
         "methods":{
             "schema.list":{"mutates":false,"params":{}},
             "catalog.import":{"mutates":true,"required":["path"]},
+            "catalog.list":{"mutates":false,"params":{},"notes":"referenced assets in import order"},
             "asset.state":{"mutates":false,"required":["asset_id"]},
             "history.list":{"mutates":false,"required":["asset_id"],"optional":{"before_sequence":"u64","limit":"1..100"}},
             "history.inspect":{"mutates":false,"required":["asset_id","entry_id"]},
@@ -533,9 +528,6 @@ impl LocalServer {
     pub fn start(owner: OwnerHandle, session_file: &Path) -> Result<Self, Error> {
         let listener = TcpListener::bind(("127.0.0.1", 0))
             .map_err(|error| Error::new(ErrorKind::Protocol, error.to_string()))?;
-        listener
-            .set_nonblocking(true)
-            .map_err(|error| Error::new(ErrorKind::Protocol, error.to_string()))?;
         let info = LocalSessionInfo {
             protocol: "lightwell-jsonl-1".into(),
             address: listener
@@ -548,27 +540,24 @@ impl LocalServer {
         let stop = stopping.clone();
         let token = info.token.clone();
         let clients = Arc::new(AtomicUsize::new(0));
+        // Blocking accept keeps the idle listener asleep; Drop wakes it with one loopback connection.
         let join = std::thread::spawn(move || {
-            while !stop.load(Ordering::Relaxed) {
-                match listener.accept() {
-                    Ok((stream, _)) => {
-                        if clients.fetch_add(1, Ordering::AcqRel) >= MAX_CLIENTS {
-                            clients.fetch_sub(1, Ordering::AcqRel);
-                            continue;
-                        }
-                        let owner = owner.clone();
-                        let token = token.clone();
-                        let clients = clients.clone();
-                        std::thread::spawn(move || {
-                            let _ = serve_stream(stream, &owner, Some(&token));
-                            clients.fetch_sub(1, Ordering::AcqRel);
-                        });
-                    }
-                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                        std::thread::sleep(Duration::from_millis(10));
-                    }
-                    Err(_) => break,
+            for stream in listener.incoming() {
+                if stop.load(Ordering::Acquire) {
+                    break;
                 }
+                let Ok(stream) = stream else { break };
+                if clients.fetch_add(1, Ordering::AcqRel) >= MAX_CLIENTS {
+                    clients.fetch_sub(1, Ordering::AcqRel);
+                    continue;
+                }
+                let owner = owner.clone();
+                let token = token.clone();
+                let clients = clients.clone();
+                std::thread::spawn(move || {
+                    let _ = serve_stream(stream, &owner, Some(&token));
+                    clients.fetch_sub(1, Ordering::AcqRel);
+                });
             }
         });
         Ok(Self {
@@ -585,8 +574,10 @@ impl LocalServer {
 
 impl Drop for LocalServer {
     fn drop(&mut self) {
-        self.stopping.store(true, Ordering::Relaxed);
-        if let Some(join) = self.join.take() {
+        self.stopping.store(true, Ordering::Release);
+        if let Some(join) = self.join.take()
+            && TcpStream::connect_timeout(&self.info.address, Duration::from_millis(250)).is_ok()
+        {
             let _ = join.join();
         }
         let _ = std::fs::remove_file(&self.session_file);
@@ -719,6 +710,7 @@ mod tests {
             .to_string();
         let input = [
             request("schema", "schema.list", json!({})),
+            request("list", "catalog.list", json!({})),
             request("pixel", "edit.set-pixel", json!({"asset_id":asset,"mutation":{"expected_revision":0,"request_id":"p1","actor":"api-test"},"x":0,"y":0,"rgb":[1,2,3]})),
             request("sample", "render.sample", json!({"asset_id":asset,"x":0,"y":0})),
             request("undo", "history.undo", json!({"asset_id":asset,"mutation":{"expected_revision":1,"request_id":"u1","actor":"api-test"}})),
@@ -731,14 +723,55 @@ mod tests {
             .filter(|line| !line.is_empty())
             .map(|line| serde_json::from_slice(line).unwrap())
             .collect();
-        assert_eq!(responses.len(), 4);
+        assert_eq!(responses.len(), 5);
         assert!(responses.iter().all(|response| response.error.is_none()));
         assert_eq!(
-            responses[2].result.as_ref().unwrap()["rgba"],
+            responses[1].result.as_ref().unwrap()["assets"][0]["id"],
+            json!(asset)
+        );
+        assert_eq!(
+            responses[3].result.as_ref().unwrap()["rgba"],
             json!([1, 2, 3, 255])
         );
         owner.stop();
         join.join().unwrap();
+        std::fs::remove_file(catalog).unwrap();
+    }
+
+    #[test]
+    fn every_listed_method_dispatches_and_mutation_flags_agree() {
+        let catalog = temp("schema.sqlite");
+        let mut service = EditorService::open(&catalog).unwrap();
+        let mut session = ClientSession::default();
+        let schema = schemas();
+        let methods = schema["methods"].as_object().unwrap();
+        assert!(methods.len() >= 17);
+        for (method, description) in methods {
+            let request = ApiRequest {
+                id: "schema".into(),
+                method: method.clone(),
+                params: json!({}),
+                token: None,
+            };
+            let response = if method == "events.since" {
+                event_response(&request, 0, &VecDeque::new())
+            } else {
+                dispatch(&mut service, &mut session, &request, 0)
+            };
+            if let Some(error) = &response.error {
+                assert!(
+                    !error.message.starts_with("unknown method"),
+                    "{method} is listed but not dispatched"
+                );
+            }
+            let declared = description["mutates"].as_bool().unwrap();
+            assert_eq!(
+                mutates(method, Some(&json!({"outcome":"applied"}))),
+                declared,
+                "{method} mutation flag"
+            );
+        }
+        drop(service);
         std::fs::remove_file(catalog).unwrap();
     }
 

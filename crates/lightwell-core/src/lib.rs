@@ -1,4 +1,4 @@
-//! Read-only image decoding and bounded request scheduling, independent of the UI.
+//! UI-independent JPEG decoding, non-destructive editing state, rendering and the JSON owner API.
 mod api;
 mod editor;
 mod error;
@@ -12,7 +12,7 @@ pub use error::{Error, ErrorKind};
 use image::{ImageDecoder, ImageReader, Limits};
 pub use model::*;
 pub use preview::*;
-pub use render::{Raster, render};
+pub use render::{Raster, Sample, render, sample};
 use sha2::{Digest, Sha256};
 use std::{
     fs::File,
@@ -89,12 +89,7 @@ fn header(bytes: &[u8]) -> Result<(u32, u32, u8), String> {
     Err("unsupported-input: JPEG frame type".into())
 }
 
-pub fn open(path: &Path) -> Result<Photo, Error> {
-    decode(path).map_err(Error::decoder)
-}
-
-fn decode(path: &Path) -> Result<Photo, String> {
-    let start = Instant::now();
+fn read_bounded(path: &Path) -> Result<Vec<u8>, String> {
     if !path
         .metadata()
         .map_err(|e| format!("read-error: {}", e.kind()))?
@@ -111,7 +106,24 @@ fn decode(path: &Path) -> Result<Photo, String> {
     if bytes.len() > 128 * 1024 * 1024 {
         return Err("resource-limit: encoded bytes".into());
     }
-    let read_done = Instant::now();
+    Ok(bytes)
+}
+
+struct Decoded {
+    upright: image::DynamicImage,
+    orientation: u8,
+    validate_ms: f64,
+    pixels_ms: f64,
+    orient_ms: f64,
+}
+
+fn ms(from: Instant, to: Instant) -> f64 {
+    (to - from).as_secs_f64() * 1000.0
+}
+
+/// Validate the supported JPEG subset, decode within fixed limits and orient once to upright pixels.
+fn decode_upright(bytes: Vec<u8>) -> Result<Decoded, String> {
+    let start = Instant::now();
     let (w, h, components) = header(&bytes)?;
     if w == 0 || h == 0 || w > 16384 || h > 16384 || u64::from(w) * u64::from(h) > 64_000_000 {
         return Err("resource-limit: dimensions".into());
@@ -138,19 +150,39 @@ fn decode(path: &Path) -> Result<Photo, String> {
         .orientation()
         .map_err(|_| "invalid-input: orientation")?;
     let validate_done = Instant::now();
-    let mut decoded =
+    let mut upright =
         image::DynamicImage::from_decoder(decoder).map_err(|_| "invalid-input: decode")?;
     let pixels_done = Instant::now();
-    decoded.apply_orientation(orientation);
+    upright.apply_orientation(orientation);
     let orient_done = Instant::now();
-    let width = decoded.width();
-    let height = decoded.height();
+    Ok(Decoded {
+        upright,
+        orientation: orientation.to_exif(),
+        validate_ms: ms(start, validate_done),
+        pixels_ms: ms(validate_done, pixels_done),
+        orient_ms: ms(pixels_done, orient_done),
+    })
+}
+
+pub fn open(path: &Path) -> Result<Photo, Error> {
+    decode(path).map_err(Error::decoder)
+}
+
+fn decode(path: &Path) -> Result<Photo, String> {
+    let start = Instant::now();
+    let bytes = read_bounded(path)?;
+    let read_done = Instant::now();
+    let decoded = decode_upright(bytes)?;
+    let mut upright = decoded.upright;
+    let width = upright.width();
+    let height = upright.height();
+    let resize_start = Instant::now();
     // S0 displays Fit only; cap upload work and textures on the decoding worker.
     if width > 4096 || height > 4096 {
-        decoded = decoded.resize(4096, 4096, image::imageops::FilterType::Triangle);
+        upright = upright.resize(4096, 4096, image::imageops::FilterType::Triangle);
     }
     let resize_done = Instant::now();
-    let rgba = decoded.into_rgba8();
+    let rgba = upright.into_rgba8();
     let rgba_done = Instant::now();
     Ok(Photo {
         width,
@@ -158,15 +190,15 @@ fn decode(path: &Path) -> Result<Photo, String> {
         preview_width: rgba.width(),
         preview_height: rgba.height(),
         rgba: rgba.into_raw(),
-        orientation: orientation.to_exif(),
+        orientation: decoded.orientation,
         decode_ms: start.elapsed().as_secs_f64() * 1000.0,
         timings: DecodeTimings {
-            read_ms: (read_done - start).as_secs_f64() * 1000.0,
-            validate_ms: (validate_done - read_done).as_secs_f64() * 1000.0,
-            pixels_ms: (pixels_done - validate_done).as_secs_f64() * 1000.0,
-            orient_ms: (orient_done - pixels_done).as_secs_f64() * 1000.0,
-            resize_ms: (resize_done - orient_done).as_secs_f64() * 1000.0,
-            rgba_ms: (rgba_done - resize_done).as_secs_f64() * 1000.0,
+            read_ms: ms(start, read_done),
+            validate_ms: decoded.validate_ms,
+            pixels_ms: decoded.pixels_ms,
+            orient_ms: decoded.orient_ms,
+            resize_ms: ms(resize_start, resize_done),
+            rgba_ms: ms(resize_done, rgba_done),
         },
     })
 }
@@ -177,58 +209,16 @@ pub fn open_source(path: &Path) -> Result<SourceImage, Error> {
 }
 
 fn decode_source(path: &Path) -> Result<SourceImage, String> {
-    if !path
-        .metadata()
-        .map_err(|e| format!("read-error: {}", e.kind()))?
-        .is_file()
-    {
-        return Err("unsupported-input: expected a regular file".into());
-    }
-    let mut bytes = Vec::new();
-    File::open(path)
-        .map_err(|e| format!("read-error: {}", e.kind()))?
-        .take(128 * 1024 * 1024 + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|e| format!("read-error: {}", e.kind()))?;
-    if bytes.len() > 128 * 1024 * 1024 {
-        return Err("resource-limit: encoded bytes".into());
-    }
+    let bytes = read_bounded(path)?;
     let fingerprint = format!("{:x}", Sha256::digest(&bytes));
-    let (w, h, components) = header(&bytes)?;
-    if w == 0 || h == 0 || w > 16384 || h > 16384 || u64::from(w) * u64::from(h) > 64_000_000 {
-        return Err("resource-limit: dimensions".into());
-    }
-    if ![1, 3].contains(&components) {
-        return Err("unsupported-color: only RGB/greyscale".into());
-    }
-    let mut reader = ImageReader::with_format(Cursor::new(bytes), image::ImageFormat::Jpeg);
-    let mut limits = Limits::default();
-    limits.max_image_width = Some(16384);
-    limits.max_image_height = Some(16384);
-    limits.max_alloc = Some(512 * 1024 * 1024);
-    reader.limits(limits);
-    let mut decoder = reader
-        .into_decoder()
-        .map_err(|_| "invalid-input: decoder header")?;
-    if let Some(profile) = decoder
-        .icc_profile()
-        .map_err(|_| "unsupported-profile: unreadable ICC")?
-    {
-        profile::check(&profile, components)?;
-    }
-    let orientation = decoder
-        .orientation()
-        .map_err(|_| "invalid-input: orientation")?;
-    let mut decoded =
-        image::DynamicImage::from_decoder(decoder).map_err(|_| "invalid-input: decode")?;
-    decoded.apply_orientation(orientation);
-    let rgba = decoded.into_rgba8();
+    let decoded = decode_upright(bytes)?;
+    let rgba = decoded.upright.into_rgba8();
     Ok(SourceImage {
         width: rgba.width(),
         height: rgba.height(),
         rgba: rgba.into_raw().into(),
         fingerprint,
-        orientation: orientation.to_exif(),
+        orientation: decoded.orientation,
     })
 }
 

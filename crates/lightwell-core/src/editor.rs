@@ -1,6 +1,6 @@
 use crate::{
     AssetId, EntryId, Error, ErrorKind, HistoryEntry, Layer, Mutation, PreviewJob, Raster,
-    Snapshot, SnapshotId, SourceImage, Transform, open_source, render,
+    Snapshot, SnapshotId, SourceImage, Transform, open_source, render, sample,
 };
 use rusqlite::{
     Connection, ErrorCode, OptionalExtension, Transaction, TransactionBehavior, params,
@@ -17,6 +17,8 @@ use std::{
 
 const CATALOG_FORMAT: i64 = 1;
 const MAX_HISTORY_PAGE: usize = 100;
+const ASSET_COLUMNS: &str =
+    "id,source_root,locator,fingerprint,file_identity,byte_len,width,height";
 
 fn catalog_error(error: rusqlite::Error) -> Error {
     let kind = match &error {
@@ -91,6 +93,20 @@ pub struct MutationResult {
     pub current_entry_id: EntryId,
     pub created_entry_id: Option<EntryId>,
     pub deduplicated: bool,
+}
+
+/// One evaluated output pixel of a saved history entry, with the identities that produced it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PixelSample {
+    pub entry_id: EntryId,
+    pub snapshot_id: SnapshotId,
+    pub source_fingerprint: String,
+    pub width: u32,
+    pub height: u32,
+    pub x: u32,
+    pub y: u32,
+    pub rgba: [u8; 4],
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -331,6 +347,20 @@ impl EditorService {
         state_from(&self.connection, asset_id)
     }
 
+    /// Every referenced asset in import order.
+    pub fn assets(&self) -> Result<Vec<AssetRecord>, Error> {
+        let mut statement = self
+            .connection
+            .prepare(&format!(
+                "SELECT {ASSET_COLUMNS} FROM assets ORDER BY rowid"
+            ))
+            .map_err(catalog_error)?;
+        let rows = statement
+            .query_map([], asset_record)
+            .map_err(catalog_error)?;
+        rows.map(|row| row.map_err(catalog_error)).collect()
+    }
+
     pub fn history(
         &self,
         asset_id: &AssetId,
@@ -402,6 +432,39 @@ impl EditorService {
         render(&source, entry.snapshot.id.clone(), &entry.snapshot.recipe)
     }
 
+    /// Evaluate one output pixel of a saved entry without rasterizing the image.
+    pub fn sample_entry(
+        &self,
+        asset_id: &AssetId,
+        entry_id: &EntryId,
+        x: u32,
+        y: u32,
+    ) -> Result<PixelSample, Error> {
+        let state = self.state(asset_id)?;
+        let entry = self.entry(asset_id, entry_id)?;
+        let source = self.verified_source(&state.asset)?;
+        let sampled = sample(&source, &entry.snapshot.recipe, x, y)?;
+        let rgba = sampled.rgba.ok_or_else(|| {
+            Error::new(
+                ErrorKind::Validation,
+                format!(
+                    "sample ({x}, {y}) is outside the {}x{} rendered image",
+                    sampled.width, sampled.height
+                ),
+            )
+        })?;
+        Ok(PixelSample {
+            entry_id: entry.id,
+            snapshot_id: entry.snapshot.id,
+            source_fingerprint: source.fingerprint,
+            width: sampled.width,
+            height: sampled.height,
+            x,
+            y,
+            rgba,
+        })
+    }
+
     pub fn apply_pixel(
         &mut self,
         asset_id: &AssetId,
@@ -418,12 +481,8 @@ impl EditorService {
         let state = self.state(asset_id)?;
         ensure_revision(&state, mutation.expected_revision)?;
         let source = self.verified_source(&state.asset)?;
-        let current = render(
-            &source,
-            state.current_entry.snapshot.id.clone(),
-            &state.current_entry.snapshot.recipe,
-        )?;
-        let rgba = current.pixel(x, y).ok_or_else(|| {
+        let current = sample(&source, &state.current_entry.snapshot.recipe, x, y)?;
+        let rgba = current.rgba.ok_or_else(|| {
             Error::new(
                 ErrorKind::Validation,
                 format!(
@@ -874,20 +933,32 @@ fn next_sequence(connection: &Connection, asset_id: &AssetId) -> Result<u64, Err
     u64::try_from(sequence).map_err(|_| Error::new(ErrorKind::Catalog, "invalid history sequence"))
 }
 
+fn asset_record(row: &rusqlite::Row<'_>) -> rusqlite::Result<AssetRecord> {
+    let id = AssetId::parse(row.get::<_, String>(0)?).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(error))
+    })?;
+    Ok(AssetRecord {
+        id,
+        source_root: PathBuf::from(row.get::<_, String>(1)?),
+        locator: PathBuf::from(row.get::<_, String>(2)?),
+        fingerprint: row.get(3)?,
+        file_identity: row.get(4)?,
+        byte_len: row.get::<_, i64>(5)? as u64,
+        width: row.get::<_, i64>(6)? as u32,
+        height: row.get::<_, i64>(7)? as u32,
+    })
+}
+
 fn state_from(connection: &Connection, asset_id: &AssetId) -> Result<EditorState, Error> {
-    let asset_json = connection.query_row("SELECT source_root,locator,fingerprint,file_identity,byte_len,width,height FROM assets WHERE id=?1", [asset_id.as_str()], |row| {
-        Ok((row.get::<_,String>(0)?,row.get::<_,String>(1)?,row.get::<_,String>(2)?,row.get::<_,String>(3)?,row.get::<_,i64>(4)?,row.get::<_,i64>(5)?,row.get::<_,i64>(6)?))
-    }).optional().map_err(catalog_error)?.ok_or_else(|| Error::new(ErrorKind::Validation, "unknown asset"))?;
-    let asset = AssetRecord {
-        id: asset_id.clone(),
-        source_root: asset_json.0.into(),
-        locator: asset_json.1.into(),
-        fingerprint: asset_json.2,
-        file_identity: asset_json.3,
-        byte_len: asset_json.4 as u64,
-        width: asset_json.5 as u32,
-        height: asset_json.6 as u32,
-    };
+    let asset = connection
+        .query_row(
+            &format!("SELECT {ASSET_COLUMNS} FROM assets WHERE id=?1"),
+            [asset_id.as_str()],
+            asset_record,
+        )
+        .optional()
+        .map_err(catalog_error)?
+        .ok_or_else(|| Error::new(ErrorKind::Validation, "unknown asset"))?;
     let (current, revision, redo): (String, i64, String) = connection
         .query_row(
             "SELECT current_entry_id,revision,redo_json FROM asset_state WHERE asset_id=?1",
@@ -1117,6 +1188,14 @@ mod tests {
         let a = service.import(&source).unwrap().asset.id;
         assert_eq!(service.import(&hard).unwrap().asset.id, a);
         assert_ne!(service.import(&copy).unwrap().asset.id, a);
+        let listed: Vec<AssetId> = service
+            .assets()
+            .unwrap()
+            .into_iter()
+            .map(|asset| asset.id)
+            .collect();
+        assert_eq!(listed.len(), 2);
+        assert_eq!(listed[0], a);
         std::fs::write(&source, b"changed").unwrap();
         assert_eq!(
             service.render_current(&a).unwrap_err().kind,

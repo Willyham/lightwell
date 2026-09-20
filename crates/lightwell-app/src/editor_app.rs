@@ -5,14 +5,17 @@ use iced::{
 };
 use iced_runtime::image as image_memory;
 use lightwell_core::{
-    ApiRequest, ClientSession, EditorState, EntryId, EventsResult, HistoryEntry, HistoryPage,
-    HistorySelection, LocalServer, Mutation, OwnerHandle, PreviewJob, PreviewQueue, Transform,
-    Zoom,
+    ApiRequest, ClientSession, EditorState, EntryId, ErrorKind, EventsResult, HistoryEntry,
+    HistoryPage, HistorySelection, LocalServer, Mutation, OwnerHandle, PreviewJob, PreviewQueue,
+    Transform, Zoom,
 };
 use serde_json::{Value, json};
 use std::{
     path::PathBuf,
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
     thread::JoinHandle,
     time::Duration,
 };
@@ -101,9 +104,49 @@ enum Message {
     Close,
 }
 
-pub(super) fn run(config: Config, size: (f32, f32)) -> iced::Result {
+/// Catalog ownership and the live service start before the window so failures are reported, not panics.
+struct Boot {
+    owner: OwnerHandle,
+    join: JoinHandle<()>,
+    live_server: Option<LocalServer>,
+    initial: Option<PathBuf>,
+}
+
+pub(super) fn run(mut config: Config, size: (f32, f32)) -> Result<(), String> {
+    let paths = Paths::resolve(config.data_root.as_ref())
+        .ok_or("no usable application data directory; pass --data-root")?;
+    let catalog = config
+        .catalog
+        .clone()
+        .unwrap_or_else(|| paths.config.join("catalog.sqlite"));
+    let (owner, join) = OwnerHandle::start(&catalog).map_err(|error| match error.kind {
+        ErrorKind::Conflict => format!(
+            "another Lightwell instance owns the catalog {}; close it or pass --catalog",
+            catalog.display()
+        ),
+        _ => format!("cannot open catalog {}: {error}", catalog.display()),
+    })?;
+    let session_file = catalog.with_extension("live-session.json");
+    // Owning the catalog proves any same-catalog session file from an earlier process is stale.
+    if session_file.exists() {
+        let _ = std::fs::remove_file(&session_file);
+    }
+    let live_server = LocalServer::start(owner.clone(), &session_file).ok();
+    let boot = Mutex::new(Some(Boot {
+        owner,
+        join,
+        live_server,
+        initial: config.files.pop_front(),
+    }));
     iced::application(
-        move || Editor::new(config.clone()),
+        move || {
+            Editor::new(
+                boot.lock()
+                    .expect("boot state is never poisoned")
+                    .take()
+                    .expect("the editor boots once"),
+            )
+        },
         Editor::update,
         Editor::view,
     )
@@ -113,6 +156,7 @@ pub(super) fn run(config: Config, size: (f32, f32)) -> iced::Result {
     .theme(iced::Theme::Dark)
     .subscription(Editor::subscription)
     .run()
+    .map_err(|error| error.to_string())
 }
 
 struct Editor {
@@ -143,22 +187,13 @@ struct Editor {
 }
 
 impl Editor {
-    fn new(mut config: Config) -> (Self, Task<Message>) {
-        let paths = Paths::resolve(config.data_root.as_ref())
-            .unwrap_or_else(|| panic!("No usable application data directory"));
-        let catalog = config
-            .catalog
-            .clone()
-            .unwrap_or_else(|| paths.config.join("catalog.sqlite"));
-        let (owner, join) = OwnerHandle::start(&catalog)
-            .unwrap_or_else(|error| panic!("Cannot open catalog: {error}"));
-        let session_file = catalog.with_extension("live-session.json");
-        // Owning the catalog proves any same-catalog session file from an earlier process is stale.
-        if session_file.exists() {
-            let _ = std::fs::remove_file(&session_file);
-        }
-        let live_server = LocalServer::start(owner.clone(), &session_file).ok();
-        let initial = config.files.pop_front();
+    fn new(boot: Boot) -> (Self, Task<Message>) {
+        let Boot {
+            owner,
+            join,
+            live_server,
+            initial,
+        } = boot;
         let mut editor = Self {
             owner: owner.clone(),
             owner_join: Some(join),

@@ -45,7 +45,7 @@ Bound active/pending jobs and estimated bytes, cancel superseded preview work an
 
 M1 exposes catalog/import/state, pixel edits, history/undo/redo/restore, preview selection/render, session view state and jobs through one typed service and external JSON sessions. Use bounded local same-user IPC to a single catalog owner while the GUI is open; permit headless ownership when absent. Protect against competing owners and stale revisions.
 
-Commands have schemas, units, ranges, defaults and structured results/errors. Durable actions require expected revision and request ID, with a documented deduplication scope. Reconnect reads a fresh state/sequence rather than blindly replaying mutations. Client disconnection does not cancel another client's jobs. Diagnostics stay off protocol stdout.
+Assets are discoverable through `catalog.list`, so a client that did not import can find asset identities. `render.sample` evaluates one pixel of a saved entry without rasterizing. Commands have schemas, units, ranges, defaults and structured results/errors. Durable actions require expected revision and request ID, with a documented deduplication scope. Reconnect reads a fresh state/sequence rather than blindly replaying mutations. Client disconnection does not cancel another client's jobs. Diagnostics stay off protocol stdout.
 
 Preview and session state are not image history. An external commit updates current state while a selected historical snapshot stays selected. Crop drafts introduced in M4 remain intact and conflicted after external commits until explicit resolution. MCP later adapts the same operation registry.
 

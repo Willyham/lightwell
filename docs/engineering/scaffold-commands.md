@@ -36,7 +36,7 @@ Build the headless JSONL owner with `cargo xtask build --release`, then use:
 target/release/lightwell-json --catalog /path/to/catalog.sqlite < requests.jsonl
 ```
 
-Start with `schema.list`; request/response examples and live-session behavior are in the [user guide](../user-guide.md). Only one process owns a catalog at a time.
+Start with `schema.list`; request/response examples and live-session behavior are in the [user guide](../user-guide.md). Only one process owns a catalog at a time; a second desktop instance on the same catalog exits with an explanatory error instead of a crash.
 
 Evidence mode disables manual opening to keep the sequence deterministic. It uses the same image loader, writes state and real window-renderer PNGs per request, then final `events.jsonl`, `state.json`, and `result.json`. PNG encoding and evidence finalization run on the task executor, away from the UI thread. Application status `captured` is not a pixel-test pass: the outer smoke runner verifies fixture colors, Fit, generation/state, backend, exit status and source SHA-256 before writing its own `passed` result. Each bundle also includes subprocess output and reproduction arguments. Errors retain the previous displayed generation and photo. A 25-second app deadline and 35-second process deadline bound hangs.
 

@@ -212,17 +212,74 @@ fn copy_transformed(source: &SourceImage, geometry: Geometry) -> Result<Vec<u8>,
     Ok(output)
 }
 
-pub fn render(
-    source: &SourceImage,
-    snapshot_id: SnapshotId,
-    recipe: &Recipe,
-) -> Result<Raster, Error> {
+struct Compiled {
+    operations: Vec<Operation>,
+    geometry: Geometry,
+    width: u32,
+    height: u32,
+    has_pixels: bool,
+}
+
+/// Where one final-stage pixel comes from: the source pixel it copies and the replacement that wins there.
+struct Resolved {
+    rgb: Option<[u8; 3]>,
+    source_x: u32,
+    source_y: u32,
+}
+
+impl Compiled {
+    fn resolve(&self, x: u32, y: u32) -> Option<Resolved> {
+        if x >= self.width || y >= self.height {
+            return None;
+        }
+        let (source_x, source_y) = self.geometry.unmap(x, y);
+        let mut suffix = Geometry::identity(self.width, self.height);
+        for operation in self.operations.iter().rev() {
+            match operation {
+                Operation::Transform {
+                    transform,
+                    input_width,
+                    input_height,
+                } => {
+                    suffix =
+                        Geometry::transform(*transform, *input_width, *input_height).then(suffix);
+                }
+                Operation::Pixel(pixel) if suffix.map(pixel.x, pixel.y) == (x, y) => {
+                    return Some(Resolved {
+                        rgb: Some(pixel.rgb),
+                        source_x,
+                        source_y,
+                    });
+                }
+                Operation::Pixel(_) => {}
+            }
+        }
+        Some(Resolved {
+            rgb: None,
+            source_x,
+            source_y,
+        })
+    }
+}
+
+fn check_source(source: &SourceImage) -> Result<(), Error> {
     if source.rgba.len() != Raster::expected_len(source.width, source.height)? {
         return Err(Error::new(
             ErrorKind::Validation,
             "source pixel buffer has the wrong length",
         ));
     }
+    Ok(())
+}
+
+fn source_pixel(source: &SourceImage, x: u32, y: u32) -> [u8; 4] {
+    let offset = ((u64::from(y) * u64::from(source.width) + u64::from(x)) * 4) as usize;
+    let pixel = &source.rgba[offset..offset + 4];
+    [pixel[0], pixel[1], pixel[2], pixel[3]]
+}
+
+/// Validate a recipe against the source dimensions and fold its exact transforms into one mapping.
+fn compile(source_width: u32, source_height: u32, recipe: &Recipe) -> Result<Compiled, Error> {
     if recipe.format != RECIPE_FORMAT {
         return Err(Error::new(
             ErrorKind::Incompatible,
@@ -232,9 +289,9 @@ pub fn render(
 
     let mut layer_ids = HashSet::with_capacity(recipe.layers.len());
     let mut operations = Vec::with_capacity(recipe.layers.len());
-    let mut geometry = Geometry::identity(source.width, source.height);
-    let mut width = source.width;
-    let mut height = source.height;
+    let mut geometry = Geometry::identity(source_width, source_height);
+    let mut width = source_width;
+    let mut height = source_height;
     for layer in &recipe.layers {
         if !layer_ids.insert(&layer.id) {
             return Err(Error::new(
@@ -291,10 +348,58 @@ pub fn render(
             }
         }
     }
-
     let has_pixels = operations
         .iter()
         .any(|operation| matches!(operation, Operation::Pixel(_)));
+    Ok(Compiled {
+        operations,
+        geometry,
+        width,
+        height,
+        has_pixels,
+    })
+}
+
+/// One evaluated pixel of a recipe's output stage, with that stage's dimensions.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Sample {
+    pub width: u32,
+    pub height: u32,
+    /// `None` when the coordinate lies outside the output stage.
+    pub rgba: Option<[u8; 4]>,
+}
+
+/// Evaluate one output pixel without rasterizing; cost is linear in the layer count.
+pub fn sample(source: &SourceImage, recipe: &Recipe, x: u32, y: u32) -> Result<Sample, Error> {
+    check_source(source)?;
+    let compiled = compile(source.width, source.height, recipe)?;
+    let rgba = compiled.resolve(x, y).map(|resolved| {
+        let mut rgba = source_pixel(source, resolved.source_x, resolved.source_y);
+        if let Some(rgb) = resolved.rgb {
+            rgba[..3].copy_from_slice(&rgb);
+        }
+        rgba
+    });
+    Ok(Sample {
+        width: compiled.width,
+        height: compiled.height,
+        rgba,
+    })
+}
+
+pub fn render(
+    source: &SourceImage,
+    snapshot_id: SnapshotId,
+    recipe: &Recipe,
+) -> Result<Raster, Error> {
+    check_source(source)?;
+    let Compiled {
+        operations,
+        geometry,
+        width,
+        height,
+        has_pixels,
+    } = compile(source.width, source.height, recipe)?;
     let mut output = if geometry.is_identity() && !has_pixels {
         None
     } else if geometry.is_identity() {
@@ -512,6 +617,53 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn samples_match_rendered_pixels_and_keep_source_alpha() {
+        let mut source = source(5, 3);
+        let rgba: Vec<u8> = source
+            .rgba
+            .iter()
+            .enumerate()
+            .map(|(i, v)| if i % 4 == 3 { (i / 4) as u8 + 100 } else { *v })
+            .collect();
+        source.rgba = rgba.into();
+        let recipe = Recipe {
+            format: 1,
+            layers: vec![
+                Layer::pixel(1, 1, [201, 1, 2]),
+                Layer::transform(Transform::RotateLeft),
+                Layer::pixel(0, 0, [3, 202, 4]),
+                Layer::transform(Transform::MirrorHorizontal),
+                Layer::pixel(0, 0, [204, 8, 9]),
+                Layer::pixel(0, 0, [205, 10, 11]),
+            ],
+        };
+        let raster = render(&source, SnapshotId::new(), &recipe).unwrap();
+        for y in 0..raster.height {
+            for x in 0..raster.width {
+                let sampled = sample(&source, &recipe, x, y).unwrap();
+                assert_eq!(
+                    (sampled.width, sampled.height),
+                    (raster.width, raster.height)
+                );
+                assert_eq!(sampled.rgba, raster.pixel(x, y), "({x}, {y})");
+            }
+        }
+        assert_eq!(
+            sample(&source, &recipe, raster.width, 0).unwrap().rgba,
+            None
+        );
+        assert_eq!(
+            sample(&source, &recipe, 0, raster.height).unwrap().rgba,
+            None
+        );
+        let invalid = Recipe {
+            format: 1,
+            layers: vec![Layer::pixel(9, 9, [0, 0, 0])],
+        };
+        assert!(sample(&source, &invalid, 0, 0).is_err());
     }
 
     #[test]

@@ -22,6 +22,8 @@ The desktop adapter also reloads state and the first history page for selection-
 - Give selection-only and view-only UI commands narrow completion paths. History selection fetches only the requested immutable entry/source job; zoom and pan update session state without decoding or rerendering unchanged pixels.
 - After an edit/undo/redo/restore, refresh only current state and merge its immutable entry into the bounded 50-row UI page instead of querying and deserializing that page again.
 - Parallelize the single transform pass above one megapixel with the pinned Rayon worker pool. Small images stay serial to avoid scheduling overhead.
+- Evaluate single pixels without rasterizing. The pixel no-op check and `render.sample` compile the recipe, map the coordinate through the composed geometry and take the last replacement that lands on it, so their cost is linear in the layer count rather than the image area. The catalog owner thread therefore never rasterizes for API calls; it only decodes once on a cache miss.
+- Keep the loopback listener blocked in `accept` while idle instead of polling every 10 ms; shutdown wakes it with one loopback connection.
 
 ## Constraints
 
@@ -44,5 +46,7 @@ The desktop adapter also reloads state and the first history page for selection-
 `cargo xtask check` passes with 31 core tests, including all 64 three-transform combinations interleaved with pixel replacements, shared source/render allocation checks and same-length source replacement invalidation. Ten desktop tests, the JSON subprocess test and 13 ordinary xtask tests also pass; the existing sleeping timeout helper remains intentionally ignored.
 
 On the owner's arm64 M4 MacBook Pro, a solo release acceptance run reduced the 203-layer 480×320 render from the turn baseline of 25.364 ms to 0.244 ms. The generated 6000×4000 JPEG diagnostic used 30 samples: one transform measured 11.650 ms p50 / 13.641 ms p95, while 200 composed transforms measured 13.375 ms p50 / 14.375 ms p95. The cached preview-job lookup was 0.086 ms. Import was 57.652 ms; reopening the catalog and reconstructing the decoded source/job was 30.169 ms. A separate 30-sample 10000×6000 run measured one transform at 24.615 ms p50 / 27.778 ms p95 and 200 transforms at 27.106 ms p50 / 29.689 ms p95.
+
+A follow-up on the same host replaced the full-frame render inside the pixel no-op check with the sampling path. On the same generated 24 MP JPEG in release, a pixel edit after one rotate fell from 17.8 ms to 0.2 ms and ten sequential pixel edits from 132 ms to 3 ms, while a full render of the same two-pixel-plus-rotate recipe stayed at about 17 ms. The new render test compares every sampled pixel against the rasterized output for an interleaved pixel/transform recipe, including source alpha.
 
 These are core request-to-render measurements with a warm filesystem cache. They exclude task scheduling, GPU upload and presentation, so they do not establish the end-to-end input-to-present budget or Windows/Linux performance. The exact command is documented in [scaffold commands](../engineering/scaffold-commands.md).

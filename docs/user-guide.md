@@ -43,7 +43,7 @@ printf '%s\n' \
   | target/release/lightwell-json --catalog /path/to/catalog.sqlite
 ```
 
-A request has `id`, `method` and `params`. Successful responses contain the matching `id`, an event `sequence` and `result`; failures contain a structured `error`. Start with `schema.list` for the authoritative method list. Mutations require `asset_id` and:
+A request has `id`, `method` and `params`. Successful responses contain the matching `id`, an event `sequence` and `result`; failures contain a structured `error`. Start with `schema.list` for the authoritative method list and `catalog.list` for the referenced assets. Mutations require `asset_id` and:
 
 ```json
 {

@@ -77,6 +77,10 @@ The generated 60 MP workload (10000×6000, SHA-256 `b9e0118ab69b5d889b62087759be
 
 `cargo xtask check` passed with 31 core tests, including exhaustive three-transform/pixel interleavings and source-cache invalidation. These measurements cover core request-to-render work on the native M4 with a warm filesystem cache; they exclude desktop task scheduling, GPU upload and presentation. A fresh packaged GUI journey and end-to-end input-to-present capture have not been run for this optimization, and Windows/Linux performance remains unverified.
 
+### Pixel sampling follow-up
+
+After the optimization above, the pixel no-op check and `render.sample` evaluate one output pixel by compiling the recipe and mapping the coordinate, without rasterizing. On the same generated 24 MP release diagnostic (warm cache, core only), a pixel edit after one rotate measured 0.2 ms instead of 17.8 ms and ten sequential pixel edits 3.1 ms instead of 131.7 ms; a full two-pixel-plus-rotate render remained about 17 ms. `cargo xtask check` passes with 33 core tests, including a sample-versus-render comparison over every pixel of an interleaved recipe. The desktop now reports a catalog owned by another instance as a startup error instead of a panic, the loopback listener blocks in `accept` while idle, and `catalog.list` exposes referenced assets. These are diagnostic observations on the native M4; no packaged GUI journey was rerun.
+
 ## Exact geometry contract
 
 Coordinates use a top-left origin, x right and y down. Every layer addresses its input stage after EXIF orientation is applied once.
