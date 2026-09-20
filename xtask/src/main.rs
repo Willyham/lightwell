@@ -309,8 +309,18 @@ fn main_result() -> Result {
                 .value("--aspect")?
                 .map(|s| s.to_string_lossy().parse::<f64>())
                 .transpose()?;
+            let columns = a
+                .value("--columns")?
+                .map(|s| -> Result<[u32; 2]> {
+                    let text = s.to_string_lossy();
+                    let (left, right) = text
+                        .split_once(',')
+                        .ok_or("--columns expects LEFT,RIGHT physical pixels")?;
+                    Ok([left.trim().parse()?, right.trim().parse()?])
+                })
+                .transpose()?;
             a.done()?;
-            println!("{}", smoke::pixels(&path, orientation, aspect)?);
+            println!("{}", smoke::pixels(&path, orientation, aspect, columns)?);
         }
         "hardening" | "measure" => {
             let out = absolute(&root, &a.path("--output")?);
@@ -339,7 +349,7 @@ fn main_result() -> Result {
         }
         "__hang" => std::thread::sleep(std::time::Duration::from_secs(60)),
         "help" => println!(
-            "cargo xtask doctor|check|check-repository|fmt|lint|test|build [--release]|develop [--debug] [app args]|fixtures|generate-fixtures [--output NEW]|audit|editor-acceptance --output NEW|editor-performance --source JPEG --output NEW [--samples N]|inventory --output NEW|package --output NEW|smoke --output NEW [--scenario NAME] [--binary PATH]|check-capture --image PNG [--orientation N] [--aspect R]|hardening --binary PATH --output NEW|measure --binary PATH --output NEW [--samples N]|probe --candidate iced|egui --output NEW"
+            "cargo xtask doctor|check|check-repository|fmt|lint|test|build [--release]|develop [--debug] [app args]|fixtures|generate-fixtures [--output NEW]|audit|editor-acceptance --output NEW|editor-performance --source JPEG --output NEW [--samples N]|inventory --output NEW|package --output NEW|smoke --output NEW [--scenario NAME] [--binary PATH]|check-capture --image PNG [--orientation N] [--aspect R] [--columns LEFT,RIGHT]|hardening --binary PATH --output NEW|measure --binary PATH --output NEW [--samples N]|probe --candidate iced|egui --output NEW"
         ),
         _ => return Err("Unknown command; use cargo xtask help".into()),
     }

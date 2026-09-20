@@ -16,7 +16,7 @@ Every change is measured against these.
 
 ## Current state
 
-S0 (JPEG viewer) is accepted. M1 (persistent history and live JSON API) and M2 (exact rotate, flip and mirror) are implemented and verified on the M4 Mac. M3 (tool modules) and M4 (Lightroom-style crop) come next, then export, Locate, MCP and full-editor verification. Everything is v0: no public compatibility framework, release planning, cloud, accounts, marketplace or generalized node graph. See the [roadmap](docs/plan.md) and [feature status](docs/features.md).
+S0 (JPEG viewing) is accepted; the evidence harness now drives the editor itself. M1 (persistent history and live JSON API) and M2 (exact rotate, flip and mirror) are implemented and verified on the M4 Mac. M3 (tool modules) and M4 (Lightroom-style crop) come next, then export, Locate, MCP and full-editor verification. Everything is v0: no public compatibility framework, release planning, cloud, accounts, marketplace or generalized node graph. See the [roadmap](docs/plan.md) and [feature status](docs/features.md).
 
 ## How we work
 

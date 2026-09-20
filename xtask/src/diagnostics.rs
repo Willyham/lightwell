@@ -69,6 +69,8 @@ pub fn hardening(root: &Path, out: &Path, bin: &Path) -> Result {
             "Obstacle modified",
         )?;
         {
+            // The data root is a plain file, so its log path cannot be created; the editor must
+            // still import and render with an explicit catalog elsewhere.
             let log = out.join("diagnostics-unavailable.log");
             let mut child = smoke::spawn(
                 root,
@@ -76,6 +78,8 @@ pub fn hardening(root: &Path, out: &Path, bin: &Path) -> Result {
                 &[
                     "--data-root".into(),
                     obstacle.into_os_string(),
+                    "--catalog".into(),
+                    out.join("degraded.sqlite").into_os_string(),
                     "--open".into(),
                     fixture.clone().into_os_string(),
                 ],
@@ -117,16 +121,27 @@ pub fn hardening(root: &Path, out: &Path, bin: &Path) -> Result {
         let text = fs::read_to_string(events)?;
         let first: Value = serde_json::from_str(text.lines().next().ok_or("Missing startup")?)?;
         ensure(first["event"] == "startup", "Wrong retained event")?;
+        // The editor owns a catalog under the data root's config directory and nothing else;
+        // no cache directory or other configuration appears.
         ensure(
-            !isolated.join("config").exists() && !isolated.join("cache").exists(),
-            "Unexpected application directories",
+            !isolated.join("cache").exists(),
+            "Unexpected cache directory",
         )?;
+        if isolated.join("config").exists() {
+            for entry in fs::read_dir(isolated.join("config"))? {
+                let name = entry?.file_name().to_string_lossy().into_owned();
+                ensure(
+                    name.starts_with("catalog."),
+                    format!("Unexpected configuration file {name}"),
+                )?;
+            }
+        }
         ensure(before == hash(&fixture)?, "Source modified")?;
         result["checks"] = json!([
             "Actual hung child killed and reaped",
             "Evidence initialization fails without changing existing files",
             "Normal decode survives unavailable diagnostics; child then terminated",
-            "Abrupt termination retains startup; no config/cache/source mutation"
+            "Abrupt termination retains startup; only the catalog under config, no cache or source mutation"
         ]);
         Ok(())
     })();
@@ -169,7 +184,7 @@ pub fn measure(root: &Path, out: &Path, bin: &Path, samples: usize) -> Result {
     ensure((1..=1000).contains(&samples), "Samples must be 1..1000")?;
     ensure(!out.exists(), "Measurement output must be new")?;
     fs::create_dir_all(out)?;
-    let mut report = json!({"status":"in_progress","platform":host(root)?,"binary_sha256":hash(bin)?,"lockfile_sha256":hash(&root.join("Cargo.lock"))?,"method":"App-cold launches; filesystem cache not purged. Frame observation upper bound includes polling/readback, not scanout. RSS sampled about every 50 ms; GPU memory not separated.","runs":[]});
+    let mut report = json!({"status":"in_progress","platform":host(root)?,"binary_sha256":hash(bin)?,"lockfile_sha256":hash(&root.join("Cargo.lock"))?,"method":"App-cold editor launches with an isolated evidence catalog; filesystem cache not purged. open_to_raster_ms spans import, refresh and render. Frame observation upper bound includes polling/readback, not scanout. RSS sampled about every 50 ms; GPU memory not separated.","runs":[]});
     let checked = (|| -> Result {
         for name in ["empty", "24mp", "60mp", "repeated60mp"] {
             for index in 0..if name == "repeated60mp" { 1 } else { samples } {
@@ -264,6 +279,7 @@ pub fn measure(root: &Path, out: &Path, bin: &Path, samples: usize) -> Result {
                             &evidence.join(frame["file"].as_str().ok_or("Missing frame")?),
                             1,
                             Some(if name == "24mp" { 1.5 } else { 5.0 / 3.0 }),
+                            smoke::columns(frame)?,
                         )?);
                     }
                 }
@@ -279,7 +295,7 @@ pub fn measure(root: &Path, out: &Path, bin: &Path, samples: usize) -> Result {
                 }
                 row["backend"] = last["state"]["backend"].clone();
                 for (key, event) in [
-                    ("decode_ms", "decoded"),
+                    ("open_to_raster_ms", "decoded"),
                     ("upload_ms", "render_ready"),
                     ("request_to_capture_ms", "frame_captured"),
                 ] {
@@ -336,7 +352,7 @@ pub fn measure(root: &Path, out: &Path, bin: &Path, samples: usize) -> Result {
             for key in [
                 "launch_to_observed_frame_ms",
                 "sampled_peak_rss_mib",
-                "decode_ms",
+                "open_to_raster_ms",
                 "upload_ms",
                 "request_to_capture_ms",
             ] {
@@ -397,7 +413,7 @@ pub fn probe(root: &Path, out: &Path, candidate: &str) -> Result {
             "Probe failed",
         )?;
         ensure(before == hash(&fixture)?, "Source changed")?;
-        result["pixel_check"] = smoke::pixels(&capture, 6, None)?;
+        result["pixel_check"] = smoke::pixels(&capture, 6, None, None)?;
         result["capture_provenance"] = json!("window-renderer-readback");
         Ok(())
     })();

@@ -2,7 +2,7 @@
 
 An open-source, non-destructive desktop photo editor for macOS, Windows and Linux, built around a small, fast core that people, programs and agents can operate equally. Project code is [GPL-3.0-or-later](LICENSE).
 
-**Status:** the S0 viewer is accepted; M1 persistent history and M2 exact transforms are implemented and verified on the owner's M4 Mac; M3 tool modules and M4 crop are next. Everything is v0. See [feature status](docs/features.md).
+**Status:** S0 is accepted and its separate viewer has been retired into the editor; M1 persistent history and M2 exact transforms are implemented and verified on the owner's M4 Mac; M3 tool modules and M4 crop are next. Everything is v0. See [feature status](docs/features.md).
 
 ## Quick start
 

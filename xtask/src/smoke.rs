@@ -37,10 +37,23 @@ pub fn wait(child: &mut Guard, timeout: Duration) -> Result<std::process::ExitSt
         std::thread::sleep(Duration::from_millis(10));
     }
 }
-pub fn pixels(path: &Path, orientation: u8, aspect: Option<f64>) -> Result<Value> {
+/// Check the captured frame shows the fixture at Fit. `columns` is the physical x range of the
+/// editor's photo surface; without it the whole capture width is the surface.
+pub fn pixels(
+    path: &Path,
+    orientation: u8,
+    aspect: Option<f64>,
+    columns: Option<[u32; 2]>,
+) -> Result<Value> {
     ensure((1..=8).contains(&orientation), "Orientation must be 1..8")?;
     let img = image::open(path)?.to_rgb8();
     let (w, h) = img.dimensions();
+    let [surface_left, surface_right] = columns.unwrap_or([0, w]);
+    ensure(
+        surface_left < surface_right && surface_right <= w,
+        "Invalid surface columns",
+    )?;
+    let surface_width = surface_right - surface_left;
     let colors =
         crate::fixtures::ORDERS[(orientation - 1) as usize].map(|i| crate::fixtures::COLORS[i]);
     let matches = |p: &[u8], c: [u8; 3]| p.iter().zip(c).all(|(a, b)| a.abs_diff(b) <= 8);
@@ -61,7 +74,11 @@ pub fn pixels(path: &Path, orientation: u8, aspect: Option<f64>) -> Result<Value
     let width = right - left;
     let height = bottom - top;
     ensure(
-        width as f64 > w as f64 * 0.2 && height as f64 > h as f64 * 0.5,
+        left >= surface_left && right <= surface_right,
+        "Image outside the photo surface",
+    )?;
+    ensure(
+        width as f64 > surface_width as f64 * 0.2 && height as f64 > h as f64 * 0.5,
         "Fixture too small",
     )?;
     let aspect = aspect.unwrap_or(if orientation >= 5 {
@@ -75,7 +92,7 @@ pub fn pixels(path: &Path, orientation: u8, aspect: Option<f64>) -> Result<Value
         "Incorrect Fit aspect ratio",
     )?;
     ensure(
-        ((left + right) as f64 / 2.0 - w as f64 / 2.0).abs() <= 5.0,
+        ((left + right) as f64 / 2.0 - (surface_left + surface_right) as f64 / 2.0).abs() <= 5.0,
         "Image not centered",
     )?;
     let mut actual = Vec::new();
@@ -91,8 +108,17 @@ pub fn pixels(path: &Path, orientation: u8, aspect: Option<f64>) -> Result<Value
         actual.push(p);
     }
     Ok(
-        json!({"status":"passed","physical_size":[w,h],"image_bounds":[left,top,right,bottom],"corner_rgb":actual,"tolerance_per_channel":8,"scope":"Fit geometry and sRGB interiors; not monitor calibration or native picker"}),
+        json!({"status":"passed","physical_size":[w,h],"surface_columns":[surface_left,surface_right],"image_bounds":[left,top,right,bottom],"corner_rgb":actual,"tolerance_per_channel":8,"scope":"Fit geometry and sRGB interiors; not monitor calibration or native picker"}),
     )
+}
+pub fn columns(frame: &Value) -> Result<Option<[u32; 2]>> {
+    match frame.get("surface_columns") {
+        None | Some(Value::Null) => Ok(None),
+        Some(value) => {
+            let pair: [u32; 2] = serde_json::from_value(value.clone())?;
+            Ok(Some(pair))
+        }
+    }
 }
 pub fn events(path: &Path) -> Result<Vec<Value>> {
     fs::read_to_string(path)?
@@ -209,6 +235,7 @@ pub fn verify(evidence: &Path, scenario: &str, count: usize) -> Result<Value> {
                     "large60" => Some(5.0 / 3.0),
                     _ => None,
                 },
+                columns(frame)?,
             )?;
             ensure(
                 events.iter().any(|e| {
@@ -343,10 +370,16 @@ mod tests {
         let p = tmp.path().join("blank.png");
         image::RgbImage::new(960, 640).save(&p).unwrap();
         assert!(
-            pixels(&p, 6, None)
+            pixels(&p, 6, None, None)
                 .unwrap_err()
                 .to_string()
                 .contains("blank")
+        );
+        assert!(
+            pixels(&p, 6, None, Some([10, 5]))
+                .unwrap_err()
+                .to_string()
+                .contains("surface columns")
         );
     }
     #[test]

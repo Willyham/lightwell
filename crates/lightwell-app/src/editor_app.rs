@@ -1,4 +1,4 @@
-use crate::{Config, paths::Paths};
+use crate::{Config, diagnostics::Diagnostics, paths::Paths};
 use iced::{
     Element, Length, Subscription, Task,
     widget::{button, column, container, image, row, scrollable, text, text_input},
@@ -11,20 +11,52 @@ use lightwell_core::{
 };
 use serde_json::{Value, json};
 use std::{
-    collections::HashSet,
+    collections::{HashSet, VecDeque},
     path::PathBuf,
     sync::{
         Mutex,
         atomic::{AtomicU64, Ordering},
     },
     thread::JoinHandle,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 static REQUEST_NUMBER: AtomicU64 = AtomicU64::new(1);
 const HISTORY_PAGE_SIZE: usize = 50;
 const LINEAGE_LIMIT: usize = 100;
 const ACTOR: &str = "desktop";
+/// Layout constants shared by the view and the evidence frame description.
+const PADDING: f32 = 16.0;
+const SPACING: f32 = 12.0;
+const SIDEBAR_WIDTH: f32 = 340.0;
+/// An evidence run that has not finished by then is stuck; exit so the harness reaps nothing.
+const EVIDENCE_DEADLINE: Duration = Duration::from_secs(25);
+
+/// What the editor was last asked to show, correlated with logged events and captured frames.
+struct Activity {
+    /// Counts open requests; `displayed` is the request whose image is on screen.
+    requested: u64,
+    displayed: u64,
+    /// An open request is in progress until its image is uploaded or it fails.
+    pending: bool,
+    phase: &'static str,
+    error_code: Option<String>,
+    source_dimensions: Option<(u32, u32)>,
+    preview_dimensions: Option<(u32, u32)>,
+    orientation: Option<u8>,
+    backend: Option<Value>,
+    request_started: Instant,
+}
+
+/// Evidence mode: import queued files in order, capture a frame after each outcome, then exit.
+struct Evidence {
+    dir: PathBuf,
+    queue: VecDeque<PathBuf>,
+    frames: Vec<Value>,
+    capture_pending: bool,
+    saving: bool,
+    had_errors: bool,
+}
 
 /// Authoritative state read back from the owner after a change. `history` is `None` when only the
 /// current entry needs merging into the loaded page.
@@ -54,6 +86,7 @@ struct Upload {
     entry_id: EntryId,
     snapshot_id: String,
     source_fingerprint: String,
+    started: Instant,
 }
 
 #[derive(Clone, Debug)]
@@ -101,6 +134,11 @@ enum Message {
     HundredPercent,
     ApplyZoom,
     ScaleFactor(f32),
+    Info(iced::system::Information),
+    EvidenceTick,
+    Capture,
+    Captured(iced::window::Screenshot),
+    Saved(Result<Value, String>),
     Close,
 }
 
@@ -109,16 +147,19 @@ struct Boot {
     owner: OwnerHandle,
     join: JoinHandle<()>,
     live_server: Option<LocalServer>,
-    initial: Option<PathBuf>,
+    config: Config,
 }
 
-pub(super) fn run(mut config: Config, size: (f32, f32)) -> Result<(), String> {
-    let paths = Paths::resolve(config.data_root.as_ref())
-        .ok_or("no usable application data directory; pass --data-root")?;
-    let catalog = config
-        .catalog
-        .clone()
-        .unwrap_or_else(|| paths.config.join("catalog.sqlite"));
+pub(super) fn run(config: Config, size: (f32, f32)) -> Result<(), String> {
+    // Evidence runs never touch a real catalog: theirs lives inside the new evidence directory.
+    let catalog = match (&config.catalog, &config.evidence) {
+        (Some(catalog), _) => catalog.clone(),
+        (None, Some(evidence)) => evidence.join("catalog.sqlite"),
+        (None, None) => Paths::resolve(config.data_root.as_ref())
+            .ok_or("no usable application data directory; pass --data-root")?
+            .config
+            .join("catalog.sqlite"),
+    };
     let (owner, join) = OwnerHandle::start(&catalog).map_err(|error| match error.kind {
         ErrorKind::Conflict => format!(
             "another Lightwell instance owns the catalog {}; close it or pass --catalog",
@@ -136,7 +177,7 @@ pub(super) fn run(mut config: Config, size: (f32, f32)) -> Result<(), String> {
         owner,
         join,
         live_server,
-        initial: config.files.pop_front(),
+        config,
     }));
     iced::application(
         move || {
@@ -167,6 +208,13 @@ struct Editor {
     client: ClientId,
     /// Local copy of the owner's session, replaced only by a response with a newer revision.
     session: ClientSession,
+    activity: Activity,
+    evidence: Option<Evidence>,
+    diagnostics: Option<Diagnostics>,
+    run_id: String,
+    /// Emit events to stderr when a log was requested but is unavailable.
+    verbose: bool,
+    started: Instant,
     state: Option<EditorState>,
     history: HistoryPage,
     versions: Vec<Version>,
@@ -203,15 +251,41 @@ impl Editor {
             owner,
             join,
             live_server,
-            initial,
+            mut config,
         } = boot;
         let client = owner.register();
+        let evidence = config.evidence.take().map(|dir| Evidence {
+            dir,
+            queue: std::mem::take(&mut config.files),
+            frames: Vec::new(),
+            capture_pending: false,
+            saving: false,
+            had_errors: false,
+        });
+        let initial = config.files.pop_front();
         let mut editor = Self {
             owner: owner.clone(),
             owner_join: Some(join),
             live_server,
             client,
             session: ClientSession::default(),
+            activity: Activity {
+                requested: 0,
+                displayed: 0,
+                pending: false,
+                phase: "empty",
+                error_code: None,
+                source_dimensions: None,
+                preview_dimensions: None,
+                orientation: None,
+                backend: None,
+                request_started: Instant::now(),
+            },
+            evidence,
+            diagnostics: config.diagnostics.clone(),
+            run_id: config.run_id.clone(),
+            verbose: config.wants_events(),
+            started: Instant::now(),
             state: None,
             history: HistoryPage {
                 entries: Vec::new(),
@@ -226,16 +300,12 @@ impl Editor {
             preview_queue: PreviewQueue::default(),
             preview_generation: 0,
             uploading: false,
-            busy: initial.is_some(),
+            busy: false,
             syncing: false,
             pan_in_flight: false,
             pending_pan: None,
             picker_open: false,
-            status: if initial.is_some() {
-                "Importing photograph…".into()
-            } else {
-                "Open a JPEG to begin".into()
-            },
+            status: "Open a JPEG to begin".into(),
             api_sequence: 0,
             scale_factor: 1.0,
             x: "0".into(),
@@ -249,13 +319,121 @@ impl Editor {
         if editor.live_server.is_none() {
             editor.status = "Editor ready; live API unavailable on this host".into();
         }
+        editor.event(
+            "startup",
+            json!({"os":std::env::consts::OS,"arch":std::env::consts::ARCH,"version":env!("CARGO_PKG_VERSION"),"debug_assertions":cfg!(debug_assertions),"mode":if editor.evidence.is_some() {"evidence"} else {"editor"}}),
+        );
         let scale = iced::window::oldest()
             .and_then(iced::window::scale_factor)
             .map(Message::ScaleFactor);
-        let import = initial
-            .map(|path| import_task(owner, client, path))
-            .unwrap_or_else(Task::none);
-        (editor, Task::batch([scale, import]))
+        let backend = iced::system::information().map(Message::Info);
+        let first = match &mut editor.evidence {
+            Some(evidence) => match evidence.queue.pop_front() {
+                Some(path) => editor.open(path),
+                None => {
+                    evidence.capture_pending = true;
+                    Task::none()
+                }
+            },
+            None => initial
+                .map(|path| editor.open(path))
+                .unwrap_or_else(Task::none),
+        };
+        (editor, Task::batch([scale, backend, first]))
+    }
+
+    fn event(&self, name: &str, detail: Value) {
+        let value = json!({"event":name,"run_id":self.run_id,"build_version":env!("CARGO_PKG_VERSION"),"elapsed_ms":self.started.elapsed().as_secs_f64()*1000.,"request_id":self.activity.requested,"generation":self.activity.requested,"detail":detail});
+        if let Some(log) = &self.diagnostics {
+            log.event(value);
+        } else if self.verbose {
+            eprintln!("{value}");
+        }
+    }
+
+    /// The state correlated with every event and captured frame; never includes source paths.
+    fn snapshot(&self) -> Value {
+        json!({"run_id":self.run_id,"mode":if self.evidence.is_some() {"evidence"} else {"editor"},"orientation":self.activity.orientation,"phase":self.activity.phase,"requested_generation":self.activity.requested,"displayed_generation":self.activity.displayed,"source_dimensions":self.activity.source_dimensions,"preview_dimensions":self.activity.preview_dimensions,"backend":self.activity.backend,"status":self.status,"error_code":self.activity.error_code})
+    }
+
+    /// Import a file through the same API call the Open button uses, tracked as one open request.
+    fn open(&mut self, path: PathBuf) -> Task<Message> {
+        self.activity.requested += 1;
+        self.activity.pending = true;
+        self.activity.phase = "loading";
+        self.activity.error_code = None;
+        self.activity.request_started = Instant::now();
+        self.busy = true;
+        self.status = "Importing photograph…".into();
+        let file = path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        self.event("open_requested", json!({"file":file}));
+        import_task(self.owner.clone(), self.client, path)
+    }
+
+    fn open_failed(&mut self, error_code: &str, message: &str) {
+        self.activity.pending = false;
+        self.activity.phase = "error";
+        self.activity.error_code = Some(error_code.into());
+        self.event(
+            "open_failed",
+            json!({"error_code":error_code,"message":message}),
+        );
+        self.outcome_ready(true);
+    }
+
+    /// An open request reached its outcome; evidence mode captures a frame for it.
+    fn outcome_ready(&mut self, failed: bool) {
+        if let Some(evidence) = &mut self.evidence {
+            evidence.had_errors |= failed;
+            evidence.capture_pending = true;
+        }
+    }
+
+    fn finish_evidence(&mut self) -> Task<Message> {
+        self.event("shutdown", json!({}));
+        let evidence = self.evidence.as_mut().expect("evidence mode");
+        let dir = evidence.dir.clone();
+        let frames = std::mem::take(&mut evidence.frames);
+        let had_errors = evidence.had_errors;
+        let result = json!({"run_id":self.run_id,"status":"captured","had_input_errors":had_errors,"frames":frames,"elapsed_ms":self.started.elapsed().as_secs_f64()*1000.,"build_version":env!("CARGO_PKG_VERSION"),"os":std::env::consts::OS,"arch":std::env::consts::ARCH});
+        let state = self.snapshot();
+        let log = self.diagnostics.take();
+        self.live_server.take();
+        self.owner.disconnect(self.client);
+        self.owner.stop();
+        let join = self.owner_join.take();
+        Task::perform(
+            async move {
+                if let Some(log) = log
+                    && !log.finish()
+                {
+                    eprintln!("diagnostics: incomplete evidence log");
+                    std::process::exit(4);
+                }
+                let write = || -> std::io::Result<()> {
+                    std::fs::write(
+                        dir.join("result.json"),
+                        serde_json::to_vec_pretty(&result).expect("result is serializable"),
+                    )?;
+                    std::fs::write(
+                        dir.join("state.json"),
+                        serde_json::to_vec_pretty(&state).expect("state is serializable"),
+                    )
+                };
+                if let Err(error) = write() {
+                    eprintln!("Evidence finalize failed: {error}");
+                    std::process::exit(4);
+                }
+                if let Some(join) = join {
+                    let _ = join.join();
+                }
+            },
+            |_| (),
+        )
+        .then(|_| iced::exit())
     }
 
     /// Keep the newest session the owner has reported; responses may complete out of order.
@@ -268,7 +446,7 @@ impl Editor {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Open => {
-                if self.picker_open || self.busy {
+                if self.picker_open || self.busy || self.evidence.is_some() {
                     return Task::none();
                 }
                 self.picker_open = true;
@@ -286,17 +464,113 @@ impl Editor {
             Message::Picked(path) => {
                 self.picker_open = false;
                 if let Some(path) = path {
-                    self.busy = true;
-                    self.status = "Importing photograph…".into();
-                    return import_task(self.owner.clone(), self.client, path);
+                    return self.open(path);
                 }
             }
             Message::Refreshed(result) => {
                 self.busy = false;
                 match result {
-                    Ok(refresh) => self.accept(*refresh),
-                    Err(error) => self.status = error,
+                    Ok(refresh) => {
+                        if self.activity.pending {
+                            self.activity.source_dimensions =
+                                Some((refresh.state.asset.width, refresh.state.asset.height));
+                            self.activity.orientation = Some(refresh.job.source.orientation);
+                        }
+                        self.accept(*refresh);
+                    }
+                    Err(error) => {
+                        self.status = error.clone();
+                        if self.activity.pending {
+                            let (code, message) =
+                                error.split_once(": ").unwrap_or(("internal", &error));
+                            self.open_failed(code, message);
+                        }
+                    }
                 }
+            }
+            Message::Info(info) => {
+                self.activity.backend =
+                    Some(json!({"backend":info.graphics_backend,"adapter":info.graphics_adapter}));
+                self.event(
+                    "backend",
+                    self.activity.backend.clone().unwrap_or(Value::Null),
+                );
+            }
+            Message::EvidenceTick => {
+                if self.evidence.is_some() && self.started.elapsed() > EVIDENCE_DEADLINE {
+                    eprintln!("Evidence deadline exceeded; inspect retained subprocess output");
+                    std::process::exit(3);
+                }
+            }
+            Message::Capture => {
+                let Some(evidence) = &mut self.evidence else {
+                    return Task::none();
+                };
+                if !evidence.capture_pending || evidence.saving || self.activity.backend.is_none() {
+                    return Task::none();
+                }
+                evidence.capture_pending = false;
+                evidence.saving = true;
+                return iced::window::oldest()
+                    .and_then(iced::window::screenshot)
+                    .map(Message::Captured);
+            }
+            Message::Captured(shot) => {
+                self.event(
+                    "frame_captured",
+                    json!({"displayed_generation":self.activity.displayed,"request_to_capture_ms":self.activity.request_started.elapsed().as_secs_f64()*1000.}),
+                );
+                let state = self.snapshot();
+                let generation = self.activity.requested;
+                let Some(evidence) = &self.evidence else {
+                    return Task::none();
+                };
+                let dir = evidence.dir.clone();
+                let scale = shot.scale_factor;
+                let logical_width = shot.size.width as f32 / scale;
+                // The photo surface spans the window minus padding, the sidebar and their spacing.
+                let columns = [
+                    (PADDING * scale).round() as u32,
+                    ((logical_width - PADDING - SIDEBAR_WIDTH - SPACING) * scale).round() as u32,
+                ];
+                return Task::perform(
+                    async move {
+                        let name = format!("frame-{generation}.png");
+                        ::image::save_buffer(
+                            dir.join(&name),
+                            &shot.rgba,
+                            shot.size.width,
+                            shot.size.height,
+                            ::image::ColorType::Rgba8,
+                        )
+                        .map_err(|e| e.to_string())?;
+                        let frame = json!({"file":name,"state":state,"capture_provenance":"window-renderer-readback","color":"sRGB","physical_size":[shot.size.width,shot.size.height],"scale":scale,"surface_columns":columns});
+                        std::fs::write(
+                            dir.join(format!("state-{generation}.json")),
+                            serde_json::to_vec_pretty(&frame).expect("frame is serializable"),
+                        )
+                        .map_err(|e| e.to_string())?;
+                        Ok(frame)
+                    },
+                    Message::Saved,
+                );
+            }
+            Message::Saved(result) => {
+                let Some(evidence) = &mut self.evidence else {
+                    return Task::none();
+                };
+                evidence.saving = false;
+                match result {
+                    Ok(frame) => evidence.frames.push(frame),
+                    Err(error) => {
+                        eprintln!("Evidence write failed: {error}");
+                        std::process::exit(4);
+                    }
+                }
+                return match evidence.queue.pop_front() {
+                    Some(path) => self.open(path),
+                    None => self.finish_evidence(),
+                };
             }
             Message::PreviewLoaded(result) => {
                 self.busy = false;
@@ -388,6 +662,14 @@ impl Editor {
                         Ok(raster) => {
                             self.uploading = true;
                             self.status = "Preparing pixels for display…".into();
+                            if self.activity.pending {
+                                self.activity.preview_dimensions =
+                                    Some((raster.width, raster.height));
+                                self.event(
+                                    "decoded",
+                                    json!({"open_to_raster_ms":self.activity.request_started.elapsed().as_secs_f64()*1000.,"source_dimensions":self.activity.source_dimensions,"preview_dimensions":[raster.width,raster.height]}),
+                                );
+                            }
                             let upload = Upload {
                                 generation: result.generation,
                                 width: raster.width,
@@ -395,6 +677,7 @@ impl Editor {
                                 entry_id: result.entry_id,
                                 snapshot_id: raster.snapshot_id.to_string(),
                                 source_fingerprint: raster.source_fingerprint,
+                                started: Instant::now(),
                             };
                             let handle = image::Handle::from_rgba(
                                 raster.width,
@@ -404,7 +687,19 @@ impl Editor {
                             return image_memory::allocate(handle)
                                 .map(move |result| Message::Uploaded(upload.clone(), result));
                         }
-                        Err(error) => self.status = error.to_string(),
+                        Err(error) => {
+                            self.status = error.to_string();
+                            if self.activity.pending {
+                                self.activity.pending = false;
+                                self.activity.phase = "error";
+                                self.activity.error_code = Some(error.kind.code().into());
+                                self.event(
+                                    "render_failed",
+                                    json!({"error_code":error.kind.code()}),
+                                );
+                                self.outcome_ready(true);
+                            }
+                        }
                     }
                 }
             }
@@ -418,6 +713,16 @@ impl Editor {
                         self.photo = Some(allocation);
                         self.dimensions = Some((upload.width, upload.height));
                         self.display_entry = Some(upload.entry_id.clone());
+                        if self.activity.pending {
+                            self.activity.pending = false;
+                            self.activity.displayed = self.activity.requested;
+                            self.activity.phase = "ready";
+                            self.event(
+                                "render_ready",
+                                json!({"upload_ms":upload.started.elapsed().as_secs_f64()*1000.,"displayed_generation":self.activity.displayed}),
+                            );
+                            self.outcome_ready(false);
+                        }
                         let marker = if self.session.preview.can_edit() {
                             "Current"
                         } else {
@@ -432,7 +737,16 @@ impl Editor {
                             short(&upload.source_fingerprint)
                         );
                     }
-                    Err(_) => self.status = "Could not upload rendered pixels".into(),
+                    Err(_) => {
+                        self.status = "Could not upload rendered pixels".into();
+                        if self.activity.pending {
+                            self.activity.pending = false;
+                            self.activity.phase = "error";
+                            self.activity.error_code = Some(ErrorKind::Render.code().into());
+                            self.event("render_failed", json!({"error_code":"render"}));
+                            self.outcome_ready(true);
+                        }
+                    }
                 }
             }
             Message::X(value) => self.x = value,
@@ -589,19 +903,24 @@ impl Editor {
                 }
             }
             Message::Close => {
+                self.event("shutdown", json!({"while_loading":self.activity.pending}));
                 self.live_server.take();
                 self.owner.disconnect(self.client);
                 self.owner.stop();
-                if let Some(join) = self.owner_join.take() {
-                    return Task::perform(
-                        async move {
+                let join = self.owner_join.take();
+                let log = self.diagnostics.take();
+                return Task::perform(
+                    async move {
+                        if let Some(log) = log {
+                            log.finish();
+                        }
+                        if let Some(join) = join {
                             let _ = join.join();
-                        },
-                        |_| (),
-                    )
-                    .then(|_| iced::exit());
-                }
-                return iced::exit();
+                        }
+                    },
+                    |_| (),
+                )
+                .then(|_| iced::exit());
             }
         }
         Task::none()
@@ -698,7 +1017,8 @@ impl Editor {
     fn view(&self) -> Element<'_, Message> {
         let current = self.state.as_ref();
         let editable = current.is_some() && self.session.preview.can_edit() && !self.busy;
-        let open = button("Open image").on_press_maybe((!self.busy).then_some(Message::Open));
+        let open = button("Open image")
+            .on_press_maybe((!self.busy && self.evidence.is_none()).then_some(Message::Open));
         let header = row![text("Lightwell").size(22), open]
             .spacing(16)
             .align_y(iced::Alignment::Center);
@@ -915,19 +1235,19 @@ impl Editor {
             .spacing(18)
             .padding(12),
         )
-        .width(340);
+        .width(SIDEBAR_WIDTH);
         column![
             header,
             row![
                 container(surface).width(Length::Fill).height(Length::Fill),
                 sidebar
             ]
-            .spacing(12)
+            .spacing(SPACING)
             .height(Length::Fill),
             text(&self.status).size(12),
         ]
-        .spacing(12)
-        .padding(16)
+        .spacing(SPACING)
+        .padding(PADDING)
         .into()
     }
 
@@ -963,9 +1283,16 @@ impl Editor {
         if self.preview_queue.is_busy() {
             subscriptions.push(iced::time::every(Duration::from_millis(16)).map(|_| Message::Poll));
         }
-        if self.state.is_some() {
+        if self.state.is_some() && self.evidence.is_none() {
             subscriptions
                 .push(iced::time::every(Duration::from_millis(500)).map(|_| Message::Sync));
+        }
+        if let Some(evidence) = &self.evidence {
+            subscriptions
+                .push(iced::time::every(Duration::from_millis(250)).map(|_| Message::EvidenceTick));
+            if evidence.capture_pending {
+                subscriptions.push(iced::window::frames().map(|_| Message::Capture));
+            }
         }
         Subscription::batch(subscriptions)
     }
@@ -1223,7 +1550,7 @@ mod tests {
             owner,
             join,
             live_server: None,
-            initial: None,
+            config: Config::default(),
         });
         (editor, catalog)
     }
