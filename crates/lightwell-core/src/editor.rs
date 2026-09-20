@@ -1,6 +1,6 @@
 use crate::{
-    AssetId, EntryId, Error, ErrorKind, HistoryEntry, ModuleRegistry, Mutation, PreviewJob, Raster,
-    Snapshot, SnapshotId, SourceImage, Transform,
+    AssetId, ContentPoint, EntryId, Error, ErrorKind, HistoryEntry, ModuleRegistry, Mutation,
+    PreviewJob, Raster, Snapshot, SnapshotId, SourceImage, Transform, locate,
     modules::{ActionInput, ActionPlan, Stage, StageContext, check_parameters},
     open_source, render,
     render::Evaluation,
@@ -543,6 +543,22 @@ impl EditorService {
             y,
             rgba,
         })
+    }
+
+    /// Map one output pixel of a saved entry back to the pixel of the content stage it shows: the
+    /// source after EXIF orientation, which is the stage a pixel-stage edit addresses. Like
+    /// `sample_entry` it answers from the compiled stack and rasterizes nothing.
+    pub fn locate_entry(
+        &self,
+        asset_id: &AssetId,
+        entry_id: &EntryId,
+        x: u32,
+        y: u32,
+    ) -> Result<ContentPoint, Error> {
+        let state = self.state(asset_id)?;
+        let entry = self.entry(asset_id, entry_id)?;
+        let source = self.verified_source(&state.asset)?;
+        locate(&self.registry, &source, &entry.snapshot.recipe, x, y)
     }
 
     /// One action request for every caller: the desktop, the JSON API and headless clients all

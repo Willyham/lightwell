@@ -184,6 +184,17 @@ pub(super) const METHODS: &[MethodSpec] = &[
         handler: Some(render_sample),
     },
     MethodSpec {
+        name: "render.locate",
+        mutates: false,
+        required: &["asset_id", "x", "y"],
+        optional: &[(
+            "entry_id",
+            "entry to locate in; default the session's selection",
+        )],
+        notes: "the content pixel, the source after EXIF orientation, that one output pixel shows",
+        handler: Some(render_locate),
+    },
+    MethodSpec {
         name: "events.since",
         mutates: false,
         required: &["after"],
@@ -607,6 +618,32 @@ fn render_sample(
     Ok(sampled)
 }
 
+/// Where a view point lands in the content stage. Read-only: the session's selection decides which
+/// entry answers when the caller names none, and nothing is committed or touched.
+fn render_locate(
+    service: &mut EditorService,
+    session: &mut ClientSession,
+    params: &Value,
+) -> Result<Value, Error> {
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct P {
+        asset_id: AssetId,
+        entry_id: Option<EntryId>,
+        x: u32,
+        y: u32,
+    }
+    let p = parse::<P>(params)?;
+    let entry_id = match p.entry_id {
+        Some(entry_id) => entry_id,
+        None => match &session.preview.selection {
+            HistorySelection::Current => service.state(&p.asset_id)?.current_entry.id,
+            HistorySelection::Entry(id) => id.clone(),
+        },
+    };
+    value(service.locate_entry(&p.asset_id, &entry_id, p.x, p.y)?)
+}
+
 fn require_current(session: &ClientSession) -> Result<(), Error> {
     if session.preview.can_edit() {
         Ok(())
@@ -746,6 +783,116 @@ mod tests {
                 .contains("number parameter"),
             "the schema describes number parameters"
         );
+        drop(service);
+        std::fs::remove_file(catalog).unwrap();
+    }
+
+    fn call(
+        service: &mut EditorService,
+        session: &mut ClientSession,
+        method: &str,
+        params: Value,
+    ) -> ApiResponse {
+        dispatch(
+            service,
+            session,
+            &ApiRequest {
+                id: method.into(),
+                method: method.into(),
+                params,
+                token: None,
+            },
+            0,
+        )
+    }
+
+    #[test]
+    fn render_locate_answers_a_view_point_in_the_content_stage() {
+        let catalog =
+            std::env::temp_dir().join(format!("lightwell-locate-{}.sqlite", std::process::id()));
+        let mut service = EditorService::open(&catalog).unwrap();
+        let asset = service
+            .import(
+                &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/s0/orientation-1.jpg"),
+            )
+            .unwrap()
+            .asset
+            .id;
+        let mut session = ClientSession::default();
+        let original = service.state(&asset).unwrap().current_entry.id;
+
+        // Discovery lists the method with its parameters before anyone calls it.
+        let schema = call(&mut service, &mut session, "schema.list", json!({}))
+            .result
+            .expect("the schema");
+        let listed = &schema["methods"]["render.locate"];
+        assert_eq!(listed["mutates"], json!(false));
+        assert_eq!(listed["required"], json!(["asset_id", "x", "y"]));
+        assert!(
+            listed["optional"]["entry_id"]
+                .as_str()
+                .expect("the optional entry")
+                .contains("default"),
+            "{listed}"
+        );
+        assert!(!listed["notes"].as_str().unwrap().is_empty());
+
+        // A quarter turn puts the content stage's top-right corner in the output's top-left.
+        let turned = call(
+            &mut service,
+            &mut session,
+            "edit.transform",
+            json!({
+                "asset_id": asset,
+                "mutation": {"expected_revision": 0, "request_id": "turn", "actor": "test"},
+                "transform": "rotate-right",
+            }),
+        );
+        assert!(turned.error.is_none(), "{:?}", turned.error);
+        let revision = session.revision;
+        let located = call(
+            &mut service,
+            &mut session,
+            "render.locate",
+            json!({"asset_id": asset, "x": 0, "y": 0}),
+        )
+        .result
+        .expect("a located point");
+        assert_eq!(
+            located,
+            json!({"content_x": 0, "content_y": 319, "width": 480, "height": 320})
+        );
+        assert_eq!(
+            session.revision, revision,
+            "locating changes no session state"
+        );
+
+        // A historical entry is located in its own stack: this point is outside the current one.
+        let historical = call(
+            &mut service,
+            &mut session,
+            "render.locate",
+            json!({"asset_id": asset, "entry_id": original, "x": 479, "y": 0}),
+        )
+        .result
+        .expect("a located point in the original entry");
+        assert_eq!(
+            historical,
+            json!({"content_x": 479, "content_y": 0, "width": 480, "height": 320})
+        );
+
+        // A point outside the selected entry's output stage is refused, and names that stage.
+        let error = call(
+            &mut service,
+            &mut session,
+            "render.locate",
+            json!({"asset_id": asset, "x": 320, "y": 0}),
+        )
+        .error
+        .expect("a point outside the rendered image");
+        assert_eq!(error.code, "validation");
+        assert!(error.message.contains("320x480"), "{}", error.message);
+
         drop(service);
         std::fs::remove_file(catalog).unwrap();
     }
