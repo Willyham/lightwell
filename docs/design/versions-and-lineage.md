@@ -24,13 +24,13 @@ Restoring a version is the existing `history.restore` on the version's entry. Th
 
 ## Lineage
 
-`history.lineage` walks `undo_parent` from an entry (default current) newest first, returning entry id, sequence, action and parent per step, at most one hundred steps per call with `next_entry_id` to continue. It reads the new `undo_parent_id` column rather than parsing entry JSON, so the desktop can afford it after every change. The desktop marks loaded entries that are not on the current lineage as branches; when the chain was truncated it marks nothing at or below the oldest returned step, because it cannot know.
+`history.lineage` walks `undo_parent` from an entry (default current) newest first, returning entry id, sequence, action and parent per step, at most one hundred steps per call with `next_entry_id` to continue. It reads the `undo_parent_id` column rather than parsing entry JSON, so the desktop can afford it after every change. The desktop marks loaded entries that are not on the current lineage as branches; when the chain was truncated it marks nothing at or below the oldest returned step, because it cannot know.
 
-## Storage decision: catalog format 2
+## Storage: catalog format 2
 
-Format 1 wrote each stack three times: inside the entry JSON, in a `snapshots` row and as `snapshot_layers` rows. Only the entry JSON was ever read. The alternative was to turn the layer table into a content-addressed object store, which would deduplicate payloads and index layers by effect id. That is speculative for v0 payloads of a few dozen bytes, so format 2 drops both tables and keeps the entry JSON authoritative. When M3 needs to find snapshots that use a provider, a scan of entry JSON is sufficient at v0 catalog sizes, and an index table can be added with that feature.
+Entry JSON is the authoritative stored recipe snapshot; each entry also has an `undo_parent_id` for bounded lineage queries. The `versions` table holds named references to entries. History inserts name their columns explicitly.
 
-Format 2 also adds `undo_parent_id` on entries and the `versions` table. Opening a format 1 catalog converts it in one transaction: verify that every entry's snapshot row exists, drop the entry immutability trigger to backfill the parent column, recreate the trigger, drop the two tables, create `versions` and set the format marker. A catalog whose snapshot rows are inconsistent is left at format 1 with an incompatibility error rather than converted. Format 0 creates format 2 directly; any other marker is refused.
+An empty, unmarked database is initialized with the current schema. Existing catalogs must use the current format marker. Unsupported or nonempty unmarked catalogs are refused without rewriting their data, with an error directing the user to a new catalog path. Only current shapes are supported during pre-release development.
 
 ## Sessions live with the owner
 
@@ -49,7 +49,8 @@ The method table in the core carries each method's schema description, mutation 
 
 ## Acceptance
 
-- Format 1 catalogs convert once; inconsistent ones are refused unchanged; converted catalogs reopen at format 2 with only the expected tables.
+- Empty catalogs initialize with the current format. Unsupported formats and nonempty unmarked catalogs are refused without changing their bytes.
+- Current-format imports and edits reopen with stable entries, versions, undo/redo and unchanged source bytes.
 - Versions survive reopen, reject empty, oversized and control-character names, treat case-insensitive duplicates as conflicts, restore through the ordinary restore path and keep their entry after deletion.
 - Lineage skips abandoned branches, pages with a continuation id and rejects unknown assets.
 - An independent JSON client creates a version, undoes, lists versions and reads a one-step lineage in one session.

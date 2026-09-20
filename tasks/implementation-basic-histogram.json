@@ -776,7 +776,7 @@
       ],
       "extra_context": [
         "Use the frozen algorithm and shared Basic field-patch host; no separate per-slider recipe layers.",
-        "Explicitly preserve earlier exposure-only Basic histories through retained payload interpretation or proven conversion."
+        "Use only the current Basic payload and algorithm; update the effect format when interpretation changes and reject unsupported formats explicitly."
       ],
       "context_links": [
         {

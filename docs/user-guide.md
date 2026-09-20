@@ -18,6 +18,8 @@ For agent-driven API or rendered checks on macOS, add `--background` to keep the
 
 Open references an existing supported sRGB or greyscale JPEG without copying or modifying it. Cmd+O on macOS and Ctrl+O elsewhere opens the picker. EXIF orientation is applied once before any edit. The catalog stores stable identities, the source fingerprint, ordered operations and history. It is not a backup of the original photo.
 
+Choose Copy message beside the status text at the bottom of the window to copy the complete message, including any error, to the clipboard. The message stays visible after copying.
+
 ## Edit and inspect
 
 The tool panel is generated from the registered tool modules: each module declares its fields and buttons, and the desktop only lays them out. A field shows its unit and, while its text is outside the declared range, the message naming that range; a button is enabled only when the current state is editable and every value it needs is valid. Tab and Shift+Tab move between fields, and Enter in a field runs its action. A control kind this build cannot draw is shown as an explicit unsupported-control message rather than hidden, and an unavailable module is listed with its reason.
@@ -55,7 +57,7 @@ Versions name the displayed state so you can find it again among many entries. T
 
 Undo and Redo navigate saved states without appending rows. Cmd+Z / Ctrl+Z and Shift+Cmd+Z / Shift+Ctrl+Z invoke the same service as the buttons. A new edit clears shortcut redo while every older entry remains available for preview or Restore. Layers, history, navigation state and stable IDs survive reopening the catalog.
 
-Missing or changed sources keep their catalog data and report why rendering is unavailable. Incompatible catalogs or operation payloads fail explicitly; Lightwell never silently resets or drops them.
+Missing or changed sources keep their catalog data and report why rendering is unavailable. Only the current catalog and operation formats are supported during pre-release development. Unsupported formats fail explicitly; Lightwell never silently resets or drops them. If a catalog format is rejected, start with a new path using `--catalog /path/to/new-catalog.sqlite` and import the originals again.
 
 ## JSON automation
 

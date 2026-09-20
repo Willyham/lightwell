@@ -70,7 +70,7 @@ Manual Locate and the MCP adapter are specified in [source recovery](source-reco
 
 ## Acceptance
 
-1. Repeat the M1/M2 saved-history journey through module-based handlers before crop testing.
+1. Exercise pixel and transform history through the current module handlers before crop testing.
 2. Exercise every handle, movement, ratio and angle control and Option scaling at Fit, numeric zoom and 100% on supported display scales, with distinct pan and crop gestures.
 3. Sweep angle away and back, use off-center subjects and near-boundary crops, and compose with pixel and transform effects before and after. Check coverage, output size, sampling tolerance and source detail.
 4. Apply, Cancel, reset, undo, redo, preview, restore, edit again and reopen: exactly one action per commit and every snapshot retained.

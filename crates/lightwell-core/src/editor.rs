@@ -216,12 +216,13 @@ impl EditorService {
             .map_err(catalog_error)?;
         match version {
             0 => Self::create_schema(&connection)?,
-            1 => Self::convert_format_1(&connection)?,
             CATALOG_FORMAT => {}
             other => {
                 return Err(Error::new(
                     ErrorKind::Incompatible,
-                    format!("catalog format {other} is not supported; expected {CATALOG_FORMAT}"),
+                    format!(
+                        "catalog format {other} is not supported; expected {CATALOG_FORMAT}; choose a new catalog path"
+                    ),
                 ));
             }
         }
@@ -238,6 +239,17 @@ impl EditorService {
     }
 
     fn create_schema(connection: &Connection) -> Result<(), Error> {
+        let occupied: bool = connection
+            .query_row("SELECT EXISTS(SELECT 1 FROM sqlite_schema)", [], |row| {
+                row.get(0)
+            })
+            .map_err(catalog_error)?;
+        if occupied {
+            return Err(Error::new(
+                ErrorKind::Incompatible,
+                "unmarked catalog is not empty; choose a new catalog path",
+            ));
+        }
         connection
             .execute_batch(
                 "BEGIN IMMEDIATE;
@@ -285,51 +297,6 @@ impl EditorService {
                  CREATE TRIGGER entries_are_immutable BEFORE UPDATE ON entries BEGIN
                     SELECT RAISE(ABORT, 'history entries are immutable');
                  END;
-                 PRAGMA user_version=2;
-                 COMMIT;",
-            )
-            .map_err(catalog_error)
-    }
-
-    /// Format 1 kept two unread copies of every stack beside the authoritative entry JSON.
-    /// Format 2 drops them, adds the undo-parent column and the versions table.
-    fn convert_format_1(connection: &Connection) -> Result<(), Error> {
-        let orphaned: i64 = connection
-            .query_row(
-                "SELECT COUNT(*) FROM entries e WHERE NOT EXISTS (
-                    SELECT 1 FROM snapshots s WHERE s.id = json_extract(e.entry_json, '$.snapshot.id'))",
-                [],
-                |row| row.get(0),
-            )
-            .map_err(catalog_error)?;
-        if orphaned != 0 {
-            return Err(Error::new(
-                ErrorKind::Incompatible,
-                format!(
-                    "catalog format 1 has {orphaned} entries without snapshots; not converting"
-                ),
-            ));
-        }
-        connection
-            .execute_batch(
-                "BEGIN IMMEDIATE;
-                 DROP TRIGGER entries_are_immutable;
-                 ALTER TABLE entries ADD COLUMN undo_parent_id TEXT;
-                 UPDATE entries SET undo_parent_id = json_extract(entry_json, '$.undo_parent');
-                 CREATE TRIGGER entries_are_immutable BEFORE UPDATE ON entries BEGIN
-                    SELECT RAISE(ABORT, 'history entries are immutable');
-                 END;
-                 DROP TRIGGER snapshots_are_immutable;
-                 DROP TABLE snapshot_layers;
-                 DROP TABLE snapshots;
-                 CREATE TABLE versions (
-                    asset_id TEXT NOT NULL REFERENCES assets(id),
-                    name TEXT NOT NULL COLLATE NOCASE,
-                    entry_id TEXT NOT NULL REFERENCES entries(id),
-                    actor TEXT NOT NULL,
-                    created_ms INTEGER NOT NULL,
-                    PRIMARY KEY(asset_id, name)
-                 );
                  PRAGMA user_version=2;
                  COMMIT;",
             )
@@ -1166,7 +1133,7 @@ fn ensure_revision(state: &EditorState, expected: u64) -> Result<(), Error> {
 }
 
 /// The deduplicated request identity: the durable action, the mutation envelope and the parsed
-/// parameters as top-level fields. Unchanged for actions that kept their M1/M2 parameter shape.
+/// parameters as top-level fields.
 fn request_input(input: &ActionInput, mutation: &Mutation) -> Result<Value, Error> {
     let mut request = serde_json::Map::new();
     request.insert("action".into(), Value::from(input.action_id.as_str()));
@@ -1252,7 +1219,8 @@ fn insert_entry(
 ) -> Result<(), Error> {
     registry.validate_recipe(&entry.snapshot.recipe)?;
     tx.execute(
-        "INSERT INTO entries VALUES (?1,?2,?3,?4,?5,?6)",
+        "INSERT INTO entries (id,asset_id,sequence,action_id,undo_parent_id,entry_json)
+         VALUES (?1,?2,?3,?4,?5,?6)",
         params![
             entry.id.as_str(),
             entry.asset_id.as_str(),
@@ -1606,146 +1574,6 @@ mod tests {
         std::fs::remove_dir_all(dir).unwrap();
     }
 
-    fn format_1_catalog(path: &Path, drop_snapshot_row: bool) -> (AssetId, EntryId) {
-        let connection = Connection::open(path).unwrap();
-        connection
-            .execute_batch(
-                "CREATE TABLE assets (id TEXT PRIMARY KEY, source_root TEXT NOT NULL, locator TEXT NOT NULL,
-                    canonical_locator TEXT NOT NULL UNIQUE, file_identity TEXT NOT NULL UNIQUE,
-                    fingerprint TEXT NOT NULL, byte_len INTEGER NOT NULL, width INTEGER NOT NULL, height INTEGER NOT NULL);
-                 CREATE TABLE snapshots (id TEXT PRIMARY KEY, asset_id TEXT NOT NULL REFERENCES assets(id), recipe_json TEXT NOT NULL);
-                 CREATE TABLE snapshot_layers (snapshot_id TEXT NOT NULL REFERENCES snapshots(id), position INTEGER NOT NULL,
-                    layer_id TEXT NOT NULL, effect_id TEXT NOT NULL, effect_format INTEGER NOT NULL, payload_json TEXT NOT NULL,
-                    PRIMARY KEY(snapshot_id, position), UNIQUE(snapshot_id, layer_id));
-                 CREATE TABLE entries (id TEXT PRIMARY KEY, asset_id TEXT NOT NULL REFERENCES assets(id), sequence INTEGER NOT NULL,
-                    action_id TEXT NOT NULL, entry_json TEXT NOT NULL, UNIQUE(asset_id, sequence));
-                 CREATE TABLE asset_state (asset_id TEXT PRIMARY KEY REFERENCES assets(id), current_entry_id TEXT NOT NULL REFERENCES entries(id),
-                    revision INTEGER NOT NULL, redo_json TEXT NOT NULL);
-                 CREATE TABLE requests (asset_id TEXT NOT NULL REFERENCES assets(id), request_id TEXT NOT NULL, input_hash TEXT NOT NULL,
-                    result_json TEXT NOT NULL, PRIMARY KEY(asset_id, request_id));
-                 CREATE TRIGGER snapshots_are_immutable BEFORE UPDATE ON snapshots BEGIN SELECT RAISE(ABORT, 'snapshots are immutable'); END;
-                 CREATE TRIGGER entries_are_immutable BEFORE UPDATE ON entries BEGIN SELECT RAISE(ABORT, 'history entries are immutable'); END;
-                 PRAGMA user_version=1;",
-            )
-            .unwrap();
-        let asset = AssetId::new();
-        let original = HistoryEntry {
-            id: EntryId::new(),
-            asset_id: asset.clone(),
-            sequence: 0,
-            action_id: "original".into(),
-            parameters: json!({}),
-            actor: "system".into(),
-            timestamp_ms: 0,
-            request_id: None,
-            base_revision: 0,
-            result_revision: 0,
-            snapshot: Snapshot::original(asset.clone()),
-            undo_parent: None,
-            restore_target: None,
-        };
-        let edit = HistoryEntry {
-            id: EntryId::new(),
-            sequence: 1,
-            action_id: "set-pixel".into(),
-            result_revision: 1,
-            snapshot: original
-                .snapshot
-                .append(Layer::pixel(0, 0, [1, 2, 3]))
-                .unwrap(),
-            undo_parent: Some(original.id.clone()),
-            ..original.clone()
-        };
-        connection
-            .execute(
-                "INSERT INTO assets VALUES (?1,'/r','/r/a.jpg','/r/a.jpg','unix:1:1','abc',1,480,320)",
-                [asset.as_str()],
-            )
-            .unwrap();
-        for entry in [&original, &edit] {
-            if !(drop_snapshot_row && entry.sequence == 1) {
-                connection
-                    .execute(
-                        "INSERT INTO snapshots VALUES (?1,?2,?3)",
-                        params![
-                            entry.snapshot.id.as_str(),
-                            asset.as_str(),
-                            encode(&entry.snapshot.recipe).unwrap()
-                        ],
-                    )
-                    .unwrap();
-            }
-            connection
-                .execute(
-                    "INSERT INTO entries VALUES (?1,?2,?3,?4,?5)",
-                    params![
-                        entry.id.as_str(),
-                        asset.as_str(),
-                        entry.sequence as i64,
-                        entry.action_id,
-                        encode(entry).unwrap()
-                    ],
-                )
-                .unwrap();
-        }
-        connection
-            .execute(
-                "INSERT INTO asset_state VALUES (?1,?2,1,'[]')",
-                params![asset.as_str(), edit.id.as_str()],
-            )
-            .unwrap();
-        (asset, edit.id)
-    }
-
-    fn user_version(path: &Path) -> i64 {
-        Connection::open(path)
-            .unwrap()
-            .pragma_query_value(None, "user_version", |row| row.get(0))
-            .unwrap()
-    }
-
-    #[test]
-    fn format_1_catalogs_convert_once_and_inconsistent_ones_are_left_alone() {
-        let catalog = temp("format1.sqlite");
-        let (asset, current) = format_1_catalog(&catalog, false);
-        let service = EditorService::open(&catalog).unwrap();
-        let state = service.state(&asset).unwrap();
-        assert_eq!(state.current_entry.id, current);
-        assert_eq!(state.current_entry.snapshot.recipe.layers.len(), 1);
-        let lineage = service.lineage(&asset, None, 10).unwrap();
-        assert_eq!(lineage.steps.len(), 2);
-        assert_eq!(lineage.steps[0].entry_id, current);
-        assert!(service.versions(&asset).unwrap().is_empty());
-        drop(service);
-        assert_eq!(user_version(&catalog), 2);
-        let tables: Vec<String> = {
-            let connection = Connection::open(&catalog).unwrap();
-            let mut statement = connection
-                .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-                .unwrap();
-            statement
-                .query_map([], |row| row.get(0))
-                .unwrap()
-                .map(Result::unwrap)
-                .collect()
-        };
-        assert_eq!(
-            tables,
-            ["asset_state", "assets", "entries", "requests", "versions"]
-        );
-        EditorService::open(&catalog).unwrap();
-        std::fs::remove_file(catalog).unwrap();
-
-        let catalog = temp("format1-broken.sqlite");
-        format_1_catalog(&catalog, true);
-        assert_eq!(
-            EditorService::open(&catalog).unwrap_err().kind,
-            ErrorKind::Incompatible
-        );
-        assert_eq!(user_version(&catalog), 1);
-        std::fs::remove_file(catalog).unwrap();
-    }
-
     #[test]
     fn versions_name_retained_entries_and_survive_reopen() {
         let catalog = temp("versions.sqlite");
@@ -1909,7 +1737,7 @@ mod tests {
     }
 
     #[test]
-    fn incompatible_and_competing_catalogs_fail_without_rewriting_data() {
+    fn competing_catalog_owners_are_rejected() {
         let catalog = temp("owner.sqlite");
         let owner = EditorService::open(&catalog).unwrap();
         assert_eq!(
@@ -1917,14 +1745,28 @@ mod tests {
             ErrorKind::Conflict
         );
         drop(owner);
-        let connection = Connection::open(&catalog).unwrap();
-        connection.pragma_update(None, "user_version", 99).unwrap();
-        drop(connection);
-        assert_eq!(
-            EditorService::open(&catalog).unwrap_err().kind,
-            ErrorKind::Incompatible
-        );
         std::fs::remove_file(catalog).unwrap();
+    }
+
+    #[test]
+    fn unsupported_catalog_formats_are_rejected_without_rewriting_data() {
+        for marker in [0, CATALOG_FORMAT - 1, CATALOG_FORMAT + 1] {
+            let catalog = temp("unsupported-format.sqlite");
+            let mut service = EditorService::open(&catalog).unwrap();
+            service.import(&fixture()).unwrap();
+            drop(service);
+            let connection = Connection::open(&catalog).unwrap();
+            connection
+                .pragma_update(None, "user_version", marker)
+                .unwrap();
+            drop(connection);
+            let before = std::fs::read(&catalog).unwrap();
+            let error = EditorService::open(&catalog).unwrap_err();
+            assert_eq!(error.kind, ErrorKind::Incompatible);
+            assert!(error.detail.contains("choose a new catalog path"));
+            assert_eq!(std::fs::read(&catalog).unwrap(), before);
+            std::fs::remove_file(catalog).unwrap();
+        }
     }
 
     #[test]
@@ -2065,10 +1907,7 @@ mod tests {
             )
             .unwrap();
         let entry = service.entry(&asset, &rotated.current_entry_id).unwrap();
-        assert_eq!(
-            entry.action_id, "rotate-right",
-            "durable M2 action identity"
-        );
+        assert_eq!(entry.action_id, "rotate-right");
         assert_eq!(entry.parameters, json!({"transform":"rotate-right"}));
         assert_eq!(
             entry.snapshot.recipe.layers[1].payload,

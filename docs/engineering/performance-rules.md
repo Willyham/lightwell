@@ -59,5 +59,4 @@ Accepted or pending decisions. Do not "fix" them without the referenced scope.
 | Accept loop sleeping 10 ms in a non-blocking spin | Blocking `accept` woken by one loopback connection on shutdown |
 | Debug build as the default development launch | Release-profile `develop`; explicit `--debug` for debugging only |
 | Tiny fixture as the only timing evidence | `editor-performance` on generated 24 MP and 60 MP inputs |
-| Three stored copies of every stack, two of them never read | Entry records are the only copy; catalog format 2 converts format 1 once |
 | Desktop tasks carrying a session copy out and writing it back after the round trip | Owner-held sessions per client with a revision; the desktop adopts only newer responses |

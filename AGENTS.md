@@ -21,7 +21,7 @@ S0 (JPEG viewing) is accepted; the evidence harness now drives the editor itself
 ## How we work
 
 - **Read first.** For any milestone or tracked task, read the relevant spec and its plan in [tasks](tasks/README.md). Product context lives in [decisions](docs/decisions.md).
-- **Plan proportionately.** Substantial features, milestones, migrations and other coordinated multi-step work start with a Markdown design (behavior, scope, constraints, acceptance, open decisions) and a validated JSON task plan. Research, reviews, diagnostics, documentation maintenance and small contained changes do not need a task plan unless asked or already tracked.
+- **Plan proportionately.** Substantial features, milestones and other coordinated multi-step work start with a Markdown design (behavior, scope, constraints, acceptance, open decisions) and a validated JSON task plan. Research, reviews, diagnostics, documentation maintenance and small contained changes do not need a task plan unless asked or already tracked.
 - **Stay in scope.** Do what was asked. A planning request does not authorize implementing the plan. Do not prebuild future features or placeholder controls.
 - **Consult the owner on consequential product tradeoffs.** Record recommendations as proposals until decided. Never turn an unanswered question into an accepted decision.
 - **Verify proportionately.** Run `cargo xtask check` before handing off. UI or image changes need a real rendered check with correlated state and logs. Changes under `crates/` answer the performance-rules checklist.
@@ -35,7 +35,7 @@ S0 (JPEG viewing) is accepted; the evidence harness now drives the editor itself
 - Decode, render, import and export never block the UI thread or the catalog owner thread. Bound queues and memory; cancel stale work.
 - Back image behavior with exact fixtures. Test source preservation and recovery, not just successful rendering.
 - Pin dependencies. Manual license, native and asset reviews are deferred by the owner; keep notices and never claim an audit is complete.
-- Internal recipe and catalog format markers may detect incompatibility to protect data. Missing or disabled providers report affected edits; they never silently omit an effect from a render or export.
+- **Current shapes only.** Lightwell is pre-release and breaking changes are expected. Support only the latest catalog, recipe, API and module shapes. Do not maintain migrations, compatibility shims, old-version fixtures or historical parity checks. Internal format markers reject unsupported data explicitly without rewriting or discarding it; use a new catalog when necessary. Current UI/API correctness and exact image tests still apply. Missing or disabled providers report affected edits; they never silently omit an effect from a render or export.
 
 ## Map
 

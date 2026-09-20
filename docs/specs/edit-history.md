@@ -45,7 +45,9 @@ A version names one retained entry per asset, unique ignoring case, without chan
 
 ## Catalog and live API
 
-Catalog reopen preserves Original, all layers and snapshots, entry identities, current state, redo navigation and request deduplication. Internal format errors preserve data and report a recovery path. Drafts are session-only.
+Catalog reopen preserves Original, all layers and snapshots, entry identities, current state, redo navigation and request deduplication within the supported format. Only current shapes are supported. An unsupported catalog format fails explicitly and directs the user to a new catalog path; unsupported recipe or effect formats also fail explicitly. No existing data is rewritten or silently discarded. Drafts are session-only.
+
+The desktop footer offers Copy message for its complete status or error text, including when an import fails before an asset is open. Copying leaves the displayed message and editing state intact. JSON clients receive failures directly as structured `error.code` and `error.message` fields.
 
 One application service and one catalog owner serve UI and JSON/IPC clients. Discoverable schemas cover asset, layer and state queries, every module action as a generated `edit.<action>` method with its parameter descriptors, module descriptors, history list, inspect, render, select, return-to-current, restore, undo and redo, viewport state, pixel sampling and jobs. Expected revision and request ID guard mutations; a retry returns the original result and a reused ID with a different payload fails. Draft conflicts come from the crop module: Restore, undo and redo do not silently discard an active draft, and agent commits preserve drafts and mark them conflicted.
 
@@ -58,4 +60,4 @@ One application service and one catalog owner serve UI and JSON/IPC clients. Dis
 5. Interrupted writes and imports, malformed or incompatible catalogs, locked storage, changed or missing originals and unsupported payloads all preserve the last valid state.
 6. Rapid browsing of a long history within bounded queries, jobs and memory, with native M4 pixels correlated to entry labels and render generation.
 
-The golden journey in `fixtures/history/m2-journey.json`, recorded before the module integration, reopens with identical identities, stacks, navigation and pixels; M4 adds crop drafts, geometry snapshots and conflict cases on top of that same history mechanism.
+History tests create catalogs and recipes with the current implementation, covering crop drafts, geometry snapshots and conflicts alongside pixel and transform edits.

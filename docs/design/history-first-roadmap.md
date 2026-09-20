@@ -6,7 +6,7 @@ The history-first sequence proves non-destructive state and history before addin
 | --- | --- | --- |
 | M1 — history foundation (implemented) | Non-destructive edit layers, a test pixel edit, durable history, undo/redo, restore, historical previews, catalog save and reopen, UI and live API | Original → two pixel changes → preview → undo/redo → restore → new change → reopen passes through UI and API with original bytes unchanged |
 | M2 — transforms (implemented) | Rotate left/right, mirror horizontal and flip vertical through the existing layer and history system | Asymmetric fixture and pixel-edit compositions, undo/redo, preview and reopen pass through UI and API |
-| M3 — tool modules (implemented) | A small tool interface declaring actions, schemas, controls and processing; the pixel and transform tools implemented through it | Generic UI and API discover and invoke the modules; saved M1/M2 catalogs and history render identically |
+| M3 — tool modules (implemented) | A small tool interface declaring actions, schemas, controls and processing; the pixel and transform tools implemented through it | Generic UI and API discover and invoke the modules; current recipes render correctly and survive reopen |
 | M4 — crop module (implemented) | Lightroom-style crop and straighten delivered as a tool module | Direct manipulation, numeric controls, API parity, history and reopen, composition-preserving geometry at several zoom and DPI settings |
 
 ## M1 and M2
@@ -15,7 +15,7 @@ The contract for sources, layers, snapshots, history transactions, read-only pre
 
 ## M3 — tool modules
 
-A tool module supplies a stable identity and effect format, action input and result schemas, parameter units, defaults and ranges, declarative control descriptions, availability and state queries, feature validation and processing. The host supplies catalog access, atomic changes and history, rendering jobs and notifications. Modules cannot write catalog tables or keep a private undo stack. Controls describe meaning; the GUI chooses presentation, and UI events and API requests call the same declared handler. Migrate the pixel and transform handlers without changing their durable effect identities or rewriting saved history. Linked modules are enough; independently loaded binaries remain later work. Full contract: [modules](modules-and-api.md).
+A tool module supplies a stable identity and effect format, action input and result schemas, parameter units, defaults and ranges, declarative control descriptions, availability and state queries, feature validation and processing. The host supplies catalog access, atomic changes and history, rendering jobs and notifications. Modules cannot write catalog tables or keep a private undo stack. Controls describe meaning; the GUI chooses presentation, and UI events and API requests call the same declared handler. The pixel and transform handlers use the same module interface and current payload contracts. Linked modules are enough; independently loaded binaries remain later work. Full contract: [modules](modules-and-api.md).
 
 ## M4 — crop module
 

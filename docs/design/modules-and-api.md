@@ -66,9 +66,9 @@ Rendering and point sampling resolve every layer's effect through the registry: 
 
 Layers whose effect has no available provider stay in every snapshot and entry unchanged. `state`, `history.list`, `history.inspect`, undo and redo keep working. Rendering, sampling, appending an edit and restoring such a stack fail with `incompatible: unavailable effect <id> (layers …)`; a cached preview may only be shown with an explicit stale or unavailable label. Registering a compatible provider again restores evaluation without touching stored data. Removing an edit is a separate explicit action that does not exist yet.
 
-## Continuity
+## Current formats
 
-Effect IDs, payload shapes, history action IDs and history parameter objects are unchanged from M1 and M2. Catalogs saved before M3 reopen with the same IDs, snapshots, navigation and exact pixels; the golden journey in `fixtures/history/` proves it. Request results recorded before M3 for transform actions used a different hash shape, so retrying one of those request IDs after M3 reports a conflict rather than the original result; pixel retries are unaffected.
+Each module accepts only its current effect format and payload shape. Unsupported formats fail explicitly without modifying the stored recipe. Breaking shape and algorithm changes are expected during pre-release development; tests target the current contracts.
 
 ## Resources and external loading
 
@@ -78,4 +78,4 @@ External loading remains required later: a separately authored tool must load wi
 
 ## Acceptance
 
-Descriptor validation rejects duplicate identities, missing handlers, invalid controls and unavailable providers explicitly. Pixel and transform actions invoked through generic controls and an independent API client produce identical stacks, history, pixels and errors. Fixtures saved before module integration reopen with all IDs and undo/restore paths intact. Registration and first-use resources are measured separately. Real native M4 control layout, keyboard behavior and pixels are inspected with correlated state.
+Descriptor validation rejects duplicate identities, missing handlers, invalid controls and unavailable providers explicitly. Pixel and transform actions invoked through generic controls and an independent API client produce identical stacks, history, pixels and errors. Current-format catalogs reopen with their IDs and undo/restore paths intact. Registration and first-use resources are measured separately. Real native M4 control layout, keyboard behavior and pixels are inspected with correlated state.

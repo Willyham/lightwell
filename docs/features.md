@@ -7,18 +7,19 @@
 | Windows/Linux automated builds and packages | Hosted baseline verified; refresh open | Native desktop checks deferred |
 | License and dependency policy | Enforced | Manual license, native and asset review deferred; two expiring advisory exceptions ([dependencies](engineering/dependencies.md)) |
 | Referenced assets in a SQLite catalog | Implemented (M1) | Stable IDs, fingerprints, explicit missing or changed-source errors |
+| Copyable status and error messages | Implemented | Copy message in the desktop footer copies the full text; JSON failures expose code and message |
 | Ordered non-destructive edit layers | Implemented (M1) | Stable layer IDs, immutable complete recipe snapshots |
 | Test pixel-change tool | Implemented (M1) | Integer x/y and 8-bit sRGB; exact lossless-buffer proof |
 | Persistent history, undo/redo, append-only Restore | Implemented (M1) | Every committed action; all branches retained |
 | History list, inspect, select and preview in UI and API | Implemented (M1) | Read-only preview and Return to current |
-| Save and reopen layers, history and navigation | Implemented (M1) | Atomic catalog writes |
+| Save and reopen layers, history and navigation | Implemented (M1) | Atomic writes in the current catalog format; unsupported formats are refused |
 | Fit, numeric zoom, 100% source detail and pan | Implemented (M1) | Physical-pixel 100%; per-client session state |
 | Live JSON API and single-owner IPC | Implemented (M1) | Same service and history while the GUI is open |
 | Rotate left/right, mirror horizontal, flip vertical | Implemented (M2) | Exact integer mappings |
 | Named versions and lineage view | Implemented | A version names a retained entry; lineage query and branch markers; catalog format 2 ([design](design/versions-and-lineage.md)) |
 | Cached source and compiled one-pass rendering | Implemented | Point queries never rasterize; [performance rules](engineering/performance-rules.md) |
 | Declarative tool-module interface | Implemented (M3) | Descriptor-validated registry, generated `edit.<action>` methods and `module.list`; [modules](design/modules-and-api.md) |
-| Pixel and transform tools as modules | Implemented (M3) | Effect and action identities unchanged; pre-module golden journey reopens identically |
+| Pixel and transform tools as modules | Implemented (M3) | Registered effects and actions use the current payload shapes |
 | Generic module controls and canvas pick in the desktop | Implemented (M3) | Controls rendered from descriptors; pointer pick fills coordinates without committing |
 | Lightroom-style crop and straighten module | Implemented (M4) | Normalized rotated-box payload, exact at 0°, linear-light bilinear resample otherwise, in-place layer updates; `edit.crop`, `edit.crop-fit`, `edit.crop-reset`; [crop contract](specs/single-image.md) |
 | Draft conflicts with live agent commits | Implemented (M4) | Explicit Discard or Reapply; a stale draft keeps its composition and re-validates against the current stack |

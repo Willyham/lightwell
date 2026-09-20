@@ -1,7 +1,7 @@
 //! UI-independent JPEG decoding, non-destructive editing state, rendering and the JSON owner API.
 mod api;
 #[cfg(test)]
-mod continuity;
+mod command_contracts;
 mod editor;
 mod error;
 mod model;

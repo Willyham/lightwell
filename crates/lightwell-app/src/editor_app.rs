@@ -265,6 +265,7 @@ enum Settle {
 #[derive(Clone, Debug)]
 pub(crate) enum Message {
     Open,
+    CopyStatus,
     Picked(Option<PathBuf>),
     Refreshed(Result<Box<Refresh>, String>),
     PreviewLoaded(Result<Box<PreviewPayload>, String>),
@@ -959,6 +960,7 @@ impl Editor {
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::CopyStatus => return iced::clipboard::write(self.status.clone()),
             Message::Open => {
                 if self.picker_open || self.busy || self.evidence.is_some() {
                     return Task::none();
@@ -2537,7 +2539,14 @@ impl Editor {
             ]
             .spacing(SPACING)
             .height(Length::Fill),
-            text(&self.status).size(12),
+            row![
+                text(&self.status).size(12).width(Length::Fill),
+                button(text("Copy message").size(12))
+                    .style(button::secondary)
+                    .on_press(Message::CopyStatus),
+            ]
+            .spacing(8)
+            .align_y(iced::Alignment::Center),
         ]
         .spacing(SPACING)
         .padding(PADDING)
