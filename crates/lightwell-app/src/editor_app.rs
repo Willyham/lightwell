@@ -1,17 +1,24 @@
-use crate::{Config, diagnostics::Diagnostics, paths::Paths};
+use crate::{
+    Config,
+    crop_canvas::{CropCanvas, Mode, Part, View},
+    crop_draft::{AspectPreset, CropDraft, Handle, Modifiers as DraftModifiers},
+    diagnostics::Diagnostics,
+    paths::Paths,
+};
 use iced::{
     ContentFit, Element, Length, Point, Rectangle, Size, Subscription, Task,
     widget::{
-        button, column, container, image, mouse_area, operation, responsive, row, scrollable, text,
-        text_input,
+        button, canvas, column, container, image, mouse_area, operation, responsive, row,
+        scrollable, stack, text, text_input,
     },
 };
 use iced_runtime::image as image_memory;
 use lightwell_core::{
     ActionDescriptor, ApiRequest, AssetId, Availability, CanvasInteraction, ClientId,
-    ClientSession, Control, EditorState, EntryId, ErrorKind, EventsResult, HistoryEntry,
-    HistoryPage, HistorySelection, Lineage, LocalServer, ModuleDescriptor, Mutation, OwnerHandle,
-    ParameterDescriptor, ParameterKind, PreviewJob, PreviewQueue, Version, Zoom,
+    ClientSession, Control, CropPayload, CropStage, EditorState, EffectStage, EntryId, ErrorKind,
+    EventsResult, HistoryEntry, HistoryPage, HistorySelection, LayerId, Lineage, LocalServer,
+    MAX_ANGLE, MIN_ANGLE, ModuleDescriptor, Mutation, OwnerHandle, ParameterDescriptor,
+    ParameterKind, PreviewJob, PreviewQueue, Version, Zoom,
 };
 use serde_json::{Map, Value, json};
 use std::{
@@ -35,6 +42,12 @@ const SPACING: f32 = 12.0;
 const SIDEBAR_WIDTH: f32 = 340.0;
 /// An evidence run that has not finished by then is stuck; exit so the harness reaps nothing.
 const EVIDENCE_DEADLINE: Duration = Duration::from_secs(25);
+/// The scrollable around the photo, so a Space drag can scroll it while drafting a crop.
+const SURFACE_ID: &str = "lightwell.surface";
+/// How far one nudge button moves the straightening angle, in degrees.
+const ANGLE_STEP: f64 = 0.5;
+/// Ratio presets per row in the sidebar.
+const PRESETS_PER_ROW: usize = 3;
 
 /// What the editor was last asked to show, correlated with logged events and captured frames.
 struct Activity {
@@ -65,7 +78,7 @@ struct Evidence {
 /// Authoritative state read back from the owner after a change. `history` is `None` when only the
 /// current entry needs merging into the loaded page.
 #[derive(Clone, Debug)]
-struct Refresh {
+pub(crate) struct Refresh {
     state: EditorState,
     history: Option<HistoryPage>,
     versions: Vec<Version>,
@@ -76,14 +89,14 @@ struct Refresh {
 }
 
 #[derive(Clone, Debug)]
-struct PreviewPayload {
+pub(crate) struct PreviewPayload {
     job: PreviewJob,
     session: ClientSession,
     sequence: u64,
 }
 
 #[derive(Clone, Debug)]
-struct Upload {
+pub(crate) struct Upload {
     generation: u64,
     width: u32,
     height: u32,
@@ -94,13 +107,69 @@ struct Upload {
 }
 
 #[derive(Clone, Debug)]
-enum SyncResult {
+pub(crate) enum SyncResult {
     Unchanged { sequence: u64 },
     Changed(Box<Refresh>),
 }
 
+/// What a crop draft is waiting for its truncated preview to tell it: the layer it edits and the
+/// payload it starts from are known from the stack, but the input stage is whatever that preview
+/// renders, so the draft opens when its pixels arrive.
 #[derive(Clone, Debug)]
-enum Message {
+struct PendingDraft {
+    layer: Option<LayerId>,
+    layer_index: usize,
+    payload: Option<CropPayload>,
+    base_revision: u64,
+    /// A reapply rebases the existing draft instead of opening a new one.
+    reapply: bool,
+}
+
+/// One pointer step of a crop gesture, already mapped to box pixels by the canvas.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum CropPointer {
+    Begin { handle: Handle, x: f64, y: f64 },
+    Drag { x: f64, y: f64, option: bool },
+    End,
+}
+
+/// Every crop draft change is one message, so a script can drive the whole editor through the
+/// update function without simulating a pointer.
+#[derive(Clone, Debug)]
+pub(crate) enum CropMessage {
+    /// Open a draft on the current stack.
+    Start,
+    /// Re-read the current stack and rebase the conflicted draft onto it.
+    Reapply,
+    /// The truncated preview job for a start or a reapply.
+    PreviewReady(Result<Box<PreviewJob>, String>),
+    Pointer(CropPointer),
+    AngleText(String),
+    SubmitAngle,
+    NudgeAngle(f64),
+    /// The index of one generated ratio preset.
+    Preset(usize),
+    CustomWidth(String),
+    CustomHeight(String),
+    Swap,
+    Lock,
+    /// The Straighten guide toggle: a drag on the image draws a levelling line instead.
+    Guide(bool),
+    /// Option (Alt) is held, so a handle scales uniformly about the centre.
+    Option(bool),
+    /// Space is held, so a drag pans instead of touching the draft.
+    Space(bool),
+    /// A Space drag asked for this many logical pixels of scroll.
+    Pan {
+        dx: f32,
+        dy: f32,
+    },
+    Apply,
+    Cancel,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) enum Message {
     Open,
     Picked(Option<PathBuf>),
     Refreshed(Result<Box<Refresh>, String>),
@@ -116,6 +185,12 @@ enum Message {
         Upload,
         Result<image_memory::Allocation, image_memory::Error>,
     ),
+    /// The truncated preview of a crop layer's input stage reached the GPU.
+    DraftUploaded(
+        Upload,
+        Result<image_memory::Allocation, image_memory::Error>,
+    ),
+    Crop(CropMessage),
     /// Every tool control is generated from these; the desktop knows no tool by name.
     ModulesLoaded(Result<Vec<ModuleDescriptor>, String>),
     /// A generated field changed: the text the user typed for one declared parameter.
@@ -268,6 +343,23 @@ struct Editor {
     pointer: Option<(u32, u32)>,
     zoom: String,
     version_name: String,
+    /// The transient crop draft. It is session state, never authoritative: only Apply commits.
+    crop: Option<CropDraft>,
+    /// What a started or reapplied draft still needs from its truncated preview.
+    crop_pending: Option<PendingDraft>,
+    /// The crop layer's input stage on the GPU: one extra texture, bounded like the main preview
+    /// and dropped as soon as the draft ends.
+    draft_photo: Option<image_memory::Allocation>,
+    /// The preview generation that belongs to the draft rather than to the displayed state.
+    draft_generation: Option<u64>,
+    /// This desktop's own Apply is in flight, so the revision it produces is not a conflict.
+    crop_applying: Option<String>,
+    crop_angle: String,
+    /// The two extents the `custom` ratio preset reads.
+    crop_custom: (String, String),
+    crop_guide: bool,
+    crop_option: bool,
+    crop_space: bool,
 }
 
 impl Editor {
@@ -339,6 +431,16 @@ impl Editor {
             pointer: None,
             zoom: "100".into(),
             version_name: String::new(),
+            crop: None,
+            crop_pending: None,
+            draft_photo: None,
+            draft_generation: None,
+            crop_applying: None,
+            crop_angle: "0".into(),
+            crop_custom: ("5".into(), "4".into()),
+            crop_guide: false,
+            crop_option: false,
+            crop_space: false,
         };
         if editor.live_server.is_none() {
             editor.status = "Editor ready; live API unavailable on this host".into();
@@ -379,7 +481,32 @@ impl Editor {
 
     /// The state correlated with every event and captured frame; never includes source paths.
     fn snapshot(&self) -> Value {
-        json!({"run_id":self.run_id,"mode":if self.evidence.is_some() {"evidence"} else {"editor"},"orientation":self.activity.orientation,"phase":self.activity.phase,"requested_generation":self.activity.requested,"displayed_generation":self.activity.displayed,"source_dimensions":self.activity.source_dimensions,"preview_dimensions":self.activity.preview_dimensions,"backend":self.activity.backend,"status":self.status,"error_code":self.activity.error_code,"modules":module_summary(&self.modules),"controls":self.fields.summary()})
+        json!({"run_id":self.run_id,"mode":if self.evidence.is_some() {"evidence"} else {"editor"},"orientation":self.activity.orientation,"phase":self.activity.phase,"requested_generation":self.activity.requested,"displayed_generation":self.activity.displayed,"source_dimensions":self.activity.source_dimensions,"preview_dimensions":self.activity.preview_dimensions,"backend":self.activity.backend,"status":self.status,"error_code":self.activity.error_code,"modules":module_summary(&self.modules),"controls":self.fields.summary(),"crop":self.crop_summary()})
+    }
+
+    /// The crop draft as a captured frame reports it, so a rendered frame correlates with the
+    /// rectangle, angle and output size that produced it.
+    fn crop_summary(&self) -> Value {
+        match &self.crop {
+            Some(draft) => {
+                let mut summary = draft.summary();
+                if let Some(object) = summary.as_object_mut() {
+                    object.insert("guide".into(), Value::from(self.crop_guide));
+                    object.insert("option".into(), Value::from(self.crop_option));
+                    object.insert("space".into(), Value::from(self.crop_space));
+                    object.insert(
+                        "paused".into(),
+                        Value::from(!self.session.preview.can_edit()),
+                    );
+                    object.insert(
+                        "input_stage_loaded".into(),
+                        Value::from(self.draft_photo.is_some()),
+                    );
+                }
+                summary
+            }
+            None => json!({"drafting":false,"pending":self.crop_pending.is_some()}),
+        }
     }
 
     /// Import a file through the same API call the Open button uses, tracked as one open request.
@@ -506,6 +633,17 @@ impl Editor {
                     }
                     Err(error) => {
                         self.status = error.clone();
+                        // A failed Apply keeps the draft; a stale revision makes it conflicted so
+                        // the user chooses Discard or Reapply rather than losing the composition.
+                        if self.crop_applying.take().is_some() {
+                            let conflict = error.starts_with(ErrorKind::Conflict.code());
+                            if conflict && let Some(draft) = &mut self.crop {
+                                draft.mark_conflicted();
+                            }
+                            if conflict {
+                                self.crop_changed("crop_draft_conflicted");
+                            }
+                        }
                         if self.activity.pending {
                             let (code, message) =
                                 error.split_once(": ").unwrap_or(("internal", &error));
@@ -686,14 +824,17 @@ impl Editor {
                 if !self.uploading
                     && let Some(result) = self.preview_queue.poll()
                 {
-                    if result.generation != self.preview_generation {
+                    // The draft's truncated preview shares the queue; its generation says which
+                    // texture the pixels belong to.
+                    let for_draft = Some(result.generation) == self.draft_generation;
+                    if !for_draft && result.generation != self.preview_generation {
                         return Task::none();
                     }
                     match result.result {
                         Ok(raster) => {
                             self.uploading = true;
                             self.status = "Preparing pixels for display…".into();
-                            if self.activity.pending {
+                            if self.activity.pending && !for_draft {
                                 self.activity.preview_dimensions =
                                     Some((raster.width, raster.height));
                                 self.event(
@@ -715,8 +856,13 @@ impl Editor {
                                 raster.height,
                                 iced_runtime::core::Bytes::from_owner(raster.rgba),
                             );
-                            return image_memory::allocate(handle)
-                                .map(move |result| Message::Uploaded(upload.clone(), result));
+                            return image_memory::allocate(handle).map(move |result| {
+                                if for_draft {
+                                    Message::DraftUploaded(upload.clone(), result)
+                                } else {
+                                    Message::Uploaded(upload.clone(), result)
+                                }
+                            });
                         }
                         Err(error) => {
                             self.status = error.to_string();
@@ -780,6 +926,28 @@ impl Editor {
                     }
                 }
             }
+            Message::DraftUploaded(upload, result) => {
+                self.uploading = false;
+                if Some(upload.generation) != self.draft_generation {
+                    return Task::none();
+                }
+                match result {
+                    Ok(allocation) => {
+                        self.draft_photo = Some(allocation);
+                        self.open_draft(CropStage {
+                            width: upload.width,
+                            height: upload.height,
+                            angle: 0.0,
+                        });
+                    }
+                    Err(_) => {
+                        self.crop_pending = None;
+                        self.draft_generation = None;
+                        self.status = "Could not upload the crop's input stage".into();
+                    }
+                }
+            }
+            Message::Crop(message) => return self.crop_update(message),
             Message::ModulesLoaded(result) => {
                 self.modules_ready = true;
                 match result {
@@ -1006,10 +1174,43 @@ impl Editor {
             .next_entry_id
             .as_ref()
             .and_then(|_| refresh.lineage.steps.last().map(|step| step.sequence));
+        let revision = refresh.state.revision;
+        let entry = refresh.state.current_entry.id.clone();
         self.state = Some(refresh.state);
         self.display_entry = Some(refresh.job.entry.id.clone());
         self.preview_generation = self.preview_queue.request(refresh.job);
         self.status = "Rendering selected history state…".into();
+        self.settle_draft(revision, &entry);
+    }
+
+    /// A new authoritative revision arrived while a draft was open. The draft's own Apply ends it;
+    /// anything else, including this desktop's undo, redo and restore, marks it conflicted and keeps
+    /// it, because no history operation discards a draft implicitly.
+    fn settle_draft(&mut self, revision: u64, entry: &EntryId) {
+        let Some((base, conflicted, summary)) = self
+            .crop
+            .as_ref()
+            .map(|draft| (draft.base_revision, draft.conflicted, draft.summary()))
+        else {
+            return;
+        };
+        if let Some(request_id) = self.crop_applying.take() {
+            self.end_draft();
+            self.event(
+                "crop_draft_applied",
+                json!({"request_id":request_id,"entry_id":entry.as_str(),"revision":revision,"draft":summary}),
+            );
+            self.status = format!("Crop applied · entry {}", short(entry.as_str()));
+            return;
+        }
+        if base == revision || conflicted {
+            return;
+        }
+        if let Some(draft) = &mut self.crop {
+            draft.mark_conflicted();
+        }
+        self.crop_changed("crop_draft_conflicted");
+        self.status = "Changed elsewhere: discard the crop draft or reapply it".into();
     }
 
     fn on_current_lineage(&self, entry: &HistoryEntry) -> bool {
@@ -1084,6 +1285,266 @@ impl Editor {
         self.state.is_some() && self.session.preview.can_edit() && !self.busy
     }
 
+    // ---- crop draft ----------------------------------------------------------------------------
+
+    /// Every crop draft change goes through here, so the API-equivalent path and the pointer path
+    /// are the same code.
+    fn crop_update(&mut self, message: CropMessage) -> Task<Message> {
+        match message {
+            CropMessage::Option(option) => self.crop_option = option,
+            CropMessage::Space(space) => self.crop_space = space,
+            CropMessage::Guide(guide) => self.crop_guide = guide && self.crop.is_some(),
+            CropMessage::Start => return self.crop_start(false),
+            CropMessage::Reapply => return self.crop_start(true),
+            CropMessage::PreviewReady(result) => match result {
+                Ok(job) => {
+                    self.draft_generation = Some(self.preview_queue.request(*job));
+                    self.status = "Rendering the crop's input stage…".into();
+                }
+                Err(error) => {
+                    self.crop_pending = None;
+                    self.status = error;
+                }
+            },
+            CropMessage::Pointer(pointer) => {
+                let Some(draft) = &mut self.crop else {
+                    return Task::none();
+                };
+                match pointer {
+                    CropPointer::Begin { handle, x, y } => draft.begin(handle, (x, y)),
+                    // A pointer move never calls an API and never logs: only the end of the gesture
+                    // is one draft change.
+                    CropPointer::Drag { x, y, option } => {
+                        draft.drag((x, y), DraftModifiers { option })
+                    }
+                    CropPointer::End => {
+                        draft.end();
+                        self.crop_changed("crop_draft_changed");
+                    }
+                }
+            }
+            CropMessage::AngleText(text) => self.crop_angle = text,
+            CropMessage::SubmitAngle => {
+                let Ok(value) = self.crop_angle.trim().parse::<f64>() else {
+                    self.status =
+                        format!("Angle must be a number from {MIN_ANGLE} to {MAX_ANGLE} degrees");
+                    return Task::none();
+                };
+                if let Some(draft) = &mut self.crop {
+                    draft.set_angle(value);
+                }
+                self.crop_changed("crop_draft_changed");
+            }
+            CropMessage::NudgeAngle(step) => {
+                if let Some(draft) = &mut self.crop {
+                    draft.nudge_angle(step);
+                }
+                self.crop_changed("crop_draft_changed");
+            }
+            CropMessage::Preset(index) => {
+                let Some(preset) = crop_frame(&self.modules)
+                    .map(|frame| frame.presets())
+                    .and_then(|presets| presets.get(index).cloned())
+                else {
+                    return Task::none();
+                };
+                let custom = self.custom_ratio();
+                if let Some(draft) = &mut self.crop {
+                    draft.set_preset(&preset, custom);
+                }
+                self.crop_changed("crop_draft_changed");
+            }
+            CropMessage::CustomWidth(text) => self.crop_custom.0 = text,
+            CropMessage::CustomHeight(text) => self.crop_custom.1 = text,
+            CropMessage::Swap => {
+                if let Some(draft) = &mut self.crop {
+                    draft.swap();
+                }
+                self.crop_changed("crop_draft_changed");
+            }
+            CropMessage::Lock => {
+                if let Some(draft) = &mut self.crop {
+                    draft.lock_toggle();
+                }
+                self.crop_changed("crop_draft_changed");
+            }
+            CropMessage::Pan { dx, dy } => {
+                if dx == 0.0 && dy == 0.0 {
+                    return Task::none();
+                }
+                return operation::scroll_by(
+                    SURFACE_ID,
+                    operation::AbsoluteOffset { x: dx, y: dy },
+                );
+            }
+            CropMessage::Apply => {
+                if self.busy || !self.session.preview.can_edit() {
+                    return Task::none();
+                }
+                match self.crop_request() {
+                    None => {}
+                    Some(Err(message)) => self.status = message,
+                    Some(Ok((method, request, request_id))) => {
+                        self.crop_applying = Some(request_id);
+                        return self.command(method, request);
+                    }
+                }
+            }
+            CropMessage::Cancel => {
+                let Some(summary) = self.crop.as_ref().map(CropDraft::summary) else {
+                    return Task::none();
+                };
+                self.end_draft();
+                self.event("crop_draft_discarded", summary);
+                self.status = "Crop draft discarded".into();
+            }
+        }
+        Task::none()
+    }
+
+    /// Open a draft, or re-read the stack for a reapply. The layer identity, its stored payload and
+    /// the preview truncation come from the current stack; the input stage comes from that preview.
+    fn crop_start(&mut self, reapply: bool) -> Task<Message> {
+        if self.busy || !self.session.preview.can_edit() || reapply != self.crop.is_some() {
+            return Task::none();
+        }
+        let Some(effect) = crop_frame(&self.modules)
+            .and_then(|frame| frame.effect().map(str::to_owned))
+            .filter(|_| self.state.is_some())
+        else {
+            return Task::none();
+        };
+        let state = self.state.as_ref().expect("filtered above");
+        let layers = &state.current_entry.snapshot.recipe.layers;
+        let found = layers.iter().position(|layer| layer.effect_id == effect);
+        let pending = PendingDraft {
+            layer: found.map(|index| layers[index].id.clone()),
+            layer_index: found.unwrap_or(layers.len()),
+            payload: found
+                .and_then(|index| serde_json::from_value(layers[index].payload.clone()).ok()),
+            base_revision: state.revision,
+            reapply,
+        };
+        let asset = state.asset.id.clone();
+        let layer_count = pending.layer_index;
+        self.crop_pending = Some(pending);
+        self.status = "Preparing the crop's input stage…".into();
+        crop_preview_task(self.owner.clone(), asset, layer_count)
+    }
+
+    /// The truncated preview arrived, so the crop layer's input stage is known: open or rebase the
+    /// draft against it.
+    fn open_draft(&mut self, input: CropStage) {
+        let Some(pending) = self.crop_pending.take() else {
+            return;
+        };
+        if pending.reapply {
+            match &mut self.crop {
+                Some(draft) => draft.rebase(
+                    input,
+                    pending.base_revision,
+                    pending.layer,
+                    pending.layer_index,
+                ),
+                None => return,
+            }
+        } else {
+            self.crop = match (pending.layer, pending.payload) {
+                (Some(layer), Some(payload)) => Some(CropDraft::from_layer(
+                    input,
+                    payload,
+                    layer,
+                    pending.layer_index,
+                    pending.base_revision,
+                )),
+                // An unreadable payload is never silently replaced by a neutral crop: the stored
+                // layer stays exactly as it is and the draft does not open.
+                (Some(_), None) => {
+                    self.draft_photo = None;
+                    self.draft_generation = None;
+                    self.status =
+                        "The existing crop layer's payload cannot be read; no draft was opened"
+                            .into();
+                    return;
+                }
+                (None, _) => Some(CropDraft::neutral(
+                    input,
+                    pending.base_revision,
+                    pending.layer_index,
+                )),
+            };
+        }
+        self.crop_changed(if pending.reapply {
+            "crop_draft_changed"
+        } else {
+            "crop_draft_started"
+        });
+        self.status = format!(
+            "Crop draft on the layer's {} × {} input stage",
+            input.width, input.height
+        );
+    }
+
+    /// One draft change reached its end: the angle field follows the draft and the new state is
+    /// logged. Pointer moves inside a gesture do not come through here.
+    fn crop_changed(&mut self, event: &'static str) {
+        let Some((angle, summary)) = self
+            .crop
+            .as_ref()
+            .map(|draft| (number_text(draft.stage.angle), draft.summary()))
+        else {
+            return;
+        };
+        self.crop_angle = angle;
+        self.event(event, summary);
+    }
+
+    /// Drop the draft and the extra texture it displayed.
+    fn end_draft(&mut self) {
+        self.crop = None;
+        self.crop_pending = None;
+        self.draft_photo = None;
+        self.draft_generation = None;
+        self.crop_applying = None;
+        self.crop_guide = false;
+    }
+
+    /// The `custom` preset's two extents as typed, or `None` when either is not a positive number.
+    fn custom_ratio(&self) -> Option<(f64, f64)> {
+        let width: f64 = self.crop_custom.0.trim().parse().ok()?;
+        let height: f64 = self.crop_custom.1.trim().parse().ok()?;
+        (width.is_finite() && height.is_finite() && width > 0.0 && height > 0.0)
+            .then_some((width, height))
+    }
+
+    /// The request Apply would send, built from the canvas descriptor's own parameter names, or the
+    /// validation message that stops it. `None` means there is nothing to apply.
+    fn crop_request(&self) -> Option<Result<(String, Value, String), String>> {
+        let frame = crop_frame(&self.modules)?;
+        let draft = self.crop.as_ref()?;
+        let state = self.state.as_ref()?;
+        if draft.conflicted {
+            return None;
+        }
+        if let Err(error) = draft.output() {
+            return Some(Err(error.to_string()));
+        }
+        let mutation = mutation(draft.base_revision);
+        let request_id = mutation.request_id.clone();
+        let mut request = json!({"asset_id":state.asset.id,"mutation":mutation});
+        request
+            .as_object_mut()
+            .expect("the envelope is an object")
+            .extend(frame.params(&draft.payload()));
+        Some(Ok((format!("edit.{}", frame.action), request, request_id)))
+    }
+
+    /// The crop draft is displayed instead of the plain preview only while its own input stage is on
+    /// the GPU and the session shows the current state.
+    fn drafting(&self) -> bool {
+        self.crop.is_some() && self.draft_photo.is_some() && self.session.preview.can_edit()
+    }
+
     /// Every tool control on screen, generated from the fetched descriptors. The desktop lays them
     /// out and edits text; the modules declare what exists and what it is worth.
     fn tool_panel(&self, editable: bool) -> Element<'_, Message> {
@@ -1105,6 +1566,13 @@ impl Editor {
                     false
                 }
             };
+            // A declared crop frame is a host interaction, not a control: the host renders its draft
+            // panel here and the module's own controls, Reset crop included, still come below.
+            if let Some(frame) =
+                crop_frame(&self.modules).filter(|frame| frame.module.id == module.id)
+            {
+                panel = panel.push(self.crop_section(&frame, enabled));
+            }
             for control in &module.controls {
                 panel = panel.push(self.control_element(module, control, enabled));
             }
@@ -1214,6 +1682,230 @@ impl Editor {
         }
     }
 
+    /// The crop frame over the layer's own input stage, at Fit or at a percentage zoom. The canvas
+    /// draws nothing authoritative: it borrows the draft and publishes messages.
+    fn crop_surface<'a>(
+        &'a self,
+        draft: &'a CropDraft,
+        allocation: &'a image_memory::Allocation,
+    ) -> Element<'a, Message> {
+        let handle = allocation.handle().clone();
+        let box_size = draft.stage.bounding_box();
+        let mode = if self.crop_space {
+            Mode::Pan
+        } else if self.crop_guide {
+            Mode::Guide
+        } else {
+            Mode::Frame
+        };
+        let option = self.crop_option;
+        // Two stacked canvases: iced paints every image of one layer over every mesh of that layer,
+        // so the frame, thirds, handles and guide need the layer the stack gives its second child.
+        let parts = move |handle: image::Handle, view: View, width: Length, height: Length| {
+            stack([Part::Photo, Part::Overlay].map(|part| {
+                canvas(CropCanvas::new(
+                    draft,
+                    handle.clone(),
+                    view,
+                    mode,
+                    option,
+                    part,
+                ))
+                .width(width)
+                .height(height)
+                .into()
+            }))
+        };
+        match self.session.preview.view.zoom {
+            Zoom::Fit => responsive(move |available| match View::fit(box_size, available) {
+                Some(view) => parts(handle.clone(), view, Length::Fill, Length::Fill).into(),
+                None => container(text("The surface is too small to draw the crop").size(12))
+                    .center(Length::Fill)
+                    .into(),
+            })
+            .into(),
+            Zoom::Percent { value } => {
+                let Some(view) = View::percent(value, self.scale_factor) else {
+                    return container(text("Zoom is out of range").size(12))
+                        .center(Length::Fill)
+                        .into();
+                };
+                let frame = parts(
+                    handle,
+                    view,
+                    Length::Fixed(box_size.0 as f32 * view.scale),
+                    Length::Fixed(box_size.1 as f32 * view.scale),
+                );
+                scrollable(container(frame).center(Length::Shrink))
+                    .id(SURFACE_ID)
+                    .direction(iced::widget::scrollable::Direction::Both {
+                        vertical: iced::widget::scrollable::Scrollbar::default(),
+                        horizontal: iced::widget::scrollable::Scrollbar::default(),
+                    })
+                    .on_scroll(|viewport| {
+                        let offset = viewport.absolute_offset();
+                        Message::Panned(offset.x, offset.y)
+                    })
+                    .into()
+            }
+        }
+    }
+
+    /// The crop draft's own controls, rendered by the host for a declared crop-frame interaction.
+    /// The module's generic controls, including Reset crop, still come from its descriptor.
+    fn crop_section<'a>(&'a self, frame: &CropFrame<'a>, enabled: bool) -> Element<'a, Message> {
+        let mut panel = column![text("Crop").size(18)].spacing(8);
+        let Some(draft) = &self.crop else {
+            panel = panel.push(
+                button("Crop").on_press_maybe(
+                    (enabled && self.crop_pending.is_none())
+                        .then_some(Message::Crop(CropMessage::Start)),
+                ),
+            );
+            if self.crop_pending.is_some() {
+                panel = panel.push(text("Preparing the crop's input stage…").size(12));
+            }
+            return panel.into();
+        };
+        if draft.conflicted {
+            panel = panel.push(text("Changed elsewhere: Discard or Reapply").size(12));
+            panel = panel.push(
+                row![
+                    button("Discard").on_press(Message::Crop(CropMessage::Cancel)),
+                    button("Reapply").on_press_maybe(
+                        (!self.busy).then_some(Message::Crop(CropMessage::Reapply))
+                    ),
+                ]
+                .spacing(6),
+            );
+        }
+        if !self.session.preview.can_edit() {
+            panel = panel
+                .push(text("Draft paused during history preview · Return to current").size(12));
+        }
+        // Ratio presets, generated from the fit action's declared aspect options.
+        let presets = frame.presets();
+        for chunk in presets.chunks(PRESETS_PER_ROW) {
+            let mut buttons = row![].spacing(6);
+            for preset in chunk {
+                let index = presets
+                    .iter()
+                    .position(|candidate| candidate.option == preset.option)
+                    .unwrap_or_default();
+                let chosen = draft.preset == preset.option;
+                let label = if chosen {
+                    format!("● {}", preset.label())
+                } else {
+                    preset.label()
+                };
+                buttons =
+                    buttons.push(button(text(label).size(12)).on_press_maybe(
+                        enabled.then_some(Message::Crop(CropMessage::Preset(index))),
+                    ));
+            }
+            panel = panel.push(buttons);
+        }
+        panel = panel.push(
+            row![
+                text("Custom").size(12).width(56),
+                text_input("W", &self.crop_custom.0)
+                    .id(field_id(frame.fit_action, "custom-width", None))
+                    .on_input(|text| Message::Crop(CropMessage::CustomWidth(text)))
+                    .width(48),
+                text_input("H", &self.crop_custom.1)
+                    .id(field_id(frame.fit_action, "custom-height", None))
+                    .on_input(|text| Message::Crop(CropMessage::CustomHeight(text)))
+                    .width(48),
+            ]
+            .spacing(6)
+            .align_y(iced::Alignment::Center),
+        );
+        let lock = match draft.aspect.ratio() {
+            Some(_) => "Unlock ratio",
+            None => "Lock ratio",
+        };
+        panel = panel.push(
+            row![
+                button(text(lock).size(12))
+                    .on_press_maybe(enabled.then_some(Message::Crop(CropMessage::Lock))),
+                button(text("Swap").size(12)).on_press_maybe(
+                    (enabled && draft.aspect.ratio().is_some())
+                        .then_some(Message::Crop(CropMessage::Swap))
+                ),
+            ]
+            .spacing(6),
+        );
+        panel = panel.push(
+            row![
+                text("Angle (deg)").size(12).width(78),
+                text_input("0", &self.crop_angle)
+                    .id(field_id(frame.action, frame.angle, None))
+                    .on_input(|text| Message::Crop(CropMessage::AngleText(text)))
+                    .on_submit(Message::Crop(CropMessage::SubmitAngle))
+                    .width(60),
+                button(text(format!("−{ANGLE_STEP}°")).size(12)).on_press_maybe(
+                    enabled.then_some(Message::Crop(CropMessage::NudgeAngle(-ANGLE_STEP)))
+                ),
+                button(text(format!("+{ANGLE_STEP}°")).size(12)).on_press_maybe(
+                    enabled.then_some(Message::Crop(CropMessage::NudgeAngle(ANGLE_STEP)))
+                ),
+            ]
+            .spacing(6)
+            .align_y(iced::Alignment::Center),
+        );
+        let guide = if self.crop_guide {
+            "Straighten guide: on"
+        } else {
+            "Straighten guide: off"
+        };
+        panel = panel.push(
+            button(text(guide).size(12))
+                .on_press(Message::Crop(CropMessage::Guide(!self.crop_guide))),
+        );
+        panel = panel.push(
+            row![
+                button("Apply").on_press_maybe(
+                    (enabled && !draft.conflicted).then_some(Message::Crop(CropMessage::Apply))
+                ),
+                button("Cancel").on_press(Message::Crop(CropMessage::Cancel)),
+            ]
+            .spacing(6),
+        );
+        // The draft's own numbers, so what is on screen is observable without a debugger.
+        let payload = draft.payload();
+        let output = match draft.output() {
+            Ok(rect) => format!(
+                "{} × {} px at ({}, {})",
+                rect.width, rect.height, rect.x, rect.y
+            ),
+            Err(error) => error.detail.clone(),
+        };
+        panel = panel.push(
+            text(format!(
+                "Input stage {} × {} · box {:.0} × {:.0}\nRect {:.0}, {:.0}, {:.0} × {:.0} box px\nOutput {output}\nPayload angle {} x {:.6} y {:.6} w {:.6} h {:.6}",
+                draft.stage.width,
+                draft.stage.height,
+                draft.stage.bounding_box().0,
+                draft.stage.bounding_box().1,
+                draft.rect.x,
+                draft.rect.y,
+                draft.rect.width,
+                draft.rect.height,
+                number_text(payload.angle),
+                payload.x,
+                payload.y,
+                payload.width,
+                payload.height,
+            ))
+            .size(11),
+        );
+        panel = panel.push(
+            text("Drag handles to resize, inside to move, Option for one scale about the centre, Space to pan. Enter applies, Escape cancels.")
+                .size(11),
+        );
+        panel.into()
+    }
+
     fn view(&self) -> Element<'_, Message> {
         let current = self.state.as_ref();
         let editable = self.editable();
@@ -1227,7 +1919,14 @@ impl Editor {
         // declares one; the adapter maps a click to image pixels and fills that module's fields.
         let picking = editable && point_pick(&self.modules).is_some();
         let pointer = self.pointer;
-        let surface: Element<'_, Message> = match (&self.photo, self.dimensions) {
+        // While a draft has its own input stage on the GPU the crop frame replaces the plain image;
+        // during a history preview the historical preview shows and the draft is only paused.
+        let drafted: Option<Element<'_, Message>> =
+            match (self.drafting(), &self.crop, &self.draft_photo) {
+                (true, Some(draft), Some(allocation)) => Some(self.crop_surface(draft, allocation)),
+                _ => None,
+            };
+        let plain: Element<'_, Message> = match (&self.photo, self.dimensions) {
             (Some(allocation), Some((width, height))) => match self.session.preview.view.zoom {
                 Zoom::Fit => {
                     let handle = allocation.handle().clone();
@@ -1269,6 +1968,7 @@ impl Editor {
                         photo.into()
                     };
                     scrollable(container(photo).center(Length::Shrink))
+                        .id(SURFACE_ID)
                         .direction(iced::widget::scrollable::Direction::Both {
                             vertical: iced::widget::scrollable::Scrollbar::default(),
                             horizontal: iced::widget::scrollable::Scrollbar::default(),
@@ -1284,6 +1984,7 @@ impl Editor {
                 .center(Length::Fill)
                 .into(),
         };
+        let surface = drafted.unwrap_or(plain);
 
         let tools = self.tool_panel(editable);
 
@@ -1495,6 +2196,42 @@ impl Editor {
             None
         });
         let mut subscriptions = vec![events];
+        // A draft adds one keyboard listener and no timer: Enter and Escape act only on keys no text
+        // input consumed, and the modifier state the canvas reads lives in the app.
+        if self.crop.is_some() {
+            subscriptions.push(iced::event::listen_with(|event, status, _| {
+                use iced::keyboard::{Event as Keys, key::Named};
+                let iced::Event::Keyboard(event) = event else {
+                    return None;
+                };
+                match event {
+                    Keys::ModifiersChanged(modifiers) => {
+                        Some(Message::Crop(CropMessage::Option(modifiers.alt())))
+                    }
+                    Keys::KeyReleased {
+                        key: iced::keyboard::Key::Named(Named::Space),
+                        ..
+                    } => Some(Message::Crop(CropMessage::Space(false))),
+                    Keys::KeyPressed { key, modifiers, .. }
+                        if status == iced::event::Status::Ignored && !modifiers.command() =>
+                    {
+                        match key {
+                            iced::keyboard::Key::Named(Named::Space) => {
+                                Some(Message::Crop(CropMessage::Space(true)))
+                            }
+                            iced::keyboard::Key::Named(Named::Enter) => {
+                                Some(Message::Crop(CropMessage::Apply))
+                            }
+                            iced::keyboard::Key::Named(Named::Escape) => {
+                                Some(Message::Crop(CropMessage::Cancel))
+                            }
+                            _ => None,
+                        }
+                    }
+                    _ => None,
+                }
+            }));
+        }
         if self.preview_queue.is_busy() {
             subscriptions.push(iced::time::every(Duration::from_millis(16)).map(|_| Message::Poll));
         }
@@ -1855,6 +2592,86 @@ fn point_pick(modules: &[ModuleDescriptor]) -> Option<(&str, &str, &str)> {
     })
 }
 
+/// One declared crop-frame interaction: the action Apply calls, the parameter names it fills, and
+/// the fit action whose `aspect` enum generates the ratio presets. The desktop reads every name from
+/// here, so it knows no tool by name.
+struct CropFrame<'a> {
+    module: &'a ModuleDescriptor,
+    action: &'a str,
+    angle: &'a str,
+    x: &'a str,
+    y: &'a str,
+    width: &'a str,
+    height: &'a str,
+    fit_action: &'a str,
+    aspect: &'a str,
+}
+
+impl CropFrame<'_> {
+    /// The durable effect identity of the crop layer: the module's geometry effect.
+    fn effect(&self) -> Option<&str> {
+        self.module
+            .effects
+            .iter()
+            .find(|effect| effect.stage == EffectStage::Geometry)
+            .map(|effect| effect.id.as_str())
+    }
+
+    /// The ratio presets, generated from the fit action's declared `aspect` options.
+    fn presets(&self) -> Vec<AspectPreset> {
+        match self
+            .module
+            .action(self.fit_action)
+            .and_then(|action| action.parameter(self.aspect))
+            .map(|parameter| &parameter.kind)
+        {
+            Some(ParameterKind::Enum { options }) => crate::crop_draft::aspect_presets(options),
+            _ => Vec::new(),
+        }
+    }
+
+    /// The payload as request fields under the declared parameter names.
+    fn params(&self, payload: &CropPayload) -> Map<String, Value> {
+        [
+            (self.angle, payload.angle),
+            (self.x, payload.x),
+            (self.y, payload.y),
+            (self.width, payload.width),
+            (self.height, payload.height),
+        ]
+        .into_iter()
+        .map(|(name, value)| (name.to_owned(), Value::from(value)))
+        .collect()
+    }
+}
+
+/// The first available module that declares a crop frame.
+fn crop_frame(modules: &[ModuleDescriptor]) -> Option<CropFrame<'_>> {
+    modules.iter().find_map(|module| match &module.canvas {
+        Some(CanvasInteraction::CropFrame {
+            action,
+            angle,
+            x,
+            y,
+            width,
+            height,
+            fit_action,
+            aspect,
+        }) if module.is_available() => Some(CropFrame {
+            module,
+            action,
+            angle,
+            x,
+            y,
+            width,
+            height,
+            fit_action,
+            aspect,
+        }),
+        _ => None,
+    })
+}
+
 /// Where iced draws a contained image inside `available`, matching the image widget's own bounds:
 /// `ContentFit::Contain` sized and centered.
 fn fit_rect(image: (u32, u32), available: Size) -> Option<Rectangle> {
@@ -2076,6 +2893,19 @@ fn preview_task(
     )
 }
 
+/// The crop draft's only preview job: the stack truncated to the layers before the crop layer, which
+/// is exactly that layer's input stage. Starting a draft and reapplying it are the only two requests.
+fn crop_preview_task(owner: OwnerHandle, asset_id: AssetId, layer_count: usize) -> Task<Message> {
+    Task::perform(
+        async move {
+            owner
+                .preview_job(asset_id, None, Some(layer_count))
+                .map_err(|error| error.to_string())
+        },
+        |result| Message::Crop(CropMessage::PreviewReady(result.map(Box::new))),
+    )
+}
+
 fn session_task(
     owner: OwnerHandle,
     client: ClientId,
@@ -2202,6 +3032,111 @@ mod tests {
             snapshot: Snapshot::original(asset.clone()),
             undo_parent: parent.cloned(),
             restore_target: None,
+        }
+    }
+
+    /// The crop module's descriptor as the desktop would fetch it through `module.list`. It is built
+    /// here rather than taken from the registry so these tests do not depend on the module being
+    /// linked: the desktop drives everything from the descriptor and knows no tool by name.
+    fn crop_descriptor() -> ModuleDescriptor {
+        let number = |name: &str, min: f64, max: f64, required: bool, default: Option<Value>| {
+            ParameterDescriptor {
+                name: name.into(),
+                kind: ParameterKind::Number { min, max },
+                required,
+                default,
+                unit: None,
+                notes: "test".into(),
+            }
+        };
+        let rectangle = ["x", "y", "width", "height"]
+            .map(|name| number(name, 0.0, 1.0, true, None))
+            .to_vec();
+        let mut crop = vec![number(
+            "angle",
+            MIN_ANGLE,
+            MAX_ANGLE,
+            false,
+            Some(json!(0.0)),
+        )];
+        crop.extend(rectangle.clone());
+        let mut fit = vec![
+            ParameterDescriptor {
+                name: "aspect".into(),
+                kind: ParameterKind::Enum {
+                    options: CROP_ASPECTS.iter().map(|option| (*option).into()).collect(),
+                },
+                required: false,
+                default: Some(json!("free")),
+                unit: None,
+                notes: "test".into(),
+            },
+            number("aspect-width", 1.0, 10000.0, false, None),
+            number("aspect-height", 1.0, 10000.0, false, None),
+            number("angle", MIN_ANGLE, MAX_ANGLE, false, Some(json!(0.0))),
+        ];
+        fit.push(number("center-x", 0.0, 1.0, false, None));
+        fit.push(number("center-y", 0.0, 1.0, false, None));
+        ModuleDescriptor {
+            id: "lightwell.crop".into(),
+            title: "Crop".into(),
+            effects: vec![lightwell_core::EffectDescriptor {
+                id: CROP_EFFECT.into(),
+                format: 1,
+                stage: EffectStage::Geometry,
+            }],
+            actions: vec![
+                ActionDescriptor {
+                    id: "crop".into(),
+                    title: "Crop".into(),
+                    notes: "test".into(),
+                    parameters: crop,
+                },
+                ActionDescriptor {
+                    id: "crop-fit".into(),
+                    title: "Fit crop".into(),
+                    notes: "test".into(),
+                    parameters: fit,
+                },
+                ActionDescriptor {
+                    id: "crop-reset".into(),
+                    title: "Reset crop".into(),
+                    notes: "test".into(),
+                    parameters: Vec::new(),
+                },
+            ],
+            controls: vec![Control::Group {
+                label: "Crop".into(),
+                controls: vec![Control::Action {
+                    action: "crop-reset".into(),
+                    label: "Reset crop".into(),
+                    preset: Map::new(),
+                }],
+            }],
+            canvas: Some(CanvasInteraction::CropFrame {
+                action: "crop".into(),
+                angle: "angle".into(),
+                x: "x".into(),
+                y: "y".into(),
+                width: "width".into(),
+                height: "height".into(),
+                fit_action: "crop-fit".into(),
+                aspect: "aspect".into(),
+            }),
+            availability: Availability::Available,
+        }
+    }
+
+    const CROP_EFFECT: &str = "lightwell.geometry.crop";
+    const CROP_ASPECTS: [&str; 7] = ["free", "original", "1:1", "3:2", "4:3", "16:9", "custom"];
+
+    /// One layer of the crop module's effect carrying that payload.
+    fn crop_layer(payload: CropPayload) -> lightwell_core::Layer {
+        lightwell_core::Layer {
+            id: LayerId::new(),
+            effect_id: CROP_EFFECT.into(),
+            effect_format: 1,
+            payload: serde_json::to_value(payload).expect("a serializable payload"),
         }
     }
 
@@ -2625,6 +3560,395 @@ mod tests {
             Some(editor.modules.len())
         );
         assert!(!editor.editable(), "nothing is open");
+        finish(editor, catalog);
+    }
+
+    /// An editor with the crop module discovered and one asset open at that revision, whose stack is
+    /// those layers.
+    fn opened(
+        layers: Vec<lightwell_core::Layer>,
+        revision: u64,
+    ) -> (Editor, PathBuf, AssetId, EntryId) {
+        let (mut editor, catalog) = boot();
+        let _ = editor.update(Message::ModulesLoaded(Ok(vec![crop_descriptor()])));
+        let asset = AssetId::new();
+        let mut current = entry(&asset, revision, None);
+        for layer in layers {
+            current.snapshot = current.snapshot.append(layer).expect("a valid stack");
+        }
+        let entry_id = current.id.clone();
+        let refresh = refresh_for(&asset, &current, vec![current.clone()], &[&current], false);
+        let _ = editor.update(Message::Refreshed(Ok(Box::new(refresh))));
+        assert!(editor.editable(), "{}", editor.status);
+        (editor, catalog, asset, entry_id)
+    }
+
+    #[test]
+    fn the_crop_frame_and_its_presets_come_from_the_declared_descriptor() {
+        let modules = vec![crop_descriptor()];
+        let frame = crop_frame(&modules).expect("a declared crop frame");
+        assert_eq!(frame.action, "crop");
+        assert_eq!(frame.fit_action, "crop-fit");
+        assert_eq!(frame.effect(), Some(CROP_EFFECT));
+        let presets = frame.presets();
+        assert_eq!(
+            presets
+                .iter()
+                .map(|preset| preset.option.as_str())
+                .collect::<Vec<_>>(),
+            CROP_ASPECTS.to_vec(),
+            "the ratio list is generated, not hard-coded"
+        );
+        // Apply fills exactly the names the canvas declares, with the payload's own numbers.
+        let params = frame.params(&CropPayload {
+            angle: -3.5,
+            x: 0.25,
+            y: 0.125,
+            width: 0.5,
+            height: 0.25,
+        });
+        assert_eq!(params["angle"], json!(-3.5));
+        assert_eq!(params["x"], json!(0.25));
+        assert_eq!(params["height"], json!(0.25));
+        assert_eq!(params.len(), 5);
+        // A crop frame is not a point pick, and an unavailable module declares no frame.
+        assert!(point_pick(&modules).is_none());
+        let unavailable = vec![ModuleDescriptor {
+            availability: Availability::Unavailable {
+                reason: "test".into(),
+            },
+            ..crop_descriptor()
+        }];
+        assert!(crop_frame(&unavailable).is_none());
+    }
+
+    #[test]
+    fn a_draft_opens_on_the_existing_crop_layer_and_its_truncated_input_stage() {
+        let payload = CropPayload {
+            angle: 7.0,
+            x: 0.2,
+            y: 0.25,
+            width: 0.4,
+            height: 0.3,
+        };
+        let earlier = lightwell_core::Layer::pixel(0, 0, [1, 2, 3]);
+        let crop = crop_layer(payload);
+        let (mut editor, catalog, _, _) = opened(
+            vec![earlier, crop.clone(), crop_layer(CropPayload::NEUTRAL)],
+            4,
+        );
+        // Only the first crop layer is the one being edited.
+        let _ = editor.update(Message::Crop(CropMessage::Start));
+        let pending = editor.crop_pending.clone().expect("a pending draft");
+        assert_eq!(pending.layer, Some(crop.id.clone()));
+        assert_eq!(pending.layer_index, 1, "the preview truncates to one layer");
+        assert_eq!(pending.payload, Some(payload));
+        assert_eq!(pending.base_revision, 4);
+        assert!(!pending.reapply);
+        assert!(editor.crop.is_none(), "the draft waits for its input stage");
+
+        editor.open_draft(CropStage {
+            width: 480,
+            height: 320,
+            angle: 0.0,
+        });
+        let draft = editor.crop.as_ref().expect("an opened draft");
+        assert_eq!(draft.layer, Some(crop.id));
+        assert_eq!(draft.layer_index, 1);
+        assert_eq!(draft.base_revision, 4);
+        assert_eq!(draft.stage.angle, 7.0);
+        assert_eq!(editor.crop_angle, "7");
+        // Reopening shows exactly the rectangle the payload committed.
+        let stage = CropStage {
+            width: 480,
+            height: 320,
+            angle: 7.0,
+        };
+        assert_eq!(
+            draft.output().expect("a valid draft"),
+            payload.output_rect(&stage).expect("a valid payload")
+        );
+        assert_eq!(editor.snapshot()["crop"]["layer_index"], json!(1));
+        finish(editor, catalog);
+    }
+
+    #[test]
+    fn a_stack_without_a_crop_layer_drafts_a_neutral_crop_at_the_end() {
+        let (mut editor, catalog, _, _) =
+            opened(vec![lightwell_core::Layer::pixel(0, 0, [9, 9, 9])], 2);
+        let _ = editor.update(Message::Crop(CropMessage::Start));
+        let pending = editor.crop_pending.clone().expect("a pending draft");
+        assert_eq!(pending.layer, None);
+        assert_eq!(pending.layer_index, 1, "the whole stack is the input stage");
+        editor.open_draft(CropStage {
+            width: 480,
+            height: 320,
+            angle: 0.0,
+        });
+        let draft = editor.crop.as_ref().expect("an opened draft");
+        assert!(draft.layer.is_none());
+        assert_eq!(draft.payload(), CropPayload::NEUTRAL);
+        finish(editor, catalog);
+    }
+
+    #[test]
+    fn an_unreadable_crop_payload_refuses_the_draft_and_keeps_the_layer() {
+        let mut broken = crop_layer(CropPayload::NEUTRAL);
+        broken.payload = json!({"angle":"sideways"});
+        let (mut editor, catalog, _, _) = opened(vec![broken], 1);
+        let _ = editor.update(Message::Crop(CropMessage::Start));
+        assert_eq!(
+            editor.crop_pending.as_ref().map(|pending| pending.payload),
+            Some(None)
+        );
+        editor.open_draft(CropStage {
+            width: 480,
+            height: 320,
+            angle: 0.0,
+        });
+        assert!(editor.crop.is_none(), "no neutral crop replaced the layer");
+        assert!(
+            editor.status.contains("cannot be read"),
+            "{}",
+            editor.status
+        );
+        finish(editor, catalog);
+    }
+
+    #[test]
+    fn every_draft_change_is_reachable_as_a_message() {
+        let (mut editor, catalog, _, _) = opened(Vec::new(), 3);
+        let _ = editor.update(Message::Crop(CropMessage::Start));
+        editor.open_draft(CropStage {
+            width: 480,
+            height: 320,
+            angle: 0.0,
+        });
+        let start = editor.crop.as_ref().expect("a draft").rect;
+
+        // A pointer gesture: begin, drag, end. Nothing changes until the drag arrives.
+        let _ = editor.update(Message::Crop(CropMessage::Pointer(CropPointer::Begin {
+            handle: Handle::Corner(crate::crop_draft::Corner::TopLeft),
+            x: 0.0,
+            y: 0.0,
+        })));
+        assert_eq!(editor.crop.as_ref().expect("a draft").rect, start);
+        let _ = editor.update(Message::Crop(CropMessage::Pointer(CropPointer::Drag {
+            x: 80.0,
+            y: 60.0,
+            option: false,
+        })));
+        let _ = editor.update(Message::Crop(CropMessage::Pointer(CropPointer::End)));
+        let dragged = editor.crop.as_ref().expect("a draft").rect;
+        assert_eq!((dragged.x, dragged.y), (80.0, 60.0));
+
+        // The angle field and its nudges.
+        let _ = editor.update(Message::Crop(CropMessage::AngleText("11.5".into())));
+        let _ = editor.update(Message::Crop(CropMessage::SubmitAngle));
+        assert_eq!(editor.crop.as_ref().expect("a draft").stage.angle, 11.5);
+        let _ = editor.update(Message::Crop(CropMessage::NudgeAngle(-ANGLE_STEP)));
+        assert_eq!(editor.crop.as_ref().expect("a draft").stage.angle, 11.0);
+        assert_eq!(editor.crop_angle, "11");
+        let _ = editor.update(Message::Crop(CropMessage::AngleText("sideways".into())));
+        let _ = editor.update(Message::Crop(CropMessage::SubmitAngle));
+        assert_eq!(editor.crop.as_ref().expect("a draft").stage.angle, 11.0);
+        assert!(editor.status.contains("Angle must be"), "{}", editor.status);
+        let _ = editor.update(Message::Crop(CropMessage::AngleText("0".into())));
+        let _ = editor.update(Message::Crop(CropMessage::SubmitAngle));
+
+        // Ratio presets, swap, lock and the custom extents, all by index into the declared list.
+        let index = |option: &str| {
+            CROP_ASPECTS
+                .iter()
+                .position(|candidate| *candidate == option)
+                .expect("a declared option")
+        };
+        let _ = editor.update(Message::Crop(CropMessage::Preset(index("16:9"))));
+        let draft = editor.crop.as_ref().expect("a draft");
+        assert_eq!(draft.preset, "16:9");
+        assert_eq!(draft.aspect.ratio(), Some(16.0 / 9.0));
+        let _ = editor.update(Message::Crop(CropMessage::Swap));
+        assert_eq!(
+            editor.crop.as_ref().expect("a draft").aspect.ratio(),
+            Some(9.0 / 16.0)
+        );
+        let _ = editor.update(Message::Crop(CropMessage::Lock));
+        assert_eq!(editor.crop.as_ref().expect("a draft").aspect.ratio(), None);
+        let _ = editor.update(Message::Crop(CropMessage::CustomWidth("5".into())));
+        let _ = editor.update(Message::Crop(CropMessage::CustomHeight("4".into())));
+        let _ = editor.update(Message::Crop(CropMessage::Preset(index("custom"))));
+        assert_eq!(
+            editor.crop.as_ref().expect("a draft").aspect.ratio(),
+            Some(1.25)
+        );
+        let _ = editor.update(Message::Crop(CropMessage::CustomHeight("none".into())));
+        let _ = editor.update(Message::Crop(CropMessage::Preset(index("1:1"))));
+        let _ = editor.update(Message::Crop(CropMessage::Preset(index("custom"))));
+        assert_eq!(
+            editor.crop.as_ref().expect("a draft").aspect.ratio(),
+            Some(1.0),
+            "an unreadable custom extent changes nothing"
+        );
+
+        // The modifier and guide state the canvas reads is app state, reachable by message.
+        for (message, read) in [
+            (CropMessage::Option(true), true),
+            (CropMessage::Option(false), false),
+        ] {
+            let _ = editor.update(Message::Crop(message));
+            assert_eq!(editor.crop_option, read);
+        }
+        let _ = editor.update(Message::Crop(CropMessage::Space(true)));
+        assert!(editor.crop_space);
+        let _ = editor.update(Message::Crop(CropMessage::Guide(true)));
+        assert!(editor.crop_guide);
+
+        let _ = editor.update(Message::Crop(CropMessage::Cancel));
+        assert!(editor.crop.is_none());
+        assert!(editor.draft_photo.is_none());
+        assert!(!editor.crop_guide, "cancelling leaves no guide mode on");
+        assert_eq!(
+            editor.snapshot()["crop"],
+            json!({"drafting":false,"pending":false})
+        );
+        finish(editor, catalog);
+    }
+
+    #[test]
+    fn apply_builds_the_declared_request_against_the_drafts_own_revision() {
+        let (mut editor, catalog, asset, _) = opened(Vec::new(), 6);
+        let _ = editor.update(Message::Crop(CropMessage::Start));
+        editor.open_draft(CropStage {
+            width: 480,
+            height: 320,
+            angle: 0.0,
+        });
+        let _ = editor.update(Message::Crop(CropMessage::Pointer(CropPointer::Begin {
+            handle: Handle::Corner(crate::crop_draft::Corner::TopLeft),
+            x: 0.0,
+            y: 0.0,
+        })));
+        let _ = editor.update(Message::Crop(CropMessage::Pointer(CropPointer::Drag {
+            x: 48.0,
+            y: 32.0,
+            option: false,
+        })));
+        let _ = editor.update(Message::Crop(CropMessage::Pointer(CropPointer::End)));
+        let payload = editor.crop.as_ref().expect("a draft").payload();
+        let (method, request, request_id) = editor
+            .crop_request()
+            .expect("a request")
+            .expect("a valid draft");
+        assert_eq!(method, "edit.crop");
+        assert_eq!(request["asset_id"], json!(asset));
+        assert_eq!(request["mutation"]["expected_revision"], json!(6));
+        assert_eq!(request["mutation"]["actor"], json!(ACTOR));
+        assert_eq!(request["mutation"]["request_id"], json!(request_id));
+        assert_eq!(request["angle"], json!(payload.angle));
+        assert_eq!(request["x"], json!(payload.x));
+        assert_eq!(request["width"], json!(payload.width));
+        assert!(request.get("aspect").is_none(), "only the declared five");
+        finish(editor, catalog);
+    }
+
+    #[test]
+    fn an_external_commit_marks_the_draft_conflicted_and_reapply_rebases_it() {
+        let (mut editor, catalog, asset, _) = opened(Vec::new(), 1);
+        let _ = editor.update(Message::Crop(CropMessage::Start));
+        editor.open_draft(CropStage {
+            width: 480,
+            height: 320,
+            angle: 0.0,
+        });
+        let _ = editor.update(Message::Crop(CropMessage::AngleText("6".into())));
+        let _ = editor.update(Message::Crop(CropMessage::SubmitAngle));
+        let composed = editor.crop.as_ref().expect("a draft").rect;
+
+        // Somebody else committed: the draft survives and says so, and Apply is refused.
+        let newer = entry(&asset, 9, None);
+        let refresh = refresh_for(&asset, &newer, vec![newer.clone()], &[&newer], false);
+        let _ = editor.update(Message::Synced(Ok(SyncResult::Changed(Box::new(refresh)))));
+        let draft = editor.crop.as_ref().expect("the draft is kept");
+        assert!(draft.conflicted);
+        assert_eq!(draft.rect, composed, "the composition is untouched");
+        assert!(editor.crop_request().is_none(), "Apply is refused");
+        assert_eq!(editor.snapshot()["crop"]["conflicted"], json!(true));
+
+        // Reapply re-reads the stack and rebases onto the new revision and input stage.
+        editor.busy = false;
+        let _ = editor.update(Message::Crop(CropMessage::Reapply));
+        let pending = editor.crop_pending.clone().expect("a pending rebase");
+        assert!(pending.reapply);
+        assert_eq!(pending.base_revision, 9);
+        editor.open_draft(CropStage {
+            width: 480,
+            height: 320,
+            angle: 0.0,
+        });
+        let draft = editor.crop.as_ref().expect("the rebased draft");
+        assert!(!draft.conflicted);
+        assert_eq!(draft.base_revision, 9);
+        assert_eq!(draft.stage.angle, 6.0, "the angle survives a rebase");
+        assert!(editor.crop_request().is_some(), "Apply is possible again");
+        finish(editor, catalog);
+    }
+
+    #[test]
+    fn the_drafts_own_apply_ends_it_and_a_failed_apply_keeps_it() {
+        let (mut editor, catalog, asset, _) = opened(Vec::new(), 2);
+        let _ = editor.update(Message::Crop(CropMessage::Start));
+        editor.open_draft(CropStage {
+            width: 480,
+            height: 320,
+            angle: 0.0,
+        });
+        // A stale revision comes back as a conflict: the draft is kept and marked.
+        editor.crop_applying = Some("desktop-1".into());
+        let _ = editor.update(Message::Refreshed(Err("conflict: stale revision".into())));
+        assert!(editor.crop.as_ref().expect("the draft is kept").conflicted);
+        assert!(editor.crop_applying.is_none());
+
+        // The draft's own successful Apply ends it and drops the extra texture.
+        editor.crop.as_mut().expect("a draft").conflicted = false;
+        editor.crop_applying = Some("desktop-2".into());
+        let newer = entry(&asset, 5, None);
+        let refresh = refresh_for(&asset, &newer, vec![newer.clone()], &[&newer], false);
+        let _ = editor.update(Message::Refreshed(Ok(Box::new(refresh))));
+        assert!(editor.crop.is_none());
+        assert!(editor.draft_photo.is_none());
+        assert!(editor.status.contains("Crop applied"), "{}", editor.status);
+        finish(editor, catalog);
+    }
+
+    #[test]
+    fn a_history_preview_pauses_the_draft_without_discarding_it() {
+        let (mut editor, catalog, asset, entry_id) = opened(Vec::new(), 1);
+        let _ = editor.update(Message::Crop(CropMessage::Start));
+        editor.open_draft(CropStage {
+            width: 480,
+            height: 320,
+            angle: 0.0,
+        });
+        let composed = editor.crop.as_ref().expect("a draft").rect;
+        let mut session = ClientSession {
+            revision: 3,
+            ..ClientSession::default()
+        };
+        session.preview.selection = HistorySelection::Entry(entry_id);
+        let _ = editor.update(Message::SessionUpdated(Ok((session, 1))));
+        assert!(!editor.session.preview.can_edit());
+        assert!(
+            editor.crop.is_some(),
+            "selecting a historical state keeps the draft"
+        );
+        assert!(!editor.drafting(), "the plain historical preview is shown");
+        assert_eq!(editor.snapshot()["crop"]["paused"], json!(true));
+        // Nothing can be applied or started while previewing history.
+        let _ = editor.update(Message::Crop(CropMessage::Apply));
+        assert!(editor.crop.is_some());
+        assert!(editor.crop_applying.is_none());
+        assert_eq!(editor.crop.as_ref().expect("a draft").rect, composed);
+        let _ = std::hint::black_box(&asset);
         finish(editor, catalog);
     }
 
