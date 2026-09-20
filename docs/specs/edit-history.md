@@ -24,11 +24,11 @@ The history browser lists Original and bounded pages of attributed actions, mark
 
 ## Pixel proof
 
-The pixel editor exposes x/y and RGB controls, Apply and optional pointer picking, backed by one semantic command. Coordinates are integers in the input stage after EXIF orientation, x right and y down; values are 8-bit sRGB; invalid input fails explicitly. Replacing a pixel with its current value is a reported no-op. Exact lossless buffers on synthetic fixtures are the correctness oracle; JPEG re-encoding is not. Two writes to the same location prove ordering: the later wins and undo exposes the earlier.
+The pixel editor exposes x/y and RGB controls, Apply and optional pointer picking, backed by one semantic command. Coordinates are integers in the content stage, the source after EXIF orientation, x right and y down, whatever transforms or crop follow; a coordinate inside the photograph but outside the current crop is accepted and simply not visible; values are 8-bit sRGB; invalid input fails explicitly. Replacing a pixel with its current value is a reported no-op. Exact lossless buffers on synthetic fixtures are the correctness oracle; JPEG re-encoding is not. Two writes to the same location prove ordering: the later wins and undo exposes the earlier.
 
 ## Exact transforms
 
-Coordinates use a top-left origin, x right, y down. Every layer addresses its input stage.
+Coordinates use a top-left origin, x right, y down. Every layer addresses its input stage; pixel-stage layers are placed before the geometry tail, so their input stage is the content stage.
 
 | Operation | Input to output mapping | Output size |
 | --- | --- | --- |
@@ -37,7 +37,7 @@ Coordinates use a top-left origin, x right, y down. Every layer addresses its in
 | Mirror horizontal | `(x, y) → (w - 1 - x, y)` | `w × h` |
 | Flip vertical | `(x, y) → (x, h - 1 - y)` | `w × h` |
 
-Mappings are integer-exact with no interpolation, accumulated raster edits or irreversible writes. Four matching quarter-turns and two matching reflections are identities. Order stays observable: a pixel edit before a transform moves with the image, one after it uses the transformed dimensions. Tests cover identities, non-commuting combinations, EXIF-mirrored sources and every interleaving with pixel edits.
+Mappings are integer-exact with no interpolation, accumulated raster edits or irreversible writes. Four matching quarter-turns and two matching reflections are identities. Pixel edits sit before the geometry tail and move with the image under every transform; the renderer still evaluates any layer order exactly, and tests cover identities, non-commuting combinations, EXIF-mirrored sources and every interleaving with pixel edits.
 
 ## Versions and lineage
 

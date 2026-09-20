@@ -28,7 +28,7 @@ Add boundaries when there is real code to own them. Crates and dynamically loade
 
 Import references a JPEG and creates a stable asset plus Original. Path and root are mutable locators; a full content fingerprint verifies the bytes. Same-filesystem aliases resolve to one asset, and identical copies at different paths are not merged. Missing or changed sources keep their edits and report an explicit rendering limitation.
 
-An edit layer is an identified, typed operation with parameters and an input/output stage contract. A recipe is the ordered stack of layers. A history entry names a semantic action and stores its complete resulting immutable recipe. Each layer's coordinates refer to its input stage: a pixel edit before a rotation travels with the image, one after it addresses the rotated dimensions. Optimizations may fuse operations only where the result stays byte-identical.
+An edit layer is an identified, typed operation with parameters and an input/output stage contract. A recipe is the ordered stack of layers. A history entry names a semantic action and stores its complete resulting immutable recipe. Each layer's coordinates refer to its input stage. The host places a new layer by its effect stage: pixel-stage layers are inserted before the geometry tail of quarter-turns, reflections and crop, so they address the content stage (the source after EXIF orientation) and every later geometry change carries them; geometry layers append. See [content-space edits](content-space-edits.md). Optimizations may fuse operations only where the result stays byte-identical.
 
 ## Persistence
 
