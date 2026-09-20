@@ -1415,6 +1415,11 @@ impl Editor {
                 if self.busy {
                     return Task::none();
                 }
+                // The current row is the live state: selecting it returns to current instead of
+                // starting a historical preview, which is also what the API does with that entry.
+                if state.current_entry.id == entry_id {
+                    return self.update(Message::ReturnCurrent);
+                }
                 let params = json!({"asset_id":state.asset.id,"entry_id":entry_id});
                 self.busy = true;
                 self.status = "Selecting history state…".into();
@@ -4691,6 +4696,19 @@ mod tests {
         assert!(editor.crop.is_none());
         assert!(editor.draft_photo.is_none());
         assert!(editor.status.contains("Crop applied"), "{}", editor.status);
+        finish(editor, catalog);
+    }
+
+    #[test]
+    fn selecting_the_current_entry_returns_to_current_instead_of_previewing() {
+        let (mut editor, catalog, _, entry_id) = opened(Vec::new(), 1);
+        let _ = editor.update(Message::Preview(entry_id));
+        assert!(editor.busy);
+        assert!(
+            editor.status.starts_with("Returning to current"),
+            "{}",
+            editor.status
+        );
         finish(editor, catalog);
     }
 

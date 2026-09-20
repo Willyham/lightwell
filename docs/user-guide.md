@@ -51,7 +51,7 @@ Selecting a historical state pauses the draft rather than discarding it: the his
 
 ## History
 
-History lists Original and every committed action with sequence and actor. The filled marker is current; selecting another row previews that immutable snapshot without changing current state or revision. Return to current leaves the preview; Restore appends a new action containing the selected recipe. Editing is disabled during a historical preview.
+History lists Original and every committed action with sequence and actor. The filled marker is current, and selecting it keeps you on the live state; selecting another row previews that immutable snapshot without changing current state or revision. Return to current leaves the preview; Restore appends a new action containing the selected recipe. Editing is disabled during a historical preview.
 
 Versions name the displayed state so you can find it again among many entries. Type a name and choose Save; each version is listed with its entry number, selecting one previews it, and Restore this state brings it back as a new action. Deleting a version removes only the name. History rows marked branch were undone and replaced by later edits; they remain available for preview, restore and versions.
 

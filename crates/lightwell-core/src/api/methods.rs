@@ -144,7 +144,7 @@ pub(super) const METHODS: &[MethodSpec] = &[
         mutates: false,
         required: &["asset_id", "entry_id"],
         optional: &[],
-        notes: "read-only session selection; returns generation and session",
+        notes: "read-only session selection; the current entry selects current, not a historical preview; returns generation and session",
         handler: Some(preview_select),
     },
     MethodSpec {
@@ -546,8 +546,15 @@ fn preview_select(
     params: &Value,
 ) -> Result<Value, Error> {
     let p = parse::<EntryParams>(params)?;
-    service.entry(&p.asset_id, &p.entry_id)?;
-    let generation = session.preview.select(HistorySelection::Entry(p.entry_id));
+    // The current entry is the live state, not a historical snapshot: selecting it is Return to
+    // current, so the session keeps following later commits and editing stays enabled.
+    let selection = if service.state(&p.asset_id)?.current_entry.id == p.entry_id {
+        HistorySelection::Current
+    } else {
+        service.entry(&p.asset_id, &p.entry_id)?;
+        HistorySelection::Entry(p.entry_id)
+    };
+    let generation = session.preview.select(selection);
     session.touch();
     Ok(json!({"generation": generation, "session": session}))
 }
