@@ -42,6 +42,10 @@ The pixel editor has x/y and RGB controls, Apply, and optional pointer picking, 
 
 Draft conflicts become relevant for the crop module: Restore/undo/redo may not silently discard an active draft. Agent commits preserve drafts and mark conflict. Explicit discard/reapply resolves it against the current revision.
 
+## Versions and lineage
+
+A version names one retained entry per asset, unique ignoring case, without changing the recipe, revision or log. Creating, listing and deleting versions are programmable and emit events; restoring a version is the ordinary restore of its entry. Deleting a version never removes history. Lineage walks undo parents from any entry newest first in bounded pages, and the desktop marks loaded entries off the current lineage as branches. Client sessions are held by the catalog owner per registered client and carry a revision; a client adopts only responses at least as new as the session it holds. See [versions and lineage](../design/versions-and-lineage.md).
+
 ## Verified acceptance
 
 1. Import → pixel A → pixel B. Verify exactly one layer/action per real change, ordered values and unchanged original bytes. Test same-pixel overrides and no-op/invalid requests.

@@ -13,6 +13,7 @@ Run `cargo xtask develop`, or `cargo xtask check` for repository, formatting, li
 - [Architecture](docs/design/architecture.md): catalog, image engine, commands, and extension boundaries.
 - [First build: image-loading skeleton](docs/specs/bootstrap.md): cross-platform launch, Open image and Fit display, with no editing tools.
 - [Development and agent verification](docs/engineering/development.md): setup, linting, builds, logs, screenshots, smoke checks and packaging.
+- [Versions and lineage](docs/design/versions-and-lineage.md): the history graph, named versions, lineage queries and the catalog format 2 decision.
 - [History-first roadmap](docs/design/history-first-roadmap.md): implemented M1 history/pixel editing and M2 transforms, followed by planned M3 tool modules and M4 crop.
 - [Editor specification](docs/specs/single-image.md): staged editing and retained export/recovery/agent follow-ups.
 - [Source recovery](docs/specs/source-recovery.md): referenced originals, stable identity, and verified recovery after files move.

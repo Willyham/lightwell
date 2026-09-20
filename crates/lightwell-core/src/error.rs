@@ -52,19 +52,6 @@ impl Error {
             detail: detail.into(),
         }
     }
-    // Normalize decoder-adapter diagnostics at the shared application boundary.
-    pub(crate) fn decoder(detail: String) -> Self {
-        let kind = match detail.split(':').next().unwrap_or("") {
-            "read-error" => ErrorKind::FileAccess,
-            "resource-limit" => ErrorKind::ResourceLimit,
-            "unsupported-input" => ErrorKind::UnsupportedInput,
-            "unsupported-color" => ErrorKind::UnsupportedColor,
-            "unsupported-profile" => ErrorKind::UnsupportedProfile,
-            "invalid-input" => ErrorKind::Decode,
-            _ => ErrorKind::Internal,
-        };
-        Self::new(kind, detail)
-    }
 }
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

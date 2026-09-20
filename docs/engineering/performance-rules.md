@@ -47,7 +47,6 @@ These are accepted or pending decisions. Do not "fix" them without the reference
 | Full-resolution GPU upload for every preview, including Fit | Open; largest per-interaction cost at 60 MP | A bounded Fit preview must keep 100% inspection exact and source-detail-ready; design it against [the editor specification](../specs/single-image.md) first |
 | One decode on the owner thread per catalog reopen | Accepted | Moving it needs the cache shared with the preview worker; not worth it before M3 |
 | 500 ms event poll while an asset is open | Accepted until push notifications exist | Do not shorten the interval |
-| `snapshots` and `snapshot_layers` tables are written but never read | Pending owner decision | Changing them changes the catalog format and needs an explicit tested conversion |
 
 ## Anti-patterns already removed
 
@@ -59,3 +58,5 @@ These are accepted or pending decisions. Do not "fix" them without the reference
 | Re-fetch state and the 50-row history page after every command, and re-render on zoom | Narrow command, preview and session tasks with entry merge |
 | Accept loop sleeping 10 ms in a non-blocking spin | Blocking `accept` woken by one loopback connection on shutdown |
 | Tiny fixture as the only timing evidence | `editor-performance` runner on generated 24 MP and 60 MP inputs |
+| Three stored copies of every stack, two of them never read | Entry records are the only copy; catalog format 2 converts format 1 once |
+| Desktop tasks carrying a session copy out and writing it back after the round trip | Owner-held sessions per client with a revision; the desktop adopts only newer responses |

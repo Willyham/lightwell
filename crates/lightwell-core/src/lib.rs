@@ -53,32 +53,38 @@ pub struct SourceImage {
     pub orientation: u8,
 }
 
+fn decode_error(detail: &str) -> Error {
+    Error::new(ErrorKind::Decode, detail)
+}
+
 // Walk JPEG header segments without decoding or allocating from declared dimensions.
-fn header(bytes: &[u8]) -> Result<(u32, u32, u8), String> {
+fn header(bytes: &[u8]) -> Result<(u32, u32, u8), Error> {
     if !bytes.starts_with(&[0xff, 0xd8]) || !bytes.ends_with(&[0xff, 0xd9]) {
-        return Err("invalid-input: missing JPEG SOI/EOI".into());
+        return Err(decode_error("missing JPEG SOI/EOI"));
     }
     let mut i = 2;
     while i + 4 <= bytes.len() {
         if bytes[i] != 0xff {
-            return Err("invalid-input: JPEG marker".into());
+            return Err(decode_error("JPEG marker"));
         }
         while i < bytes.len() && bytes[i] == 0xff {
             i += 1;
         }
-        let marker = *bytes.get(i).ok_or("invalid-input: marker")?;
+        let marker = *bytes.get(i).ok_or_else(|| decode_error("marker"))?;
         i += 1;
         if marker == 0xda || marker == 0xd9 {
             break;
         }
-        let size = bytes.get(i..i + 2).ok_or("invalid-input: segment length")?;
+        let size = bytes
+            .get(i..i + 2)
+            .ok_or_else(|| decode_error("segment length"))?;
         let size = u16::from_be_bytes([size[0], size[1]]) as usize;
         if size < 2 || i + size > bytes.len() {
-            return Err("invalid-input: segment bounds".into());
+            return Err(decode_error("segment bounds"));
         }
         if [0xc0, 0xc1, 0xc2].contains(&marker) {
             if size < 8 || bytes[i + 2] != 8 {
-                return Err("unsupported-color: JPEG precision".into());
+                return Err(Error::new(ErrorKind::UnsupportedColor, "JPEG precision"));
             }
             let h = u16::from_be_bytes([bytes[i + 3], bytes[i + 4]]) as u32;
             let w = u16::from_be_bytes([bytes[i + 5], bytes[i + 6]]) as u32;
@@ -86,25 +92,25 @@ fn header(bytes: &[u8]) -> Result<(u32, u32, u8), String> {
         }
         i += size;
     }
-    Err("unsupported-input: JPEG frame type".into())
+    Err(Error::new(ErrorKind::UnsupportedInput, "JPEG frame type"))
 }
 
-fn read_bounded(path: &Path) -> Result<Vec<u8>, String> {
-    if !path
-        .metadata()
-        .map_err(|e| format!("read-error: {}", e.kind()))?
-        .is_file()
-    {
-        return Err("unsupported-input: expected a regular file".into());
+fn read_bounded(path: &Path) -> Result<Vec<u8>, Error> {
+    let file_error = |e: std::io::Error| Error::new(ErrorKind::FileAccess, e.kind().to_string());
+    if !path.metadata().map_err(file_error)?.is_file() {
+        return Err(Error::new(
+            ErrorKind::UnsupportedInput,
+            "expected a regular file",
+        ));
     }
     let mut bytes = Vec::new();
     File::open(path)
-        .map_err(|e| format!("read-error: {}", e.kind()))?
+        .map_err(file_error)?
         .take(128 * 1024 * 1024 + 1)
         .read_to_end(&mut bytes)
-        .map_err(|e| format!("read-error: {}", e.kind()))?;
+        .map_err(file_error)?;
     if bytes.len() > 128 * 1024 * 1024 {
-        return Err("resource-limit: encoded bytes".into());
+        return Err(Error::new(ErrorKind::ResourceLimit, "encoded bytes"));
     }
     Ok(bytes)
 }
@@ -122,14 +128,17 @@ fn ms(from: Instant, to: Instant) -> f64 {
 }
 
 /// Validate the supported JPEG subset, decode within fixed limits and orient once to upright pixels.
-fn decode_upright(bytes: Vec<u8>) -> Result<Decoded, String> {
+fn decode_upright(bytes: Vec<u8>) -> Result<Decoded, Error> {
     let start = Instant::now();
     let (w, h, components) = header(&bytes)?;
     if w == 0 || h == 0 || w > 16384 || h > 16384 || u64::from(w) * u64::from(h) > 64_000_000 {
-        return Err("resource-limit: dimensions".into());
+        return Err(Error::new(ErrorKind::ResourceLimit, "dimensions"));
     }
     if ![1, 3].contains(&components) {
-        return Err("unsupported-color: only RGB/greyscale".into());
+        return Err(Error::new(
+            ErrorKind::UnsupportedColor,
+            "only RGB/greyscale",
+        ));
     }
     let mut reader = ImageReader::with_format(Cursor::new(bytes), image::ImageFormat::Jpeg);
     let mut limits = Limits::default();
@@ -139,19 +148,19 @@ fn decode_upright(bytes: Vec<u8>) -> Result<Decoded, String> {
     reader.limits(limits);
     let mut decoder = reader
         .into_decoder()
-        .map_err(|_| "invalid-input: decoder header")?;
+        .map_err(|_| decode_error("decoder header"))?;
     if let Some(profile) = decoder
         .icc_profile()
-        .map_err(|_| "unsupported-profile: unreadable ICC")?
+        .map_err(|_| Error::new(ErrorKind::UnsupportedProfile, "unreadable ICC"))?
     {
         profile::check(&profile, components)?;
     }
     let orientation = decoder
         .orientation()
-        .map_err(|_| "invalid-input: orientation")?;
+        .map_err(|_| decode_error("orientation"))?;
     let validate_done = Instant::now();
     let mut upright =
-        image::DynamicImage::from_decoder(decoder).map_err(|_| "invalid-input: decode")?;
+        image::DynamicImage::from_decoder(decoder).map_err(|_| decode_error("decode"))?;
     let pixels_done = Instant::now();
     upright.apply_orientation(orientation);
     let orient_done = Instant::now();
@@ -165,10 +174,6 @@ fn decode_upright(bytes: Vec<u8>) -> Result<Decoded, String> {
 }
 
 pub fn open(path: &Path) -> Result<Photo, Error> {
-    decode(path).map_err(Error::decoder)
-}
-
-fn decode(path: &Path) -> Result<Photo, String> {
     let start = Instant::now();
     let bytes = read_bounded(path)?;
     let read_done = Instant::now();
@@ -205,10 +210,6 @@ fn decode(path: &Path) -> Result<Photo, String> {
 
 /// Decode the complete upright source once for non-destructive recipe evaluation.
 pub fn open_source(path: &Path) -> Result<SourceImage, Error> {
-    decode_source(path).map_err(Error::decoder)
-}
-
-fn decode_source(path: &Path) -> Result<SourceImage, String> {
     let bytes = read_bounded(path)?;
     let fingerprint = format!("{:x}", Sha256::digest(&bytes));
     let decoded = decode_upright(bytes)?;

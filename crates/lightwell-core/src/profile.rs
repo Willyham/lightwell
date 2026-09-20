@@ -1,8 +1,14 @@
 //! Conservative S0 recognition of standard RGB matrix/TRC sRGB profiles.
+use crate::{Error, ErrorKind};
 use moxcms::{ColorProfile, DataColorSpace, ParsingOptions, ProfileClass};
 
-pub fn check(bytes: &[u8], components: u8) -> Result<(), String> {
-    let unsupported = || "unsupported-profile: expected standard RGB matrix/TRC sRGB".to_string();
+pub fn check(bytes: &[u8], components: u8) -> Result<(), Error> {
+    let unsupported = || {
+        Error::new(
+            ErrorKind::UnsupportedProfile,
+            "expected standard RGB matrix/TRC sRGB",
+        )
+    };
     if components != 3 {
         return Err(unsupported());
     }

@@ -30,6 +30,8 @@ Original files remain read-only. Import references existing files, with stable a
 
 M1 implements ordered non-destructive edit operations (“layers”), immutable complete recipe snapshots and durable attributed history. The pixel-change proof exercises the model before more complex tools. General bitmap compositing, blend modes and arbitrary layer reordering are not selected.
 
+History is a graph: entries keep their undo parent, nothing is truncated, and a named **version** is a reference to one retained entry, the Lightroom-style saved state under the owner's chosen name. The catalog is at internal format 2; format 1 converts once on open and the unread snapshot tables were dropped in favour of the authoritative entry records. See [versions and lineage](design/versions-and-lineage.md).
+
 Every committed image action enters the shared history. Undo/redo navigates saved entries without appending oscillating navigation rows. Preview/select is read-only. Restore appends an action and preserves all later entries; a new edit clears shortcut redo availability but retains historical access. Committed state survives restart; drafts do not.
 
 Use one focused workspace with collapsible controls, a centered photo, visible history, Fit, numeric zoom and true 100% inspection. No full library grid is required for the editor milestones. Geometry, crop, export, recovery and human-agent behavior are specified in [accepted editor behavior](design/m1-decisions.md), [history](specs/edit-history.md), [editor](specs/single-image.md) and [source recovery](specs/source-recovery.md).

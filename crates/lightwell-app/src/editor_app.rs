@@ -5,12 +5,13 @@ use iced::{
 };
 use iced_runtime::image as image_memory;
 use lightwell_core::{
-    ApiRequest, ClientSession, EditorState, EntryId, ErrorKind, EventsResult, HistoryEntry,
-    HistoryPage, HistorySelection, LocalServer, Mutation, OwnerHandle, PreviewJob, PreviewQueue,
-    Transform, Zoom,
+    ApiRequest, AssetId, ClientId, ClientSession, EditorState, EntryId, ErrorKind, EventsResult,
+    HistoryEntry, HistoryPage, HistorySelection, Lineage, LocalServer, Mutation, OwnerHandle,
+    PreviewJob, PreviewQueue, Transform, Version, Zoom,
 };
 use serde_json::{Value, json};
 use std::{
+    collections::HashSet,
     path::PathBuf,
     sync::{
         Mutex,
@@ -22,11 +23,17 @@ use std::{
 
 static REQUEST_NUMBER: AtomicU64 = AtomicU64::new(1);
 const HISTORY_PAGE_SIZE: usize = 50;
+const LINEAGE_LIMIT: usize = 100;
+const ACTOR: &str = "desktop";
 
+/// Authoritative state read back from the owner after a change. `history` is `None` when only the
+/// current entry needs merging into the loaded page.
 #[derive(Clone, Debug)]
-struct Payload {
+struct Refresh {
     state: EditorState,
-    history: HistoryPage,
+    history: Option<HistoryPage>,
+    versions: Vec<Version>,
+    lineage: Lineage,
     job: PreviewJob,
     session: ClientSession,
     sequence: u64,
@@ -34,14 +41,6 @@ struct Payload {
 
 #[derive(Clone, Debug)]
 struct PreviewPayload {
-    job: PreviewJob,
-    session: ClientSession,
-    sequence: u64,
-}
-
-#[derive(Clone, Debug)]
-struct StatePayload {
-    state: EditorState,
     job: PreviewJob,
     session: ClientSession,
     sequence: u64,
@@ -59,23 +58,21 @@ struct Upload {
 
 #[derive(Clone, Debug)]
 enum SyncResult {
-    Unchanged {
-        session: ClientSession,
-        sequence: u64,
-    },
-    Changed(Box<Payload>),
+    Unchanged { sequence: u64 },
+    Changed(Box<Refresh>),
 }
 
 #[derive(Clone, Debug)]
 enum Message {
     Open,
     Picked(Option<PathBuf>),
-    Loaded(Result<Box<Payload>, String>),
-    StateLoaded(Result<Box<StatePayload>, String>),
+    Refreshed(Result<Box<Refresh>, String>),
     PreviewLoaded(Result<Box<PreviewPayload>, String>),
     SessionUpdated(Result<(ClientSession, u64), String>),
+    PanSynced(Result<ClientSession, String>),
+    VersionsLoaded(Result<(Vec<Version>, u64), String>),
     Synced(Result<SyncResult, String>),
-    OlderLoaded(Result<(HistoryPage, ClientSession, u64), String>),
+    OlderLoaded(Result<(HistoryPage, u64), String>),
     Sync,
     Poll,
     Uploaded(
@@ -88,6 +85,7 @@ enum Message {
     G(String),
     B(String),
     Zoom(String),
+    VersionName(String),
     Panned(f32, f32),
     ApplyPixel,
     Transform(Transform),
@@ -96,6 +94,8 @@ enum Message {
     Preview(EntryId),
     ReturnCurrent,
     Restore,
+    SaveVersion,
+    DeleteVersion(String),
     LoadOlder,
     Fit,
     HundredPercent,
@@ -163,9 +163,17 @@ struct Editor {
     owner: OwnerHandle,
     owner_join: Option<JoinHandle<()>>,
     live_server: Option<LocalServer>,
+    /// The desktop is one registered client; the owner holds its session.
+    client: ClientId,
+    /// Local copy of the owner's session, replaced only by a response with a newer revision.
     session: ClientSession,
     state: Option<EditorState>,
     history: HistoryPage,
+    versions: Vec<Version>,
+    /// Entries on the current undo-parent chain; other loaded entries are abandoned branches.
+    lineage: HashSet<EntryId>,
+    /// Oldest lineage sequence when the chain was truncated; entries at or below it are unknown.
+    lineage_floor: Option<u64>,
     display_entry: Option<EntryId>,
     photo: Option<image_memory::Allocation>,
     dimensions: Option<(u32, u32)>,
@@ -174,6 +182,8 @@ struct Editor {
     uploading: bool,
     busy: bool,
     syncing: bool,
+    pan_in_flight: bool,
+    pending_pan: Option<(f32, f32)>,
     picker_open: bool,
     status: String,
     api_sequence: u64,
@@ -184,6 +194,7 @@ struct Editor {
     g: String,
     b: String,
     zoom: String,
+    version_name: String,
 }
 
 impl Editor {
@@ -194,16 +205,21 @@ impl Editor {
             live_server,
             initial,
         } = boot;
+        let client = owner.register();
         let mut editor = Self {
             owner: owner.clone(),
             owner_join: Some(join),
             live_server,
+            client,
             session: ClientSession::default(),
             state: None,
             history: HistoryPage {
                 entries: Vec::new(),
                 next_before_sequence: None,
             },
+            versions: Vec::new(),
+            lineage: HashSet::new(),
+            lineage_floor: None,
             display_entry: None,
             photo: None,
             dimensions: None,
@@ -212,6 +228,8 @@ impl Editor {
             uploading: false,
             busy: initial.is_some(),
             syncing: false,
+            pan_in_flight: false,
+            pending_pan: None,
             picker_open: false,
             status: if initial.is_some() {
                 "Importing photograph…".into()
@@ -226,6 +244,7 @@ impl Editor {
             g: "0".into(),
             b: "0".into(),
             zoom: "100".into(),
+            version_name: String::new(),
         };
         if editor.live_server.is_none() {
             editor.status = "Editor ready; live API unavailable on this host".into();
@@ -234,9 +253,16 @@ impl Editor {
             .and_then(iced::window::scale_factor)
             .map(Message::ScaleFactor);
         let import = initial
-            .map(|path| import_task(owner, editor.session.clone(), path))
+            .map(|path| import_task(owner, client, path))
             .unwrap_or_else(Task::none);
         (editor, Task::batch([scale, import]))
+    }
+
+    /// Keep the newest session the owner has reported; responses may complete out of order.
+    fn adopt(&mut self, session: ClientSession) {
+        if session.revision >= self.session.revision {
+            self.session = session;
+        }
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
@@ -262,29 +288,13 @@ impl Editor {
                 if let Some(path) = path {
                     self.busy = true;
                     self.status = "Importing photograph…".into();
-                    return import_task(self.owner.clone(), self.session.clone(), path);
+                    return import_task(self.owner.clone(), self.client, path);
                 }
             }
-            Message::Loaded(result) => {
+            Message::Refreshed(result) => {
                 self.busy = false;
                 match result {
-                    Ok(payload) => self.accept(*payload),
-                    Err(error) => self.status = error,
-                }
-            }
-            Message::StateLoaded(result) => {
-                self.busy = false;
-                match result {
-                    Ok(payload) => {
-                        let payload = *payload;
-                        self.api_sequence = payload.sequence;
-                        self.session = payload.session;
-                        merge_current_entry(&mut self.history, payload.state.current_entry.clone());
-                        self.state = Some(payload.state);
-                        self.display_entry = Some(payload.job.entry.id.clone());
-                        self.preview_generation = self.preview_queue.request(payload.job);
-                        self.status = "Rendering current state…".into();
-                    }
+                    Ok(refresh) => self.accept(*refresh),
                     Err(error) => self.status = error,
                 }
             }
@@ -294,7 +304,7 @@ impl Editor {
                     Ok(payload) => {
                         let payload = *payload;
                         self.api_sequence = payload.sequence;
-                        self.session = payload.session;
+                        self.adopt(payload.session);
                         self.display_entry = Some(payload.job.entry.id.clone());
                         self.preview_generation = self.preview_queue.request(payload.job);
                         self.status = "Rendering selected history state…".into();
@@ -306,9 +316,31 @@ impl Editor {
                 self.busy = false;
                 match result {
                     Ok((session, sequence)) => {
-                        self.session = session;
+                        self.adopt(session);
                         self.api_sequence = sequence;
                         self.status = "View updated".into();
+                    }
+                    Err(error) => self.status = error,
+                }
+            }
+            Message::PanSynced(result) => {
+                self.pan_in_flight = false;
+                match result {
+                    Ok(session) => self.adopt(session),
+                    Err(error) => self.status = error,
+                }
+                if let Some((x, y)) = self.pending_pan.take() {
+                    return self.pan(x, y);
+                }
+            }
+            Message::VersionsLoaded(result) => {
+                self.busy = false;
+                match result {
+                    Ok((versions, sequence)) => {
+                        self.versions = versions;
+                        self.api_sequence = sequence;
+                        self.version_name.clear();
+                        self.status = "Versions updated".into();
                     }
                     Err(error) => self.status = error,
                 }
@@ -320,7 +352,7 @@ impl Editor {
                 self.syncing = true;
                 return sync_task(
                     self.owner.clone(),
-                    self.session.clone(),
+                    self.client,
                     self.state.as_ref().unwrap().asset.id.clone(),
                     self.api_sequence,
                 );
@@ -328,19 +360,15 @@ impl Editor {
             Message::Synced(result) => {
                 self.syncing = false;
                 match result {
-                    Ok(SyncResult::Unchanged { session, sequence }) => {
-                        self.session = session;
-                        self.api_sequence = sequence;
-                    }
-                    Ok(SyncResult::Changed(payload)) => self.accept(*payload),
+                    Ok(SyncResult::Unchanged { sequence }) => self.api_sequence = sequence,
+                    Ok(SyncResult::Changed(refresh)) => self.accept(*refresh),
                     Err(error) => self.status = format!("Live refresh failed: {error}"),
                 }
             }
             Message::OlderLoaded(result) => {
                 self.busy = false;
                 match result {
-                    Ok((page, session, sequence)) => {
-                        self.session = session;
+                    Ok((page, sequence)) => {
                         self.api_sequence = sequence;
                         self.history.entries.extend(page.entries);
                         self.history.next_before_sequence = page.next_before_sequence;
@@ -413,9 +441,8 @@ impl Editor {
             Message::G(value) => self.g = value,
             Message::B(value) => self.b = value,
             Message::Zoom(value) => self.zoom = value,
-            Message::Panned(x, y) => {
-                let _ = self.session.preview.view.pan_to(x, y);
-            }
+            Message::VersionName(value) => self.version_name = value,
+            Message::Panned(x, y) => return self.pan(x, y),
             Message::ApplyPixel => {
                 let Some(state) = &self.state else {
                     return Task::none();
@@ -436,14 +463,14 @@ impl Editor {
                         "Pixel fields require integer x/y and RGB values from 0 to 255".into();
                     return Task::none();
                 };
-                let params = json!({"asset_id":state.asset.id,"mutation":mutation(state.revision,"desktop"),"x":x,"y":y,"rgb":rgb});
+                let params = json!({"asset_id":state.asset.id,"mutation":mutation(state.revision),"x":x,"y":y,"rgb":rgb});
                 return self.command("edit.set-pixel", params);
             }
             Message::Transform(transform) => {
                 let Some(state) = &self.state else {
                     return Task::none();
                 };
-                let params = json!({"asset_id":state.asset.id,"mutation":mutation(state.revision,"desktop"),"transform":transform});
+                let params = json!({"asset_id":state.asset.id,"mutation":mutation(state.revision),"transform":transform});
                 return self.command("edit.transform", params);
             }
             Message::Undo | Message::Redo => {
@@ -455,22 +482,22 @@ impl Editor {
                 } else {
                     "history.redo"
                 };
-                let params = json!({"asset_id":state.asset.id,"mutation":mutation(state.revision,"desktop")});
+                let params = json!({"asset_id":state.asset.id,"mutation":mutation(state.revision)});
                 return self.command(method, params);
             }
             Message::Preview(entry_id) => {
                 let Some(state) = &self.state else {
                     return Task::none();
                 };
-                let params = json!({"asset_id":state.asset.id,"entry_id":entry_id});
                 if self.busy {
                     return Task::none();
                 }
+                let params = json!({"asset_id":state.asset.id,"entry_id":entry_id});
                 self.busy = true;
                 self.status = "Selecting history state…".into();
                 return preview_task(
                     self.owner.clone(),
-                    self.session.clone(),
+                    self.client,
                     state.asset.id.clone(),
                     Some(entry_id),
                     "preview.select",
@@ -488,7 +515,7 @@ impl Editor {
                 self.status = "Returning to current state…".into();
                 return preview_task(
                     self.owner.clone(),
-                    self.session.clone(),
+                    self.client,
                     state.asset.id.clone(),
                     None,
                     "preview.return-current",
@@ -501,8 +528,27 @@ impl Editor {
                 else {
                     return Task::none();
                 };
-                let params = json!({"asset_id":state.asset.id,"mutation":mutation(state.revision,"desktop"),"entry_id":entry_id});
+                let params = json!({"asset_id":state.asset.id,"mutation":mutation(state.revision),"entry_id":entry_id});
                 return self.command("history.restore", params);
+            }
+            Message::SaveVersion => {
+                let (Some(state), Some(entry_id)) = (&self.state, &self.display_entry) else {
+                    return Task::none();
+                };
+                let name = self.version_name.trim().to_string();
+                if name.is_empty() {
+                    self.status = "Enter a version name first".into();
+                    return Task::none();
+                }
+                let params = json!({"asset_id":state.asset.id,"name":name,"actor":ACTOR,"entry_id":entry_id});
+                return self.version_command("version.create", params);
+            }
+            Message::DeleteVersion(name) => {
+                let Some(state) = &self.state else {
+                    return Task::none();
+                };
+                let params = json!({"asset_id":state.asset.id,"name":name});
+                return self.version_command("version.delete", params);
             }
             Message::LoadOlder => {
                 let (Some(state), Some(before)) = (&self.state, self.history.next_before_sequence)
@@ -515,7 +561,7 @@ impl Editor {
                 self.busy = true;
                 return older_task(
                     self.owner.clone(),
-                    self.session.clone(),
+                    self.client,
                     state.asset.id.clone(),
                     before,
                 );
@@ -544,6 +590,7 @@ impl Editor {
             }
             Message::Close => {
                 self.live_server.take();
+                self.owner.disconnect(self.client);
                 self.owner.stop();
                 if let Some(join) = self.owner_join.take() {
                     return Task::perform(
@@ -560,14 +607,47 @@ impl Editor {
         Task::none()
     }
 
-    fn accept(&mut self, payload: Payload) {
-        self.api_sequence = payload.sequence;
-        self.session = payload.session;
-        self.history = payload.history;
-        self.state = Some(payload.state);
-        self.display_entry = Some(payload.job.entry.id.clone());
-        self.preview_generation = self.preview_queue.request(payload.job);
+    fn accept(&mut self, refresh: Refresh) {
+        self.api_sequence = refresh.sequence;
+        self.adopt(refresh.session);
+        match refresh.history {
+            Some(history) => self.history = history,
+            None => merge_current_entry(&mut self.history, refresh.state.current_entry.clone()),
+        }
+        self.versions = refresh.versions;
+        self.lineage = refresh
+            .lineage
+            .steps
+            .iter()
+            .map(|step| step.entry_id.clone())
+            .collect();
+        self.lineage_floor = refresh
+            .lineage
+            .next_entry_id
+            .as_ref()
+            .and_then(|_| refresh.lineage.steps.last().map(|step| step.sequence));
+        self.state = Some(refresh.state);
+        self.display_entry = Some(refresh.job.entry.id.clone());
+        self.preview_generation = self.preview_queue.request(refresh.job);
         self.status = "Rendering selected history state…".into();
+    }
+
+    fn on_current_lineage(&self, entry: &HistoryEntry) -> bool {
+        self.lineage.contains(&entry.id)
+            || self
+                .lineage_floor
+                .is_some_and(|floor| entry.sequence <= floor)
+    }
+
+    /// Pan is session state like zoom, but scroll events arrive faster than round trips complete:
+    /// keep one request in flight and only the newest pending position.
+    fn pan(&mut self, x: f32, y: f32) -> Task<Message> {
+        if self.pan_in_flight {
+            self.pending_pan = Some((x, y));
+            return Task::none();
+        }
+        self.pan_in_flight = true;
+        pan_task(self.owner.clone(), self.client, x, y)
     }
 
     fn command(&mut self, method: &'static str, params: Value) -> Task<Message> {
@@ -581,7 +661,7 @@ impl Editor {
         self.status = format!("Running {method}…");
         state_task(
             self.owner.clone(),
-            self.session.clone(),
+            self.client,
             state.asset.id.clone(),
             method,
             params,
@@ -594,7 +674,25 @@ impl Editor {
         }
         self.busy = true;
         self.status = format!("Running {method}…");
-        session_task(self.owner.clone(), self.session.clone(), method, params)
+        session_task(self.owner.clone(), self.client, method, params)
+    }
+
+    fn version_command(&mut self, method: &'static str, params: Value) -> Task<Message> {
+        let Some(state) = &self.state else {
+            return Task::none();
+        };
+        if self.busy {
+            return Task::none();
+        }
+        self.busy = true;
+        self.status = format!("Running {method}…");
+        versions_task(
+            self.owner.clone(),
+            self.client,
+            state.asset.id.clone(),
+            method,
+            params,
+        )
     }
 
     fn view(&self) -> Element<'_, Message> {
@@ -705,8 +803,13 @@ impl Editor {
             } else {
                 "○"
             };
+            let branch = if self.on_current_lineage(entry) {
+                ""
+            } else {
+                " · branch"
+            };
             let label = format!(
-                "{marker} {} · {} · {}",
+                "{marker} {} · {} · {}{branch}",
                 entry.sequence, entry.action_id, entry.actor
             );
             history_rows = history_rows.push(
@@ -732,6 +835,45 @@ impl Editor {
                 .spacing(6),
             );
         }
+
+        let can_save = current.is_some() && self.display_entry.is_some() && !self.busy;
+        let mut version_rows = column![
+            text("Versions").size(18),
+            row![
+                text_input("Name the displayed state", &self.version_name)
+                    .on_input(Message::VersionName)
+                    .on_submit(Message::SaveVersion)
+                    .width(Length::Fill),
+                button("Save").on_press_maybe(can_save.then_some(Message::SaveVersion)),
+            ]
+            .spacing(6),
+        ]
+        .spacing(5);
+        for version in &self.versions {
+            let marker = if self.display_entry.as_ref() == Some(&version.entry_id) {
+                "◉"
+            } else {
+                "○"
+            };
+            let label = format!(
+                "{marker} {} · entry {}",
+                version.name, version.entry_sequence
+            );
+            version_rows = version_rows.push(
+                row![
+                    button(text(label).size(12))
+                        .width(Length::Fill)
+                        .on_press_maybe(
+                            (!self.busy).then_some(Message::Preview(version.entry_id.clone()))
+                        ),
+                    button(text("Delete").size(12)).on_press_maybe(
+                        (!self.busy).then_some(Message::DeleteVersion(version.name.clone()))
+                    ),
+                ]
+                .spacing(6),
+            );
+        }
+
         let layers = self
             .history
             .entries
@@ -766,6 +908,7 @@ impl Editor {
                 transforms,
                 zoom,
                 history_rows,
+                version_rows,
                 text("Layer stack").size(18),
                 text(layers).size(11)
             ]
@@ -843,7 +986,7 @@ fn merge_current_entry(history: &mut HistoryPage, entry: HistoryEntry) {
         .then(|| history.entries.last().expect("page is not empty").sequence);
 }
 
-fn mutation(revision: u64, actor: &str) -> Mutation {
+fn mutation(revision: u64) -> Mutation {
     Mutation {
         expected_revision: revision,
         request_id: format!(
@@ -851,13 +994,13 @@ fn mutation(revision: u64, actor: &str) -> Mutation {
             std::process::id(),
             REQUEST_NUMBER.fetch_add(1, Ordering::Relaxed)
         ),
-        actor: actor.into(),
+        actor: ACTOR.into(),
     }
 }
 
 fn call(
     owner: &OwnerHandle,
-    session: &mut ClientSession,
+    client: ClientId,
     method: &str,
     params: Value,
 ) -> Result<(Value, u64), String> {
@@ -868,7 +1011,7 @@ fn call(
         token: None,
     };
     let response = owner
-        .call(session, request)
+        .call(client, request)
         .map_err(|error| error.to_string())?;
     if let Some(error) = response.error {
         Err(format!("{}: {}", error.code, error.message))
@@ -877,27 +1020,39 @@ fn call(
     }
 }
 
-fn load_payload(
+fn parse<T: serde::de::DeserializeOwned>(value: Value) -> Result<T, String> {
+    serde_json::from_value(value).map_err(|error| error.to_string())
+}
+
+/// Read authoritative state back after a change or an external event.
+fn refresh(
     owner: &OwnerHandle,
-    mut session: ClientSession,
-    asset_id: lightwell_core::AssetId,
-    sequence: u64,
-) -> Result<Payload, String> {
-    let (state, state_sequence) = call(
-        owner,
-        &mut session,
-        "asset.state",
-        json!({"asset_id":asset_id}),
-    )?;
-    let state: EditorState = serde_json::from_value(state).map_err(|error| error.to_string())?;
-    let (history, history_sequence) = call(
-        owner,
-        &mut session,
-        "history.list",
-        json!({"asset_id":asset_id,"before_sequence":null,"limit":HISTORY_PAGE_SIZE}),
-    )?;
-    let history: HistoryPage =
-        serde_json::from_value(history).map_err(|error| error.to_string())?;
+    client: ClientId,
+    asset_id: AssetId,
+    with_history: bool,
+    mut sequence: u64,
+) -> Result<Refresh, String> {
+    let mut fetch = |method: &str, params: Value| -> Result<Value, String> {
+        let (value, seen) = call(owner, client, method, params)?;
+        sequence = sequence.max(seen);
+        Ok(value)
+    };
+    let state: EditorState = parse(fetch("asset.state", json!({"asset_id":asset_id}))?)?;
+    let history = if with_history {
+        Some(parse::<HistoryPage>(fetch(
+            "history.list",
+            json!({"asset_id":asset_id,"before_sequence":null,"limit":HISTORY_PAGE_SIZE}),
+        )?)?)
+    } else {
+        None
+    };
+    let versions: Vec<Version> =
+        parse(fetch("version.list", json!({"asset_id":asset_id}))?["versions"].take())?;
+    let lineage: Lineage = parse(fetch(
+        "history.lineage",
+        json!({"asset_id":asset_id,"limit":LINEAGE_LIMIT}),
+    )?)?;
+    let session: ClientSession = parse(fetch("session.state", json!({}))?)?;
     let selected = match &session.preview.selection {
         HistorySelection::Current => None,
         HistorySelection::Entry(entry_id) => Some(entry_id.clone()),
@@ -905,72 +1060,57 @@ fn load_payload(
     let job = owner
         .preview_job(asset_id, selected)
         .map_err(|error| error.to_string())?;
-    Ok(Payload {
+    Ok(Refresh {
         state,
         history,
+        versions,
+        lineage,
         job,
         session,
-        sequence: sequence.max(state_sequence).max(history_sequence),
+        sequence,
     })
 }
 
-fn import_task(owner: OwnerHandle, mut session: ClientSession, path: PathBuf) -> Task<Message> {
+fn import_task(owner: OwnerHandle, client: ClientId, path: PathBuf) -> Task<Message> {
     Task::perform(
         async move {
-            let (result, sequence) =
-                call(&owner, &mut session, "catalog.import", json!({"path":path}))?;
-            let state: EditorState =
-                serde_json::from_value(result).map_err(|error| error.to_string())?;
-            let _ = call(&owner, &mut session, "preview.return-current", json!({}))?;
-            load_payload(&owner, session, state.asset.id, sequence)
+            let (result, sequence) = call(&owner, client, "catalog.import", json!({"path":path}))?;
+            let state: EditorState = parse(result)?;
+            let _ = call(&owner, client, "preview.return-current", json!({}))?;
+            refresh(&owner, client, state.asset.id, true, sequence)
         },
-        |result| Message::Loaded(result.map(Box::new)),
+        |result| Message::Refreshed(result.map(Box::new)),
     )
 }
 
 fn state_task(
     owner: OwnerHandle,
-    mut session: ClientSession,
-    asset_id: lightwell_core::AssetId,
+    client: ClientId,
+    asset_id: AssetId,
     method: &'static str,
     params: Value,
 ) -> Task<Message> {
     Task::perform(
         async move {
-            let (_, sequence) = call(&owner, &mut session, method, params)?;
-            let (state, state_sequence) = call(
-                &owner,
-                &mut session,
-                "asset.state",
-                json!({"asset_id":asset_id}),
-            )?;
-            let state: EditorState =
-                serde_json::from_value(state).map_err(|error| error.to_string())?;
-            let job = owner
-                .preview_job(asset_id, None)
-                .map_err(|error| error.to_string())?;
-            Ok(StatePayload {
-                state,
-                job,
-                session,
-                sequence: sequence.max(state_sequence),
-            })
+            let (_, sequence) = call(&owner, client, method, params)?;
+            refresh(&owner, client, asset_id, false, sequence)
         },
-        |result| Message::StateLoaded(result.map(Box::new)),
+        |result| Message::Refreshed(result.map(Box::new)),
     )
 }
 
 fn preview_task(
     owner: OwnerHandle,
-    mut session: ClientSession,
-    asset_id: lightwell_core::AssetId,
+    client: ClientId,
+    asset_id: AssetId,
     entry_id: Option<EntryId>,
     method: &'static str,
     params: Value,
 ) -> Task<Message> {
     Task::perform(
         async move {
-            let (_, sequence) = call(&owner, &mut session, method, params)?;
+            let (mut result, sequence) = call(&owner, client, method, params)?;
+            let session: ClientSession = parse(result["session"].take())?;
             let job = owner
                 .preview_job(asset_id, entry_id)
                 .map_err(|error| error.to_string())?;
@@ -986,35 +1126,59 @@ fn preview_task(
 
 fn session_task(
     owner: OwnerHandle,
-    mut session: ClientSession,
+    client: ClientId,
     method: &'static str,
     params: Value,
 ) -> Task<Message> {
     Task::perform(
         async move {
-            let (_, sequence) = call(&owner, &mut session, method, params)?;
-            Ok((session, sequence))
+            let (result, sequence) = call(&owner, client, method, params)?;
+            Ok((parse::<ClientSession>(result)?, sequence))
         },
         Message::SessionUpdated,
     )
 }
 
-fn sync_task(
+fn pan_task(owner: OwnerHandle, client: ClientId, x: f32, y: f32) -> Task<Message> {
+    Task::perform(
+        async move {
+            let (result, _) = call(&owner, client, "view.set", json!({"pan_x":x,"pan_y":y}))?;
+            parse::<ClientSession>(result)
+        },
+        Message::PanSynced,
+    )
+}
+
+fn versions_task(
     owner: OwnerHandle,
-    mut session: ClientSession,
-    asset_id: lightwell_core::AssetId,
-    after: u64,
+    client: ClientId,
+    asset_id: AssetId,
+    method: &'static str,
+    params: Value,
 ) -> Task<Message> {
     Task::perform(
         async move {
-            let (events, sequence) =
-                call(&owner, &mut session, "events.since", json!({"after":after}))?;
-            let events: EventsResult =
-                serde_json::from_value(events).map_err(|error| error.to_string())?;
+            let (_, sequence) = call(&owner, client, method, params)?;
+            let (mut listed, seen) =
+                call(&owner, client, "version.list", json!({"asset_id":asset_id}))?;
+            Ok((
+                parse::<Vec<Version>>(listed["versions"].take())?,
+                sequence.max(seen),
+            ))
+        },
+        Message::VersionsLoaded,
+    )
+}
+
+fn sync_task(owner: OwnerHandle, client: ClientId, asset_id: AssetId, after: u64) -> Task<Message> {
+    Task::perform(
+        async move {
+            let (events, sequence) = call(&owner, client, "events.since", json!({"after":after}))?;
+            let events: EventsResult = parse(events)?;
             if events.events.is_empty() && !events.gap {
-                Ok(SyncResult::Unchanged { session, sequence })
+                Ok(SyncResult::Unchanged { sequence })
             } else {
-                load_payload(&owner, session, asset_id, sequence)
+                refresh(&owner, client, asset_id, true, sequence)
                     .map(Box::new)
                     .map(SyncResult::Changed)
             }
@@ -1025,20 +1189,19 @@ fn sync_task(
 
 fn older_task(
     owner: OwnerHandle,
-    mut session: ClientSession,
-    asset_id: lightwell_core::AssetId,
+    client: ClientId,
+    asset_id: AssetId,
     before_sequence: u64,
 ) -> Task<Message> {
     Task::perform(
         async move {
             let (page, sequence) = call(
                 &owner,
-                &mut session,
+                client,
                 "history.list",
                 json!({"asset_id":asset_id,"before_sequence":before_sequence,"limit":HISTORY_PAGE_SIZE}),
             )?;
-            let page = serde_json::from_value(page).map_err(|error| error.to_string())?;
-            Ok((page, session, sequence))
+            Ok((parse::<HistoryPage>(page)?, sequence))
         },
         Message::OlderLoaded,
     )
@@ -1047,6 +1210,103 @@ fn older_task(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lightwell_core::{AssetRecord, LineageStep, Snapshot, SourceImage};
+
+    fn boot() -> (Editor, PathBuf) {
+        let catalog = std::env::temp_dir().join(format!(
+            "lightwell-desktop-{}-{}.sqlite",
+            std::process::id(),
+            REQUEST_NUMBER.fetch_add(1, Ordering::Relaxed)
+        ));
+        let (owner, join) = OwnerHandle::start(&catalog).unwrap();
+        let (editor, _) = Editor::new(Boot {
+            owner,
+            join,
+            live_server: None,
+            initial: None,
+        });
+        (editor, catalog)
+    }
+
+    fn finish(mut editor: Editor, catalog: PathBuf) {
+        editor.owner.stop();
+        editor.owner_join.take().unwrap().join().unwrap();
+        drop(editor);
+        std::fs::remove_file(catalog).unwrap();
+    }
+
+    fn entry(asset: &AssetId, sequence: u64, parent: Option<&EntryId>) -> HistoryEntry {
+        HistoryEntry {
+            id: EntryId::new(),
+            asset_id: asset.clone(),
+            sequence,
+            action_id: "test".into(),
+            parameters: json!({}),
+            actor: "test".into(),
+            timestamp_ms: 0,
+            request_id: None,
+            base_revision: sequence,
+            result_revision: sequence,
+            snapshot: Snapshot::original(asset.clone()),
+            undo_parent: parent.cloned(),
+            restore_target: None,
+        }
+    }
+
+    fn refresh_for(
+        asset: &AssetId,
+        current: &HistoryEntry,
+        page: Vec<HistoryEntry>,
+        lineage: &[&HistoryEntry],
+        truncated: bool,
+    ) -> Refresh {
+        Refresh {
+            state: EditorState {
+                asset: AssetRecord {
+                    id: asset.clone(),
+                    source_root: PathBuf::new(),
+                    locator: PathBuf::new(),
+                    fingerprint: "f".into(),
+                    file_identity: "i".into(),
+                    byte_len: 0,
+                    width: 1,
+                    height: 1,
+                },
+                revision: current.sequence,
+                current_entry: current.clone(),
+                redo: Vec::new(),
+            },
+            history: (!page.is_empty()).then_some(HistoryPage {
+                entries: page,
+                next_before_sequence: None,
+            }),
+            versions: Vec::new(),
+            lineage: Lineage {
+                steps: lineage
+                    .iter()
+                    .map(|entry| LineageStep {
+                        entry_id: entry.id.clone(),
+                        sequence: entry.sequence,
+                        action_id: entry.action_id.clone(),
+                        undo_parent: entry.undo_parent.clone(),
+                    })
+                    .collect(),
+                next_entry_id: truncated.then(EntryId::new),
+            },
+            job: PreviewJob {
+                source: SourceImage {
+                    width: 1,
+                    height: 1,
+                    rgba: vec![0, 0, 0, 255].into(),
+                    fingerprint: "f".into(),
+                    orientation: 1,
+                },
+                entry: current.clone(),
+            },
+            session: ClientSession::default(),
+            sequence: 7,
+        }
+    }
 
     #[test]
     fn pixel_fields_reject_non_integral_values() {
@@ -1070,33 +1330,107 @@ mod tests {
 
     #[test]
     fn current_entry_merge_is_newest_first_and_bounded() {
-        let asset = lightwell_core::AssetId::new();
-        let make_entry = |sequence| HistoryEntry {
-            id: EntryId::new(),
-            asset_id: asset.clone(),
-            sequence,
-            action_id: "test".into(),
-            parameters: json!({}),
-            actor: "test".into(),
-            timestamp_ms: 0,
-            request_id: None,
-            base_revision: sequence,
-            result_revision: sequence,
-            snapshot: lightwell_core::Snapshot::original(asset.clone()),
-            undo_parent: None,
-            restore_target: None,
-        };
+        let asset = AssetId::new();
         let mut history = HistoryPage {
             entries: (0..HISTORY_PAGE_SIZE as u64)
                 .rev()
-                .map(make_entry)
+                .map(|sequence| entry(&asset, sequence, None))
                 .collect(),
             next_before_sequence: None,
         };
-        merge_current_entry(&mut history, make_entry(HISTORY_PAGE_SIZE as u64));
+        merge_current_entry(&mut history, entry(&asset, HISTORY_PAGE_SIZE as u64, None));
         assert_eq!(history.entries.len(), HISTORY_PAGE_SIZE);
         assert_eq!(history.entries[0].sequence, HISTORY_PAGE_SIZE as u64);
         assert_eq!(history.entries.last().unwrap().sequence, 1);
         assert_eq!(history.next_before_sequence, Some(1));
+    }
+
+    #[test]
+    fn stale_session_responses_are_not_adopted() {
+        let (mut editor, catalog) = boot();
+        let mut newer = ClientSession {
+            revision: 5,
+            ..ClientSession::default()
+        };
+        newer
+            .preview
+            .view
+            .set_zoom(Zoom::Percent { value: 200.0 })
+            .unwrap();
+        let older = ClientSession {
+            revision: 3,
+            ..ClientSession::default()
+        };
+        let _ = editor.update(Message::SessionUpdated(Ok((newer.clone(), 1))));
+        let _ = editor.update(Message::PanSynced(Ok(older)));
+        assert_eq!(editor.session, newer);
+        let mut same = newer.clone();
+        same.preview.view.pan_to(4.0, 5.0).unwrap();
+        let _ = editor.update(Message::SessionUpdated(Ok((same.clone(), 1))));
+        assert_eq!(
+            editor.session, same,
+            "an equal revision may replace the copy"
+        );
+        finish(editor, catalog);
+    }
+
+    #[test]
+    fn pan_keeps_one_request_in_flight_and_only_the_newest_pending_position() {
+        let (mut editor, catalog) = boot();
+        let _ = editor.update(Message::Panned(1.0, 2.0));
+        assert!(editor.pan_in_flight);
+        assert_eq!(editor.pending_pan, None);
+        let _ = editor.update(Message::Panned(3.0, 4.0));
+        let _ = editor.update(Message::Panned(5.0, 6.0));
+        assert_eq!(editor.pending_pan, Some((5.0, 6.0)));
+        let _ = editor.update(Message::PanSynced(Ok(ClientSession::default())));
+        assert!(
+            editor.pan_in_flight,
+            "the pending position starts the next request"
+        );
+        assert_eq!(editor.pending_pan, None);
+        let _ = editor.update(Message::PanSynced(Ok(ClientSession::default())));
+        assert!(!editor.pan_in_flight);
+        finish(editor, catalog);
+    }
+
+    #[test]
+    fn refresh_replaces_or_merges_history_and_marks_abandoned_branches() {
+        let (mut editor, catalog) = boot();
+        let asset = AssetId::new();
+        let original = entry(&asset, 0, None);
+        let a = entry(&asset, 1, Some(&original.id));
+        let b = entry(&asset, 2, Some(&a.id));
+        let c = entry(&asset, 3, Some(&a.id));
+        editor.busy = true;
+        let full = refresh_for(
+            &asset,
+            &c,
+            vec![c.clone(), b.clone(), a.clone(), original.clone()],
+            &[&c, &a, &original],
+            false,
+        );
+        let _ = editor.update(Message::Refreshed(Ok(Box::new(full))));
+        assert!(!editor.busy);
+        assert_eq!(editor.api_sequence, 7);
+        assert_eq!(editor.history.entries.len(), 4);
+        assert_eq!(editor.display_entry, Some(c.id.clone()));
+        assert!(editor.on_current_lineage(&c));
+        assert!(editor.on_current_lineage(&original));
+        assert!(
+            !editor.on_current_lineage(&b),
+            "b was undone and is a branch"
+        );
+        let d = entry(&asset, 4, Some(&c.id));
+        let merged = refresh_for(&asset, &d, Vec::new(), &[&d, &c], true);
+        let _ = editor.update(Message::Refreshed(Ok(Box::new(merged))));
+        assert_eq!(editor.history.entries.len(), 5);
+        assert_eq!(editor.history.entries[0].id, d.id);
+        assert!(editor.on_current_lineage(&d));
+        assert!(
+            editor.on_current_lineage(&b),
+            "below a truncated lineage nothing is marked as a branch"
+        );
+        finish(editor, catalog);
     }
 }

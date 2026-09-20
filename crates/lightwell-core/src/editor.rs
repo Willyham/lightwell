@@ -15,8 +15,9 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-const CATALOG_FORMAT: i64 = 1;
+const CATALOG_FORMAT: i64 = 2;
 const MAX_HISTORY_PAGE: usize = 100;
+const MAX_VERSION_NAME: usize = 64;
 const ASSET_COLUMNS: &str =
     "id,source_root,locator,fingerprint,file_identity,byte_len,width,height";
 
@@ -116,6 +117,44 @@ pub struct HistoryPage {
     pub next_before_sequence: Option<u64>,
 }
 
+/// One step on the undo-parent chain, without the entry's full stack.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LineageStep {
+    pub entry_id: EntryId,
+    pub sequence: u64,
+    pub action_id: String,
+    pub undo_parent: Option<EntryId>,
+}
+
+/// The chain of undo parents from one entry back towards Original, newest first.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Lineage {
+    pub steps: Vec<LineageStep>,
+    /// The next parent to continue from when the page limit stopped the walk.
+    pub next_entry_id: Option<EntryId>,
+}
+
+/// A named reference to one retained history entry: the Lightroom-style saved state.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Version {
+    pub asset_id: AssetId,
+    pub name: String,
+    pub entry_id: EntryId,
+    pub entry_sequence: u64,
+    pub actor: String,
+    pub created_ms: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VersionResult {
+    pub outcome: MutationOutcome,
+    pub version: Option<Version>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct SourceSignature {
     byte_len: u64,
@@ -163,13 +202,16 @@ impl EditorService {
         let version: i64 = connection
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .map_err(catalog_error)?;
-        if version == 0 {
-            Self::create_schema(&connection)?;
-        } else if version != CATALOG_FORMAT {
-            return Err(Error::new(
-                ErrorKind::Incompatible,
-                format!("catalog format {version} is not supported; expected {CATALOG_FORMAT}"),
-            ));
+        match version {
+            0 => Self::create_schema(&connection)?,
+            1 => Self::convert_format_1(&connection)?,
+            CATALOG_FORMAT => {}
+            other => {
+                return Err(Error::new(
+                    ErrorKind::Incompatible,
+                    format!("catalog format {other} is not supported; expected {CATALOG_FORMAT}"),
+                ));
+            }
         }
         Ok(Self {
             connection,
@@ -192,26 +234,12 @@ impl EditorService {
                     width INTEGER NOT NULL,
                     height INTEGER NOT NULL
                  );
-                 CREATE TABLE snapshots (
-                    id TEXT PRIMARY KEY,
-                    asset_id TEXT NOT NULL REFERENCES assets(id),
-                    recipe_json TEXT NOT NULL
-                 );
-                 CREATE TABLE snapshot_layers (
-                    snapshot_id TEXT NOT NULL REFERENCES snapshots(id),
-                    position INTEGER NOT NULL,
-                    layer_id TEXT NOT NULL,
-                    effect_id TEXT NOT NULL,
-                    effect_format INTEGER NOT NULL,
-                    payload_json TEXT NOT NULL,
-                    PRIMARY KEY(snapshot_id, position),
-                    UNIQUE(snapshot_id, layer_id)
-                 );
                  CREATE TABLE entries (
                     id TEXT PRIMARY KEY,
                     asset_id TEXT NOT NULL REFERENCES assets(id),
                     sequence INTEGER NOT NULL,
                     action_id TEXT NOT NULL,
+                    undo_parent_id TEXT,
                     entry_json TEXT NOT NULL,
                     UNIQUE(asset_id, sequence)
                  );
@@ -228,13 +256,63 @@ impl EditorService {
                     result_json TEXT NOT NULL,
                     PRIMARY KEY(asset_id, request_id)
                  );
-                 CREATE TRIGGER snapshots_are_immutable BEFORE UPDATE ON snapshots BEGIN
-                    SELECT RAISE(ABORT, 'snapshots are immutable');
-                 END;
+                 CREATE TABLE versions (
+                    asset_id TEXT NOT NULL REFERENCES assets(id),
+                    name TEXT NOT NULL COLLATE NOCASE,
+                    entry_id TEXT NOT NULL REFERENCES entries(id),
+                    actor TEXT NOT NULL,
+                    created_ms INTEGER NOT NULL,
+                    PRIMARY KEY(asset_id, name)
+                 );
                  CREATE TRIGGER entries_are_immutable BEFORE UPDATE ON entries BEGIN
                     SELECT RAISE(ABORT, 'history entries are immutable');
                  END;
-                 PRAGMA user_version=1;
+                 PRAGMA user_version=2;
+                 COMMIT;",
+            )
+            .map_err(catalog_error)
+    }
+
+    /// Format 1 kept two unread copies of every stack beside the authoritative entry JSON.
+    /// Format 2 drops them, adds the undo-parent column and the versions table.
+    fn convert_format_1(connection: &Connection) -> Result<(), Error> {
+        let orphaned: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM entries e WHERE NOT EXISTS (
+                    SELECT 1 FROM snapshots s WHERE s.id = json_extract(e.entry_json, '$.snapshot.id'))",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(catalog_error)?;
+        if orphaned != 0 {
+            return Err(Error::new(
+                ErrorKind::Incompatible,
+                format!(
+                    "catalog format 1 has {orphaned} entries without snapshots; not converting"
+                ),
+            ));
+        }
+        connection
+            .execute_batch(
+                "BEGIN IMMEDIATE;
+                 DROP TRIGGER entries_are_immutable;
+                 ALTER TABLE entries ADD COLUMN undo_parent_id TEXT;
+                 UPDATE entries SET undo_parent_id = json_extract(entry_json, '$.undo_parent');
+                 CREATE TRIGGER entries_are_immutable BEFORE UPDATE ON entries BEGIN
+                    SELECT RAISE(ABORT, 'history entries are immutable');
+                 END;
+                 DROP TRIGGER snapshots_are_immutable;
+                 DROP TABLE snapshot_layers;
+                 DROP TABLE snapshots;
+                 CREATE TABLE versions (
+                    asset_id TEXT NOT NULL REFERENCES assets(id),
+                    name TEXT NOT NULL COLLATE NOCASE,
+                    entry_id TEXT NOT NULL REFERENCES entries(id),
+                    actor TEXT NOT NULL,
+                    created_ms INTEGER NOT NULL,
+                    PRIMARY KEY(asset_id, name)
+                 );
+                 PRAGMA user_version=2;
                  COMMIT;",
             )
             .map_err(catalog_error)
@@ -322,7 +400,6 @@ impl EditorService {
             ],
         )
         .map_err(catalog_error)?;
-        insert_snapshot(&tx, &entry.snapshot)?;
         insert_entry(&tx, &entry)?;
         tx.execute(
             "INSERT INTO asset_state VALUES (?1,?2,0,'[]')",
@@ -615,7 +692,6 @@ impl EditorService {
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(catalog_error)?;
         ensure_request_absent(&tx, asset_id, &mutation.request_id)?;
-        insert_snapshot(&tx, &entry.snapshot)?;
         insert_entry(&tx, &entry)?;
         tx.execute("UPDATE asset_state SET current_entry_id=?2,revision=?3,redo_json='[]' WHERE asset_id=?1", params![asset_id.as_str(), entry.id.as_str(), entry.result_revision as i64]).map_err(catalog_error)?;
         insert_request(&tx, asset_id, &mutation.request_id, &input, &result)?;
@@ -748,12 +824,196 @@ impl EditorService {
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(catalog_error)?;
-        insert_snapshot(&tx, &entry.snapshot)?;
         insert_entry(&tx, &entry)?;
         tx.execute("UPDATE asset_state SET current_entry_id=?2,revision=?3,redo_json='[]' WHERE asset_id=?1", params![asset_id.as_str(), entry.id.as_str(), entry.result_revision as i64]).map_err(catalog_error)?;
         insert_request(&tx, asset_id, &mutation.request_id, &input, &result)?;
         tx.commit().map_err(catalog_error)?;
         Ok(result)
+    }
+
+    /// Walk undo parents from `from` (default: current) towards Original, newest first.
+    pub fn lineage(
+        &self,
+        asset_id: &AssetId,
+        from: Option<&EntryId>,
+        limit: usize,
+    ) -> Result<Lineage, Error> {
+        if limit == 0 || limit > MAX_HISTORY_PAGE {
+            return Err(Error::new(
+                ErrorKind::Validation,
+                format!("lineage limit must be 1..={MAX_HISTORY_PAGE}"),
+            ));
+        }
+        let mut next = Some(match from {
+            Some(entry_id) => entry_id.clone(),
+            None => self.state(asset_id)?.current_entry.id,
+        });
+        let mut steps = Vec::new();
+        while let Some(entry_id) = next.take() {
+            if steps.len() == limit {
+                next = Some(entry_id);
+                break;
+            }
+            let (sequence, action_id, parent): (i64, String, Option<String>) = self
+                .connection
+                .query_row(
+                    "SELECT sequence,action_id,undo_parent_id FROM entries WHERE id=?1 AND asset_id=?2",
+                    params![entry_id.as_str(), asset_id.as_str()],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                )
+                .optional()
+                .map_err(catalog_error)?
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorKind::Validation,
+                        "history entry does not belong to this asset",
+                    )
+                })?;
+            let undo_parent = parent.map(EntryId::parse).transpose()?;
+            next = undo_parent.clone();
+            steps.push(LineageStep {
+                entry_id,
+                sequence: u64::try_from(sequence)
+                    .map_err(|_| Error::new(ErrorKind::Catalog, "invalid history sequence"))?,
+                action_id,
+                undo_parent,
+            });
+        }
+        Ok(Lineage {
+            steps,
+            next_entry_id: next,
+        })
+    }
+
+    /// Saved versions of one asset in creation order.
+    pub fn versions(&self, asset_id: &AssetId) -> Result<Vec<Version>, Error> {
+        let mut statement = self
+            .connection
+            .prepare(
+                "SELECT v.name,v.entry_id,e.sequence,v.actor,v.created_ms FROM versions v
+                 JOIN entries e ON e.id = v.entry_id
+                 WHERE v.asset_id=?1 ORDER BY v.created_ms, v.name",
+            )
+            .map_err(catalog_error)?;
+        let rows = statement
+            .query_map([asset_id.as_str()], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, i64>(4)?,
+                ))
+            })
+            .map_err(catalog_error)?;
+        let mut versions = Vec::new();
+        for row in rows {
+            let (name, entry_id, sequence, actor, created_ms) = row.map_err(catalog_error)?;
+            versions.push(Version {
+                asset_id: asset_id.clone(),
+                name,
+                entry_id: EntryId::parse(entry_id)?,
+                entry_sequence: u64::try_from(sequence)
+                    .map_err(|_| Error::new(ErrorKind::Catalog, "invalid history sequence"))?,
+                actor,
+                created_ms,
+            });
+        }
+        Ok(versions)
+    }
+
+    /// Name a retained entry (default: current). Re-creating the same name on the same entry is a no-op;
+    /// on a different entry it is a conflict. Names are unique per asset ignoring case.
+    pub fn create_version(
+        &mut self,
+        asset_id: &AssetId,
+        name: &str,
+        entry_id: Option<&EntryId>,
+        actor: &str,
+    ) -> Result<VersionResult, Error> {
+        let name = valid_version_name(name)?;
+        if actor.is_empty() || actor.len() > 128 {
+            return Err(Error::new(
+                ErrorKind::Validation,
+                "actor must contain 1..128 characters",
+            ));
+        }
+        let entry = match entry_id {
+            Some(entry_id) => self.entry(asset_id, entry_id)?,
+            None => self.state(asset_id)?.current_entry,
+        };
+        if let Some(existing) = self
+            .versions(asset_id)?
+            .into_iter()
+            .find(|version| version.name.eq_ignore_ascii_case(&name))
+        {
+            if existing.entry_id == entry.id {
+                return Ok(VersionResult {
+                    outcome: MutationOutcome::NoOp,
+                    version: Some(existing),
+                });
+            }
+            return Err(Error::new(
+                ErrorKind::Conflict,
+                format!("version {:?} already names another entry", existing.name),
+            ));
+        }
+        let version = Version {
+            asset_id: asset_id.clone(),
+            name,
+            entry_id: entry.id,
+            entry_sequence: entry.sequence,
+            actor: actor.into(),
+            created_ms: now_ms(),
+        };
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(catalog_error)?;
+        tx.execute(
+            "INSERT INTO versions VALUES (?1,?2,?3,?4,?5)",
+            params![
+                asset_id.as_str(),
+                version.name,
+                version.entry_id.as_str(),
+                version.actor,
+                version.created_ms
+            ],
+        )
+        .map_err(catalog_error)?;
+        tx.commit().map_err(catalog_error)?;
+        Ok(VersionResult {
+            outcome: MutationOutcome::Applied,
+            version: Some(version),
+        })
+    }
+
+    /// Remove a version name. The entry it named is retained history and stays reachable.
+    pub fn delete_version(
+        &mut self,
+        asset_id: &AssetId,
+        name: &str,
+    ) -> Result<VersionResult, Error> {
+        let name = valid_version_name(name)?;
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(catalog_error)?;
+        let removed = tx
+            .execute(
+                "DELETE FROM versions WHERE asset_id=?1 AND name=?2",
+                params![asset_id.as_str(), name],
+            )
+            .map_err(catalog_error)?;
+        tx.commit().map_err(catalog_error)?;
+        Ok(VersionResult {
+            outcome: if removed == 0 {
+                MutationOutcome::NoOp
+            } else {
+                MutationOutcome::Applied
+            },
+            version: None,
+        })
     }
 
     fn persist_noop(
@@ -879,42 +1139,30 @@ fn ensure_request_absent(
     }
 }
 
-fn insert_snapshot(tx: &Transaction<'_>, snapshot: &Snapshot) -> Result<(), Error> {
-    snapshot.recipe.validate()?;
-    tx.execute(
-        "INSERT INTO snapshots VALUES (?1,?2,?3)",
-        params![
-            snapshot.id.as_str(),
-            snapshot.asset_id.as_str(),
-            encode(&snapshot.recipe)?
-        ],
-    )
-    .map_err(catalog_error)?;
-    for (position, layer) in snapshot.recipe.layers.iter().enumerate() {
-        tx.execute(
-            "INSERT INTO snapshot_layers VALUES (?1,?2,?3,?4,?5,?6)",
-            params![
-                snapshot.id.as_str(),
-                position as i64,
-                layer.id.as_str(),
-                layer.effect_id,
-                i64::from(layer.effect_format),
-                encode(&layer.payload)?
-            ],
-        )
-        .map_err(catalog_error)?;
+fn valid_version_name(name: &str) -> Result<String, Error> {
+    let name = name.trim();
+    if name.is_empty()
+        || name.chars().count() > MAX_VERSION_NAME
+        || name.chars().any(char::is_control)
+    {
+        return Err(Error::new(
+            ErrorKind::Validation,
+            format!("version name must contain 1..={MAX_VERSION_NAME} printable characters"),
+        ));
     }
-    Ok(())
+    Ok(name.to_string())
 }
 
 fn insert_entry(tx: &Transaction<'_>, entry: &HistoryEntry) -> Result<(), Error> {
+    entry.snapshot.recipe.validate()?;
     tx.execute(
-        "INSERT INTO entries VALUES (?1,?2,?3,?4,?5)",
+        "INSERT INTO entries VALUES (?1,?2,?3,?4,?5,?6)",
         params![
             entry.id.as_str(),
             entry.asset_id.as_str(),
             entry.sequence as i64,
             entry.action_id,
+            entry.undo_parent.as_ref().map(EntryId::as_str),
             encode(entry)?
         ],
     )
@@ -1249,6 +1497,273 @@ mod tests {
         );
         drop(service);
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    fn format_1_catalog(path: &Path, drop_snapshot_row: bool) -> (AssetId, EntryId) {
+        let connection = Connection::open(path).unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE assets (id TEXT PRIMARY KEY, source_root TEXT NOT NULL, locator TEXT NOT NULL,
+                    canonical_locator TEXT NOT NULL UNIQUE, file_identity TEXT NOT NULL UNIQUE,
+                    fingerprint TEXT NOT NULL, byte_len INTEGER NOT NULL, width INTEGER NOT NULL, height INTEGER NOT NULL);
+                 CREATE TABLE snapshots (id TEXT PRIMARY KEY, asset_id TEXT NOT NULL REFERENCES assets(id), recipe_json TEXT NOT NULL);
+                 CREATE TABLE snapshot_layers (snapshot_id TEXT NOT NULL REFERENCES snapshots(id), position INTEGER NOT NULL,
+                    layer_id TEXT NOT NULL, effect_id TEXT NOT NULL, effect_format INTEGER NOT NULL, payload_json TEXT NOT NULL,
+                    PRIMARY KEY(snapshot_id, position), UNIQUE(snapshot_id, layer_id));
+                 CREATE TABLE entries (id TEXT PRIMARY KEY, asset_id TEXT NOT NULL REFERENCES assets(id), sequence INTEGER NOT NULL,
+                    action_id TEXT NOT NULL, entry_json TEXT NOT NULL, UNIQUE(asset_id, sequence));
+                 CREATE TABLE asset_state (asset_id TEXT PRIMARY KEY REFERENCES assets(id), current_entry_id TEXT NOT NULL REFERENCES entries(id),
+                    revision INTEGER NOT NULL, redo_json TEXT NOT NULL);
+                 CREATE TABLE requests (asset_id TEXT NOT NULL REFERENCES assets(id), request_id TEXT NOT NULL, input_hash TEXT NOT NULL,
+                    result_json TEXT NOT NULL, PRIMARY KEY(asset_id, request_id));
+                 CREATE TRIGGER snapshots_are_immutable BEFORE UPDATE ON snapshots BEGIN SELECT RAISE(ABORT, 'snapshots are immutable'); END;
+                 CREATE TRIGGER entries_are_immutable BEFORE UPDATE ON entries BEGIN SELECT RAISE(ABORT, 'history entries are immutable'); END;
+                 PRAGMA user_version=1;",
+            )
+            .unwrap();
+        let asset = AssetId::new();
+        let original = HistoryEntry {
+            id: EntryId::new(),
+            asset_id: asset.clone(),
+            sequence: 0,
+            action_id: "original".into(),
+            parameters: json!({}),
+            actor: "system".into(),
+            timestamp_ms: 0,
+            request_id: None,
+            base_revision: 0,
+            result_revision: 0,
+            snapshot: Snapshot::original(asset.clone()),
+            undo_parent: None,
+            restore_target: None,
+        };
+        let edit = HistoryEntry {
+            id: EntryId::new(),
+            sequence: 1,
+            action_id: "set-pixel".into(),
+            result_revision: 1,
+            snapshot: original
+                .snapshot
+                .append(Layer::pixel(0, 0, [1, 2, 3]))
+                .unwrap(),
+            undo_parent: Some(original.id.clone()),
+            ..original.clone()
+        };
+        connection
+            .execute(
+                "INSERT INTO assets VALUES (?1,'/r','/r/a.jpg','/r/a.jpg','unix:1:1','abc',1,480,320)",
+                [asset.as_str()],
+            )
+            .unwrap();
+        for entry in [&original, &edit] {
+            if !(drop_snapshot_row && entry.sequence == 1) {
+                connection
+                    .execute(
+                        "INSERT INTO snapshots VALUES (?1,?2,?3)",
+                        params![
+                            entry.snapshot.id.as_str(),
+                            asset.as_str(),
+                            encode(&entry.snapshot.recipe).unwrap()
+                        ],
+                    )
+                    .unwrap();
+            }
+            connection
+                .execute(
+                    "INSERT INTO entries VALUES (?1,?2,?3,?4,?5)",
+                    params![
+                        entry.id.as_str(),
+                        asset.as_str(),
+                        entry.sequence as i64,
+                        entry.action_id,
+                        encode(entry).unwrap()
+                    ],
+                )
+                .unwrap();
+        }
+        connection
+            .execute(
+                "INSERT INTO asset_state VALUES (?1,?2,1,'[]')",
+                params![asset.as_str(), edit.id.as_str()],
+            )
+            .unwrap();
+        (asset, edit.id)
+    }
+
+    fn user_version(path: &Path) -> i64 {
+        Connection::open(path)
+            .unwrap()
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap()
+    }
+
+    #[test]
+    fn format_1_catalogs_convert_once_and_inconsistent_ones_are_left_alone() {
+        let catalog = temp("format1.sqlite");
+        let (asset, current) = format_1_catalog(&catalog, false);
+        let service = EditorService::open(&catalog).unwrap();
+        let state = service.state(&asset).unwrap();
+        assert_eq!(state.current_entry.id, current);
+        assert_eq!(state.current_entry.snapshot.recipe.layers.len(), 1);
+        let lineage = service.lineage(&asset, None, 10).unwrap();
+        assert_eq!(lineage.steps.len(), 2);
+        assert_eq!(lineage.steps[0].entry_id, current);
+        assert!(service.versions(&asset).unwrap().is_empty());
+        drop(service);
+        assert_eq!(user_version(&catalog), 2);
+        let tables: Vec<String> = {
+            let connection = Connection::open(&catalog).unwrap();
+            let mut statement = connection
+                .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+                .unwrap();
+            statement
+                .query_map([], |row| row.get(0))
+                .unwrap()
+                .map(Result::unwrap)
+                .collect()
+        };
+        assert_eq!(
+            tables,
+            ["asset_state", "assets", "entries", "requests", "versions"]
+        );
+        EditorService::open(&catalog).unwrap();
+        std::fs::remove_file(catalog).unwrap();
+
+        let catalog = temp("format1-broken.sqlite");
+        format_1_catalog(&catalog, true);
+        assert_eq!(
+            EditorService::open(&catalog).unwrap_err().kind,
+            ErrorKind::Incompatible
+        );
+        assert_eq!(user_version(&catalog), 1);
+        std::fs::remove_file(catalog).unwrap();
+    }
+
+    #[test]
+    fn versions_name_retained_entries_and_survive_reopen() {
+        let catalog = temp("versions.sqlite");
+        let (asset, a, original);
+        {
+            let mut service = EditorService::open(&catalog).unwrap();
+            let state = service.import(&fixture()).unwrap();
+            asset = state.asset.id.clone();
+            original = state.current_entry.id.clone();
+            a = service
+                .apply_pixel(&asset, mutation(0, "a"), 0, 0, [1, 2, 3])
+                .unwrap()
+                .current_entry_id;
+            let created = service
+                .create_version(&asset, " Keeper ", None, "test")
+                .unwrap();
+            assert_eq!(created.outcome, MutationOutcome::Applied);
+            assert_eq!(created.version.as_ref().unwrap().name, "Keeper");
+            assert_eq!(created.version.as_ref().unwrap().entry_id, a);
+            let again = service
+                .create_version(&asset, "keeper", Some(&a), "test")
+                .unwrap();
+            assert_eq!(again.outcome, MutationOutcome::NoOp);
+            assert_eq!(
+                service
+                    .create_version(&asset, "KEEPER", Some(&original), "test")
+                    .unwrap_err()
+                    .kind,
+                ErrorKind::Conflict
+            );
+            assert!(service.create_version(&asset, "", None, "test").is_err());
+            assert!(
+                service
+                    .create_version(&asset, "bad\u{7}", None, "test")
+                    .is_err()
+            );
+            service.undo(&asset, mutation(1, "undo")).unwrap();
+            service
+                .create_version(&asset, "Start", None, "test")
+                .unwrap();
+            let names: Vec<(String, u64)> = service
+                .versions(&asset)
+                .unwrap()
+                .into_iter()
+                .map(|version| (version.name, version.entry_sequence))
+                .collect();
+            assert_eq!(names, [("Keeper".to_string(), 1), ("Start".to_string(), 0)]);
+        }
+        let mut service = EditorService::open(&catalog).unwrap();
+        let versions = service.versions(&asset).unwrap();
+        assert_eq!(versions.len(), 2);
+        assert_eq!(versions[1].entry_id, original);
+        service
+            .restore(&asset, mutation(2, "restore-keeper"), &versions[0].entry_id)
+            .unwrap();
+        assert_eq!(
+            service.render_current(&asset).unwrap().pixel(0, 0),
+            Some([1, 2, 3, 255])
+        );
+        assert_eq!(
+            service.delete_version(&asset, "keeper").unwrap().outcome,
+            MutationOutcome::Applied
+        );
+        assert_eq!(
+            service.delete_version(&asset, "keeper").unwrap().outcome,
+            MutationOutcome::NoOp
+        );
+        assert_eq!(service.versions(&asset).unwrap().len(), 1);
+        assert!(
+            service.entry(&asset, &a).is_ok(),
+            "deleting a version keeps its entry"
+        );
+        drop(service);
+        std::fs::remove_file(catalog).unwrap();
+    }
+
+    #[test]
+    fn lineage_follows_undo_parents_and_skips_abandoned_branches() {
+        let catalog = temp("lineage.sqlite");
+        let mut service = EditorService::open(&catalog).unwrap();
+        let state = service.import(&fixture()).unwrap();
+        let asset = state.asset.id;
+        let original = state.current_entry.id;
+        let a = service
+            .apply_pixel(&asset, mutation(0, "a"), 0, 0, [1, 2, 3])
+            .unwrap()
+            .current_entry_id;
+        let b = service
+            .apply_pixel(&asset, mutation(1, "b"), 1, 0, [4, 5, 6])
+            .unwrap()
+            .current_entry_id;
+        service.undo(&asset, mutation(2, "undo")).unwrap();
+        let c = service
+            .apply_pixel(&asset, mutation(3, "c"), 2, 0, [7, 8, 9])
+            .unwrap()
+            .current_entry_id;
+        let ids = |lineage: Lineage| -> Vec<EntryId> {
+            lineage
+                .steps
+                .into_iter()
+                .map(|step| step.entry_id)
+                .collect()
+        };
+        assert_eq!(
+            ids(service.lineage(&asset, None, 10).unwrap()),
+            [c.clone(), a.clone(), original.clone()]
+        );
+        assert_eq!(service.history(&asset, None, 10).unwrap().entries.len(), 4);
+        assert_eq!(
+            ids(service.lineage(&asset, Some(&b), 10).unwrap()),
+            [b.clone(), a.clone(), original.clone()]
+        );
+        let page = service.lineage(&asset, None, 2).unwrap();
+        assert_eq!(page.steps.len(), 2);
+        assert_eq!(page.next_entry_id, Some(original.clone()));
+        assert_eq!(
+            ids(service
+                .lineage(&asset, page.next_entry_id.as_ref(), 2)
+                .unwrap()),
+            [original]
+        );
+        assert!(service.lineage(&asset, None, 0).is_err());
+        assert!(service.lineage(&AssetId::new(), Some(&c), 5).is_err());
+        drop(service);
+        std::fs::remove_file(catalog).unwrap();
     }
 
     #[test]

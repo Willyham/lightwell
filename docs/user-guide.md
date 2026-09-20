@@ -28,6 +28,8 @@ History shows Original and committed actions with sequence and actor. The filled
 
 For an unchanged active source, Lightwell reuses one decoded pixel allocation while browsing history. Exact rotate/reflect stacks are composed before rendering instead of rewriting the image once per history layer. This is transparent to recipes and does not weaken changed-source detection.
 
+Versions name the displayed state so you can find it again among many entries. Type a name and choose Save; the row lists each version with its entry number, selecting one previews it, and Restore this state brings it back as a new action. Deleting a version removes only the name. History rows marked branch were undone and replaced by later edits; they remain available for preview, restore and versions.
+
 Undo and Redo navigate saved states without appending artificial history rows. Cmd+Z / Ctrl+Z and Shift+Cmd+Z / Shift+Ctrl+Z invoke the same service as the buttons. A new edit clears shortcut redo while every older entry remains available for preview or Restore. Layers, history, current/redo navigation and stable IDs survive reopening the catalog.
 
 Missing or changed sources preserve their catalog data and report why rendering is unavailable. Incompatible catalogs or operation payloads fail explicitly; Lightwell does not silently reset or drop them.
@@ -43,7 +45,7 @@ printf '%s\n' \
   | target/release/lightwell-json --catalog /path/to/catalog.sqlite
 ```
 
-A request has `id`, `method` and `params`. Successful responses contain the matching `id`, an event `sequence` and `result`; failures contain a structured `error`. Start with `schema.list` for the authoritative method list and `catalog.list` for the referenced assets. Mutations require `asset_id` and:
+A request has `id`, `method` and `params`. Successful responses contain the matching `id`, an event `sequence` and `result`; failures contain a structured `error`. Start with `schema.list` for the authoritative method list and `catalog.list` for the referenced assets. `version.create`, `version.list`, `version.delete` and `history.lineage` cover named states and the undo-parent chain. Mutations require `asset_id` and:
 
 ```json
 {
