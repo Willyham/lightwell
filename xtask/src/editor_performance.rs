@@ -1,5 +1,7 @@
 use crate::*;
-use lightwell_core::{EditorService, Mutation, Transform, render};
+use lightwell_core::{
+    CROP_EFFECT, CropPayload, CropStage, EditorService, Mutation, Transform, render,
+};
 use std::time::Instant;
 
 fn mutation(revision: u64, request: impl Into<String>) -> Mutation {
@@ -89,6 +91,41 @@ pub fn run(root: &Path, source: &Path, out: &Path, samples: usize) -> Result {
         )?;
     }
     let two_hundred_transforms = distribution(render_samples(&service, &asset, samples)?);
+
+    // One straightened crop on top of the exact stack: the resample is a stage boundary, so this
+    // measures the interpolating pass on the photo-sized input as well as the exact pass before it.
+    let crop_started = Instant::now();
+    let crop_entry = service
+        .apply_action(
+            &asset,
+            mutation(200, "performance-crop-fit"),
+            "crop-fit",
+            json!({"aspect":"16:9","angle":10.0}),
+        )?
+        .current_entry_id;
+    let crop_fit_commit_ms = milliseconds(crop_started);
+    let crop_layers = service.entry(&asset, &crop_entry)?.snapshot.recipe.layers;
+    let crop_layer = crop_layers
+        .iter()
+        .find(|layer| layer.effect_id == CROP_EFFECT)
+        .ok_or("The fit did not produce a crop layer")?;
+    let crop_payload: CropPayload = serde_json::from_value(crop_layer.payload.clone())?;
+    // Two hundred quarter turns and reflections of a landscape source leave its dimensions swapped.
+    let crop_input = CropStage {
+        width: state.asset.height,
+        height: state.asset.width,
+        angle: crop_payload.angle,
+    };
+    let crop_rect = crop_payload.output_rect(&crop_input)?;
+    let angled_crop = distribution(render_samples(&service, &asset, samples)?);
+    let crop_raster = service.render_current(&asset)?;
+    ensure(
+        (crop_raster.width, crop_raster.height) == (crop_rect.width, crop_rect.height),
+        format!(
+            "Straightened crop renders {}x{}, its payload declares {}x{}",
+            crop_raster.width, crop_raster.height, crop_rect.width, crop_rect.height
+        ),
+    )?;
     drop(service);
 
     let service = EditorService::open(&catalog)?;
@@ -116,6 +153,11 @@ pub fn run(root: &Path, source: &Path, out: &Path, samples: usize) -> Result {
         "source":source,
         "source_sha256":source_hash,
         "source_dimensions":[state.asset.width,state.asset.height],
+        "crop_stage":{
+            "input":[crop_input.width,crop_input.height],
+            "angle_deg":crop_payload.angle,
+            "output":[crop_rect.width,crop_rect.height],
+        },
         "samples_per_recipe":samples,
         "method":"Core request-to-render diagnostics with a warm filesystem cache; excludes desktop scheduling, GPU upload and presentation.",
         "timings_ms":{
@@ -124,6 +166,8 @@ pub fn run(root: &Path, source: &Path, out: &Path, samples: usize) -> Result {
             "original_render":original_render_ms,
             "one_transform":one_transform,
             "two_hundred_transforms":two_hundred_transforms,
+            "crop_fit_commit":crop_fit_commit_ms,
+            "two_hundred_transforms_and_a_10_degree_crop":angled_crop,
             "reopen_source_and_preview_job":cold_source_and_job_ms,
             "reopen_original_render":cold_original_render_ms,
             "total":milliseconds(total),
@@ -132,6 +176,7 @@ pub fn run(root: &Path, source: &Path, out: &Path, samples: usize) -> Result {
             "Decoded source is cached after import",
             "Original render dimensions are exact",
             "One and 200 exact transforms render from the same immutable source",
+            "A 10 degree crop-fit adds one resample stage boundary and renders its declared stage",
             "Catalog reopen reconstructs the original historical state",
             "Source SHA-256 is unchanged"
         ]

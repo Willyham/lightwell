@@ -676,7 +676,16 @@ mod tests {
             .flat_map(|descriptor| descriptor.actions.iter())
             .map(|action| action_method(&action.id))
             .collect();
-        assert_eq!(generated, ["edit.set-pixel", "edit.transform"]);
+        assert_eq!(
+            generated,
+            [
+                "edit.set-pixel",
+                "edit.transform",
+                "edit.crop",
+                "edit.crop-fit",
+                "edit.crop-reset"
+            ]
+        );
         let schema = schemas(service.registry());
         let listed = schema["methods"].as_object().unwrap();
         assert_eq!(listed.len(), METHODS.len() + generated.len());

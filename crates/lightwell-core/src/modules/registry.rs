@@ -1,8 +1,8 @@
 //! The provider index: descriptors validated once at registration, then hash lookups by effect
 //! and action identity. Registration touches no image or catalog resource.
 use super::{
-    ActionDescriptor, EffectDescriptor, ModuleDescriptor, PixelModule, Processing, Stage,
-    ToolModule, TransformModule,
+    ActionDescriptor, CropModule, EffectDescriptor, ModuleDescriptor, PixelModule, Processing,
+    Stage, ToolModule, TransformModule,
 };
 use crate::{
     Error, ErrorKind, Layer, RECIPE_FORMAT, Recipe,
@@ -63,6 +63,7 @@ impl ModuleRegistry {
         for module in [
             Arc::new(PixelModule::new()) as Arc<dyn ToolModule>,
             Arc::new(TransformModule::new()),
+            Arc::new(CropModule::new()),
         ] {
             registry
                 .register(module)
@@ -150,17 +151,16 @@ impl ModuleRegistry {
         for layer in &recipe.layers {
             let module = self
                 .provider(&layer.effect_id)
-                .ok_or_else(|| self.unavailable_in(recipe, &layer.effect_id))?;
+                .ok_or_else(|| self.unavailable_in(&recipe.layers, &layer.effect_id))?;
             module.validate_payload(&layer.effect_id, layer.effect_format, &layer.payload)?;
         }
         Ok(())
     }
 
-    fn unavailable_in(&self, recipe: &Recipe, effect_id: &str) -> Error {
+    fn unavailable_in(&self, layers: &[Layer], effect_id: &str) -> Error {
         unavailable(
             effect_id,
-            recipe
-                .layers
+            layers
                 .iter()
                 .filter(|layer| layer.effect_id == effect_id)
                 .map(|layer| layer.id.as_str())
@@ -183,15 +183,27 @@ impl ModuleRegistry {
                 format!("unsupported recipe format {}", recipe.format),
             ));
         }
-        let mut layer_ids = HashSet::with_capacity(recipe.layers.len());
+        self.compile_layers(source_width, source_height, &recipe.layers)
+    }
+
+    /// Compile an ordered layer slice whose recipe format is already known good. Asking for the
+    /// stage one layer receives compiles the prefix before it through here, so it copies no part of
+    /// the stack.
+    pub(crate) fn compile_layers(
+        &self,
+        source_width: u32,
+        source_height: u32,
+        layers: &[Layer],
+    ) -> Result<Compiled, Error> {
+        let mut layer_ids = HashSet::with_capacity(layers.len());
         let mut segments = vec![Segment::new(None, source_width, source_height)];
-        for layer in &recipe.layers {
+        for layer in layers {
             if !layer_ids.insert(&layer.id) {
                 return Err(validation("duplicate layer identity"));
             }
             let module = self
                 .provider(&layer.effect_id)
-                .ok_or_else(|| self.unavailable_in(recipe, &layer.effect_id))?;
+                .ok_or_else(|| self.unavailable_in(layers, &layer.effect_id))?;
             let segment = segments.last_mut().expect("one segment always exists");
             let processing = module.compile(
                 &layer.effect_id,
@@ -244,8 +256,8 @@ impl ModuleRegistry {
 pub(crate) mod tests {
     use super::*;
     use crate::{
-        AssetId, EFFECT_FORMAT, LayerId, PIXEL_EFFECT, SnapshotId, SourceImage, TRANSFORM_EFFECT,
-        Transform,
+        AssetId, CROP_EFFECT, EFFECT_FORMAT, LayerId, PIXEL_EFFECT, SnapshotId, SourceImage,
+        TRANSFORM_EFFECT, Transform,
         modules::{
             ActionInput, ActionPlan, Availability, EffectStage, ModuleDescriptor, StageContext,
         },
@@ -339,7 +351,9 @@ pub(crate) mod tests {
         assert!(registry.action("transform").is_some());
         assert!(registry.effect(PIXEL_EFFECT).is_some());
         assert!(registry.effect(TRANSFORM_EFFECT).is_some());
-        assert_eq!(registry.descriptors().len(), 2);
+        assert!(registry.action("crop").is_some());
+        assert!(registry.effect(CROP_EFFECT).is_some());
+        assert_eq!(registry.descriptors().len(), 3);
         assert!(registry.action("edit.set-pixel").is_none());
 
         for (case, module) in [
@@ -385,7 +399,7 @@ pub(crate) mod tests {
         }
         assert_eq!(
             registry.descriptors().len(),
-            2,
+            3,
             "nothing was half-registered"
         );
         assert!(
@@ -398,7 +412,7 @@ pub(crate) mod tests {
                 ))
                 .is_ok()
         );
-        assert_eq!(registry.descriptors().len(), 3);
+        assert_eq!(registry.descriptors().len(), 4);
     }
 
     #[test]

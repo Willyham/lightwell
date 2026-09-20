@@ -1,5 +1,8 @@
 use crate::*;
-use lightwell_core::{EditorService, ModuleRegistry, Mutation, MutationOutcome, Transform};
+use lightwell_core::{
+    CROP_EFFECT, CropPayload, CropStage, EditorService, ModuleRegistry, Mutation, MutationOutcome,
+    Transform,
+};
 use std::time::Instant;
 
 fn mutation(revision: u64, request: impl Into<String>) -> Mutation {
@@ -18,7 +21,7 @@ pub fn run(root: &Path, out: &Path) -> Result {
     let catalog = out.join("catalog.sqlite");
     let mut result = json!({
         "status":"failed",
-        "scope":["M1 history foundation","M2 basic transforms","M3 tool modules"],
+        "scope":["M1 history foundation","M2 basic transforms","M3 tool modules","M4 crop module core"],
         "profile": if cfg!(debug_assertions) { "debug" } else { "release" },
         "platform":host(root)?,
         "fixture":"fixtures/s0/orientation-1.jpg",
@@ -43,8 +46,8 @@ pub fn run(root: &Path, out: &Path) -> Result {
             .map(|action| action.id.clone())
             .collect();
         ensure(
-            modules == ["lightwell.pixel", "lightwell.transform"]
-                && actions == ["set-pixel", "transform"],
+            modules == ["lightwell.pixel", "lightwell.transform", "lightwell.crop"]
+                && actions == ["set-pixel", "transform", "crop", "crop-fit", "crop-reset"],
             "Built-in module discovery changed",
         )?;
         drop(registry);
@@ -124,13 +127,112 @@ pub fn run(root: &Path, out: &Path) -> Result {
             listed == 208,
             format!("Expected 208 retained entries, found {listed}"),
         )?;
+
+        // Crop: one angle-zero rectangle that must be an exact copy of its input stage, then a
+        // straightened 16:9 fit that updates the same layer in place.
+        let before_crop = service.render_current(&asset)?;
+        ensure(
+            (before_crop.width, before_crop.height) == (320, 480),
+            "Crop input stage is not the transformed 320x480 stage",
+        )?;
+        let crop_started = Instant::now();
+        let cropped_entry = service
+            .apply_action(
+                &asset,
+                mutation(209, "crop-exact"),
+                "crop",
+                json!({"x":0.25,"y":0.25,"width":0.5,"height":0.5}),
+            )?
+            .current_entry_id;
+        let crop_commit_ms = crop_started.elapsed().as_secs_f64() * 1000.0;
+        let crop_layer = service
+            .entry(&asset, &cropped_entry)?
+            .snapshot
+            .recipe
+            .layers
+            .iter()
+            .find(|layer| layer.effect_id == CROP_EFFECT)
+            .ok_or("Crop did not append a crop layer")?
+            .id
+            .clone();
+        let cropped = service.render_current(&asset)?;
+        ensure(
+            (cropped.width, cropped.height) == (160, 240),
+            format!(
+                "Exact crop dimensions are {}x{}, expected 160x240",
+                cropped.width, cropped.height
+            ),
+        )?;
+        let row_bytes = 160 * 4;
+        for y in 0..240usize {
+            let start = (120 + y) * 320 * 4 + 80 * 4;
+            ensure(
+                cropped.rgba[y * row_bytes..(y + 1) * row_bytes]
+                    == before_crop.rgba[start..start + row_bytes],
+                format!("Exact crop row {y} is not a byte-for-byte copy of its input stage"),
+            )?;
+        }
+        let crop_corner = cropped.pixel(0, 0).ok_or("Crop has no first pixel")?;
+        ensure(
+            Some(crop_corner) == before_crop.pixel(80, 120),
+            "Exact crop origin pixel does not match its input stage",
+        )?;
+
+        let fit_started = Instant::now();
+        let fitted_entry = service
+            .apply_action(
+                &asset,
+                mutation(210, "crop-fit-16-9"),
+                "crop-fit",
+                json!({"aspect":"16:9","angle":10.0}),
+            )?
+            .current_entry_id;
+        let fit_commit_ms = fit_started.elapsed().as_secs_f64() * 1000.0;
+        let fitted_layers = service.entry(&asset, &fitted_entry)?.snapshot.recipe.layers;
+        let fitted_layer = fitted_layers
+            .iter()
+            .find(|layer| layer.effect_id == CROP_EFFECT)
+            .ok_or("The fit lost the crop layer")?;
+        ensure(
+            fitted_layer.id == crop_layer,
+            "The fit did not update the crop layer in place",
+        )?;
+        ensure(
+            fitted_layers
+                .iter()
+                .filter(|layer| layer.effect_id == CROP_EFFECT)
+                .count()
+                == 1,
+            "More than one crop layer in the stack",
+        )?;
+        let fitted_payload: CropPayload = serde_json::from_value(fitted_layer.payload.clone())?;
+        let fitted_rect = fitted_payload.output_rect(&CropStage {
+            width: 320,
+            height: 480,
+            angle: fitted_payload.angle,
+        })?;
+        let angled_render_started = Instant::now();
+        let angled = service.render_current(&asset)?;
+        let angled_render_ms = angled_render_started.elapsed().as_secs_f64() * 1000.0;
+        ensure(
+            (angled.width, angled.height) == (fitted_rect.width, fitted_rect.height),
+            format!(
+                "Straightened crop renders {}x{}, its payload declares {}x{}",
+                angled.width, angled.height, fitted_rect.width, fitted_rect.height
+            ),
+        )?;
+        let fitted_ratio = f64::from(angled.width) / f64::from(angled.height);
+        ensure(
+            (fitted_ratio - 16.0 / 9.0).abs() <= 3.0 / f64::from(angled.height),
+            format!("Straightened crop ratio is {fitted_ratio}, expected 16:9 within a pixel"),
+        )?;
         drop(service);
 
         let reopen_started = Instant::now();
         let service = EditorService::open(&catalog)?;
         let reopened = service.state(&asset)?;
         let reopen_ms = reopen_started.elapsed().as_secs_f64() * 1000.0;
-        ensure(reopened.revision == 209, "Revision did not survive reopen")?;
+        ensure(reopened.revision == 211, "Revision did not survive reopen")?;
         ensure(
             service
                 .entry(&asset, &original)?
@@ -148,8 +250,39 @@ pub fn run(root: &Path, out: &Path) -> Result {
         let current = service.render_current(&asset)?;
         let current_render_ms = render_started.elapsed().as_secs_f64() * 1000.0;
         ensure(
-            (current.width, current.height) == (320, 480),
-            "Transform dimensions did not survive reopen",
+            (current.width, current.height) == (fitted_rect.width, fitted_rect.height),
+            format!(
+                "Crop dimensions did not survive reopen: {}x{} against {}x{}",
+                current.width, current.height, fitted_rect.width, fitted_rect.height
+            ),
+        )?;
+        let reopened_layers = reopened.current_entry.snapshot.recipe.layers.clone();
+        ensure(
+            reopened_layers
+                .iter()
+                .any(|layer| layer.effect_id == CROP_EFFECT && layer.id == crop_layer),
+            "The crop layer's identity did not survive reopen",
+        )?;
+        ensure(
+            service.render_entry(&asset, &cropped_entry)?.pixel(0, 0) == Some(crop_corner),
+            "The exact crop's pixels did not survive reopen",
+        )?;
+        let mut after_cursor = None;
+        let mut retained = 0usize;
+        loop {
+            let page = service.history(&asset, after_cursor, 50)?;
+            retained += page.entries.len();
+            match page.next_before_sequence {
+                Some(next) => after_cursor = Some(next),
+                None => break,
+            }
+        }
+        ensure(
+            retained == listed + 2,
+            format!(
+                "Expected {} retained entries after crop, found {retained}",
+                listed + 2
+            ),
         )?;
         ensure(hash(&fixture)? == fixture_hash, "Original source changed")?;
         result["status"] = json!("passed");
@@ -158,8 +291,23 @@ pub fn run(root: &Path, out: &Path) -> Result {
         result["pixel_a_entry_id"] = json!(a_entry);
         result["revision"] = json!(reopened.revision);
         result["history_entries"] = json!(listed);
+        result["history_entries_after_crop"] = json!(retained);
         result["current_dimensions"] = json!([current.width, current.height]);
+        result["current_layers"] = json!(reopened_layers.len());
         result["source_pixel_before_edits"] = json!(source_pixel);
+        result["crop_layer_id"] = json!(crop_layer);
+        result["crop_entry_id"] = json!(cropped_entry);
+        result["crop_fit_entry_id"] = json!(fitted_entry);
+        result["exact_crop"] = json!({
+            "input_dimensions":[before_crop.width,before_crop.height],
+            "output_dimensions":[cropped.width,cropped.height],
+            "origin_pixel":crop_corner,
+        });
+        result["straightened_crop"] = json!({
+            "payload":fitted_layer.payload,
+            "output_dimensions":[angled.width,angled.height],
+            "ratio":fitted_ratio,
+        });
         result["modules"] = json!(modules);
         result["actions"] = json!(actions);
         result["timings_ms"] = json!({
@@ -169,8 +317,11 @@ pub fn run(root: &Path, out: &Path) -> Result {
             "historical_preview":preview_ms,
             "long_log_200_commits":long_log_commit_ms,
             "history_208_entries_paged_by_25":history_paging_ms,
+            "exact_crop_commit":crop_commit_ms,
+            "crop_fit_commit":fit_commit_ms,
+            "straightened_crop_render":angled_render_ms,
             "catalog_reopen":reopen_ms,
-            "current_render_203_layers":current_render_ms,
+            "current_render_full_stack":current_render_ms,
             "total":total.elapsed().as_secs_f64()*1000.0,
         });
         result["catalog_bytes"] = json!(fs::metadata(&catalog)?.len());
@@ -180,7 +331,9 @@ pub fn run(root: &Path, out: &Path) -> Result {
             "Undo/redo and Restore A -> pixel C",
             "Exact rotate-right, mirror-horizontal and flip-vertical",
             "Two hundred additional exact layers with bounded history paging",
-            "Catalog reopen retains revision, identities, snapshots and dimensions",
+            "Angle-zero crop is a byte-for-byte copy of its input stage with exact dimensions",
+            "Straightened 16:9 crop-fit updates the one crop layer in place and renders its declared stage",
+            "Catalog reopen retains revision, identities, snapshots, the crop layer and dimensions",
             "Module registry and descriptor discovery",
             "Source SHA-256 unchanged"
         ]);
@@ -192,9 +345,9 @@ pub fn run(root: &Path, out: &Path) -> Result {
     write_json(&out.join("result.json"), &result)?;
     fs::write(
         out.join("README.md"),
-        "# M1/M2/M3 automated acceptance\n\nRun from the repository root with:\n\n```sh\ncargo xtask editor-acceptance --output NEW_DIRECTORY\n```\n\n`result.json` records exact state, hashes, timings and the tested platform. Native UI capture and platform classification are recorded in the engineering results document.\n",
+        "# M1/M2/M3/M4 automated acceptance\n\nRun from the repository root with:\n\n```sh\ncargo xtask editor-acceptance --output NEW_DIRECTORY\n```\n\n`result.json` records exact state, hashes, timings and the tested platform. Native UI capture and platform classification are recorded in the engineering results document.\n",
     )?;
     checked?;
-    println!("PASS M1/M2/M3 editor acceptance: {}", out.display());
+    println!("PASS M1/M2/M3/M4 editor acceptance: {}", out.display());
     Ok(())
 }

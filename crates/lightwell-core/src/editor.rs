@@ -1,7 +1,7 @@
 use crate::{
     AssetId, EntryId, Error, ErrorKind, HistoryEntry, ModuleRegistry, Mutation, PreviewJob, Raster,
     Snapshot, SnapshotId, SourceImage, Transform,
-    modules::{ActionInput, ActionPlan, StageContext, check_parameters},
+    modules::{ActionInput, ActionPlan, Stage, StageContext, check_parameters},
     open_source, render,
     render::Evaluation,
     sample,
@@ -602,13 +602,32 @@ impl EditorService {
         ensure_revision(&state, mutation.expected_revision)?;
         let source = self.verified_source(&state.asset)?;
         // The stack is compiled once; planning answers point queries and never rasterizes.
-        let evaluation = Evaluation::new(&registry, &source, &state.current_entry.snapshot.recipe)?;
+        let recipe = &state.current_entry.snapshot.recipe;
+        let evaluation = Evaluation::new(&registry, &source, recipe)?;
         let sampler =
             |x: u32, y: u32| -> Result<Option<[u8; 4]>, Error> { Ok(evaluation.pixel(x, y)) };
+        // The stage one layer receives: compile the prefix before it. Compiling folds declared
+        // output stages and allocates only the operation lists, so this copies no part of the stack
+        // and rasterizes nothing. The whole recipe compiled above, so its format is known good.
+        let stage_before = |index: usize| -> Result<Stage, Error> {
+            let prefix = recipe.layers.get(..index).ok_or_else(|| {
+                Error::new(
+                    ErrorKind::Validation,
+                    format!(
+                        "layer index {index} is outside the {} layers of the stack",
+                        recipe.layers.len()
+                    ),
+                )
+            })?;
+            Ok(registry
+                .compile_layers(source.width, source.height, prefix)?
+                .stage())
+        };
         let context = StageContext {
             stage: evaluation.stage(),
-            layers: &state.current_entry.snapshot.recipe.layers,
+            layers: &recipe.layers,
             sampler: &sampler,
+            stage_before: &stage_before,
         };
         let snapshot = match module.plan(&input, &context)? {
             ActionPlan::NoOp => {
@@ -1375,9 +1394,10 @@ fn file_identity(_: &Metadata, canonical: &Path) -> String {
 mod tests {
     use super::*;
     use crate::{
-        ActionDescriptor, Availability, EFFECT_FORMAT, EffectDescriptor, EffectStage,
-        ExactGeometry, Layer, LayerId, ModuleDescriptor, PIXEL_EFFECT, ParameterDescriptor,
-        ParameterKind, PreviewQueue, Processing, Stage, ToolModule,
+        ActionDescriptor, Availability, CROP_EFFECT, CropPayload, CropStage, EFFECT_FORMAT,
+        EffectDescriptor, EffectStage, ExactGeometry, Layer, LayerId, ModuleDescriptor,
+        PIXEL_EFFECT, ParameterDescriptor, ParameterKind, PreviewQueue, Processing, Stage,
+        TRANSFORM_EFFECT, ToolModule,
     };
     use serde_json::Map;
     use std::{
@@ -2444,6 +2464,313 @@ mod tests {
         assert_eq!(
             service.render_current(&asset).unwrap().pixel(0, 0),
             Some([4, 5, 6, 255])
+        );
+        drop(service);
+        std::fs::remove_file(catalog).unwrap();
+    }
+
+    /// The 480x320 fixture's crop journey: an exact copy at angle zero, in-place updates that keep
+    /// one layer and one entry per commit, a resampled angled crop, composition with a later
+    /// quarter turn and a later pixel, an atomic rejection, reset, navigation and reopen.
+    #[test]
+    fn the_crop_journey_keeps_exact_pixels_one_layer_and_every_snapshot() {
+        let catalog = temp("crop-journey.sqlite");
+        let source_path = fixture();
+        let source_bytes = std::fs::read(&source_path).unwrap();
+        let (asset, layer_id, first_entry, angled_entry, before_reopen);
+        {
+            let mut service = EditorService::open(&catalog).unwrap();
+            let state = service.import(&source_path).unwrap();
+            asset = state.asset.id.clone();
+            let original = service.render_current(&asset).unwrap();
+            assert_eq!((original.width, original.height), (480, 320));
+            let revision = |service: &EditorService| service.state(&asset).unwrap().revision;
+            let layers = |service: &EditorService| -> Vec<Layer> {
+                service
+                    .state(&asset)
+                    .unwrap()
+                    .current_entry
+                    .snapshot
+                    .recipe
+                    .layers
+            };
+
+            // An angle-zero crop copies the source rectangle byte for byte.
+            let at = revision(&service);
+            let first = service
+                .apply_action(
+                    &asset,
+                    mutation(at, "crop-a"),
+                    "crop",
+                    json!({"x":0.25,"y":0.25,"width":0.5,"height":0.5}),
+                )
+                .unwrap();
+            assert_eq!(first.outcome, MutationOutcome::Applied);
+            first_entry = first.current_entry_id.clone();
+            let entry = service.entry(&asset, &first_entry).unwrap();
+            assert_eq!(entry.action_id, "crop");
+            assert_eq!(
+                entry.parameters,
+                json!({"angle":0.0,"x":0.25,"y":0.25,"width":0.5,"height":0.5})
+            );
+            assert_eq!(entry.snapshot.recipe.layers.len(), 1);
+            layer_id = entry.snapshot.recipe.layers[0].id.clone();
+            assert_eq!(entry.snapshot.recipe.layers[0].effect_id, CROP_EFFECT);
+            let cropped = service.render_current(&asset).unwrap();
+            assert_eq!((cropped.width, cropped.height), (240, 160));
+            let row_bytes = 240 * 4;
+            for y in 0..160usize {
+                let start = (80 + y) * 480 * 4 + 120 * 4;
+                assert_eq!(
+                    &cropped.rgba[y * row_bytes..(y + 1) * row_bytes],
+                    &original.rgba[start..start + row_bytes],
+                    "crop row {y} is not an exact copy of the source"
+                );
+            }
+
+            // A second rectangle updates the same layer; the earlier snapshot keeps its own stack.
+            let at = revision(&service);
+            let second = service
+                .apply_action(
+                    &asset,
+                    mutation(at, "crop-b"),
+                    "crop",
+                    json!({"x":0.5,"y":0.0,"width":0.5,"height":0.5}),
+                )
+                .unwrap();
+            let updated = service.entry(&asset, &second.current_entry_id).unwrap();
+            assert_eq!(
+                updated.snapshot.recipe.layers.len(),
+                1,
+                "an update adds no layer"
+            );
+            assert_eq!(updated.snapshot.recipe.layers[0].id, layer_id);
+            assert_ne!(updated.snapshot.id, entry.snapshot.id, "a new snapshot");
+            assert_eq!(
+                service.entry(&asset, &first_entry).unwrap(),
+                entry,
+                "the earlier entry and snapshot are untouched"
+            );
+            assert_eq!(
+                service.history(&asset, None, 50).unwrap().entries.len(),
+                3,
+                "one entry per commit, plus the import's original"
+            );
+            let moved = service.render_current(&asset).unwrap();
+            assert_eq!((moved.width, moved.height), (240, 160));
+            for y in 0..160usize {
+                let start = y * 480 * 4 + 240 * 4;
+                assert_eq!(
+                    &moved.rgba[y * row_bytes..(y + 1) * row_bytes],
+                    &original.rgba[start..start + row_bytes],
+                    "moved crop row {y}"
+                );
+            }
+            // The same rectangle again is a reported no-op with no history row.
+            let at = revision(&service);
+            let repeated = service
+                .apply_action(
+                    &asset,
+                    mutation(at, "crop-b-again"),
+                    "crop",
+                    json!({"x":0.5,"y":0.0,"width":0.5,"height":0.5}),
+                )
+                .unwrap();
+            assert_eq!(repeated.outcome, MutationOutcome::NoOp);
+            assert_eq!(service.history(&asset, None, 50).unwrap().entries.len(), 3);
+
+            // An angled crop resamples; the rendered stage is exactly the payload's output rect.
+            let angled_payload = CropPayload {
+                angle: 5.0,
+                x: 0.2,
+                y: 0.2,
+                width: 0.6,
+                height: 0.6,
+            };
+            let expected = angled_payload
+                .output_rect(&CropStage {
+                    width: 480,
+                    height: 320,
+                    angle: 5.0,
+                })
+                .expect("the angled rectangle is covered");
+            let at = revision(&service);
+            angled_entry = service
+                .apply_action(
+                    &asset,
+                    mutation(at, "crop-angled"),
+                    "crop",
+                    json!({"angle":5.0,"x":0.2,"y":0.2,"width":0.6,"height":0.6}),
+                )
+                .unwrap()
+                .current_entry_id;
+            let raster = service.render_current(&asset).unwrap();
+            assert_eq!(
+                (raster.width, raster.height),
+                (expected.width, expected.height)
+            );
+            assert_eq!(layers(&service)[0].id, layer_id);
+
+            // A quarter turn after the crop swaps the dimensions and stays after the crop layer.
+            let at = revision(&service);
+            service
+                .apply_transform(&asset, mutation(at, "rotate"), Transform::RotateRight)
+                .unwrap();
+            let rotated = service.render_current(&asset).unwrap();
+            assert_eq!(
+                (rotated.width, rotated.height),
+                (expected.height, expected.width)
+            );
+            let stack = layers(&service);
+            assert_eq!(stack.len(), 2);
+            assert_eq!(stack[0].effect_id, CROP_EFFECT);
+            assert_eq!(stack[1].effect_id, TRANSFORM_EFFECT);
+
+            // Re-cropping after the quarter turn updates in place; the transform still follows.
+            let at = revision(&service);
+            service
+                .apply_action(
+                    &asset,
+                    mutation(at, "crop-c"),
+                    "crop",
+                    json!({"x":0.1,"y":0.1,"width":0.5,"height":0.5}),
+                )
+                .unwrap();
+            let stack = layers(&service);
+            assert_eq!(stack.len(), 2);
+            assert_eq!(stack[0].id, layer_id, "the crop layer keeps its identity");
+            assert_eq!(
+                stack[1].effect_id, TRANSFORM_EFFECT,
+                "the transform still follows the crop"
+            );
+            let recropped = service.render_current(&asset).unwrap();
+            assert_eq!((recropped.width, recropped.height), (160, 240));
+
+            // A pixel on the cropped and turned stage, then a crop update that would push it out.
+            let at = revision(&service);
+            service
+                .apply_pixel(&asset, mutation(at, "pixel"), 150, 230, [1, 2, 3])
+                .unwrap();
+            assert_eq!(
+                service.render_current(&asset).unwrap().pixel(150, 230),
+                Some([1, 2, 3, 255])
+            );
+            let before = service.state(&asset).unwrap();
+            let (entries, requests) = (rows(&service, "entries"), rows(&service, "requests"));
+            let error = service
+                .apply_action(
+                    &asset,
+                    mutation(before.revision, "crop-too-small"),
+                    "crop",
+                    json!({"x":0.1,"y":0.1,"width":0.25,"height":0.25}),
+                )
+                .expect_err("the pixel layer would fall outside the new stage");
+            assert_eq!(error.kind, ErrorKind::Validation);
+            assert!(
+                error
+                    .detail
+                    .contains("pixel (150, 230) is outside 80x120 input stage"),
+                "{error}"
+            );
+            assert_eq!(service.state(&asset).unwrap(), before);
+            assert_eq!(rows(&service, "entries"), entries, "no history row");
+            assert_eq!(rows(&service, "requests"), requests, "no request result");
+
+            // Reset returns the crop layer's output to its own input stage.
+            let at = revision(&service);
+            let reset = service
+                .apply_action(&asset, mutation(at, "crop-reset"), "crop-reset", json!({}))
+                .unwrap();
+            assert_eq!(reset.outcome, MutationOutcome::Applied);
+            let stack = layers(&service);
+            assert_eq!(stack[0].id, layer_id);
+            assert_eq!(
+                stack[0].payload,
+                json!({"angle":0.0,"x":0.0,"y":0.0,"width":1.0,"height":1.0})
+            );
+            let full = service.render_current(&asset).unwrap();
+            assert_eq!(
+                (full.width, full.height),
+                (320, 480),
+                "the whole input stage, turned by the later quarter turn"
+            );
+            let at = revision(&service);
+            assert_eq!(
+                service
+                    .apply_action(
+                        &asset,
+                        mutation(at, "crop-reset-again"),
+                        "crop-reset",
+                        json!({})
+                    )
+                    .unwrap()
+                    .outcome,
+                MutationOutcome::NoOp,
+                "an already neutral crop layer"
+            );
+
+            // Undo, redo and restore keep every entry and every snapshot.
+            let recorded = service.history(&asset, None, 50).unwrap().entries;
+            let reset_entry = reset.current_entry_id.clone();
+            let at = revision(&service);
+            service.undo(&asset, mutation(at, "undo")).unwrap();
+            assert_ne!(service.state(&asset).unwrap().current_entry.id, reset_entry);
+            let at = revision(&service);
+            service.redo(&asset, mutation(at, "redo")).unwrap();
+            assert_eq!(service.state(&asset).unwrap().current_entry.id, reset_entry);
+            let at = revision(&service);
+            let restored = service
+                .restore(&asset, mutation(at, "restore-first"), &first_entry)
+                .unwrap();
+            assert_eq!(
+                service
+                    .entry(&asset, &restored.current_entry_id)
+                    .unwrap()
+                    .snapshot
+                    .recipe,
+                service.entry(&asset, &first_entry).unwrap().snapshot.recipe,
+                "restore copies the first crop's stack"
+            );
+            for entry in &recorded {
+                assert_eq!(
+                    &service.entry(&asset, &entry.id).unwrap(),
+                    entry,
+                    "entry {} and its snapshot are unchanged",
+                    entry.id
+                );
+            }
+            before_reopen = service.render_current(&asset).unwrap();
+            assert_eq!(
+                (before_reopen.width, before_reopen.height),
+                (240, 160),
+                "the restored first crop"
+            );
+        }
+
+        let service = EditorService::open(&catalog).unwrap();
+        let stack = service
+            .state(&asset)
+            .unwrap()
+            .current_entry
+            .snapshot
+            .recipe
+            .layers;
+        assert_eq!(stack.len(), 1);
+        assert_eq!(
+            stack[0].id, layer_id,
+            "the crop layer's identity survives reopen"
+        );
+        let reopened = service.render_current(&asset).unwrap();
+        assert_eq!(reopened.rgba, before_reopen.rgba, "identical pixels");
+        let angled = service.render_entry(&asset, &angled_entry).unwrap();
+        assert!(
+            angled.width < 480 && angled.height < 320,
+            "the angled entry still renders its trimmed stage"
+        );
+        assert_eq!(
+            std::fs::read(&source_path).unwrap(),
+            source_bytes,
+            "source unchanged"
         );
         drop(service);
         std::fs::remove_file(catalog).unwrap();
