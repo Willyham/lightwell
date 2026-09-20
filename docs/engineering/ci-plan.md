@@ -1,15 +1,20 @@
-# CI activation and additional checks
+# CI configuration and outstanding verification
 
-Scope: push the reviewed scaffold, inspect its first GitHub Actions run, fix actual build failures, and automate existing fixture/dependency checks. This does not close native desktop acceptance or add editor functionality.
+The checked-in workflow uses the same Rust xtask commands as local development. It runs locked checks, optimized builds and development packaging on macOS, Windows and Ubuntu, with seven-day artifact retention. Separate jobs validate deterministic fixtures and the pinned cargo-deny dependency policy.
 
-Keep one shared runner for local/CI checks. Run Rust fixture checks in the Ubuntu quality job. Add a separate blocking dependency job using pinned cargo-deny 0.20.2; preserve actionable output. Known maintenance advisories require individually documented review, never blanket suppression. New vulnerability/license/source findings must fail.
+Package evidence records target, binary and lockfile hashes, source revision and dirty state. Runtime-import collection is configured. Linux smoke drives the packaged executable under Xvfb/software Vulkan, including invalid, repeated, alternating and large-image scenarios. This is functional headless evidence, not native desktop or GPU-performance acceptance.
 
-The existing native build matrix remains macOS, Windows and Ubuntu with locked debug checks, optimized build, package and seven-day artifacts. Inspect failures by exact run/commit identity. GUI smoke may run on Linux Xvfb with a software Vulkan driver if it works, but must be labeled headless/software and must not count as accepted native GPU/desktop evidence.
+## Verification requirements
 
-Acceptance: real GitHub run results for the pushed commit, fixture validation exercised on a hosted runner, auditable dependency results, and clear reports for anything unavailable. Retain failure logs and update the task/feature/command documentation. Avoid claiming that configured steps passed until their run completes.
+- Inspect actual run results for the tested commit and artifact identities; configured steps are not passing results.
+- Preserve blocking license/source/advisory checks and narrowly scoped, expiring maintenance exceptions. New or unapproved findings fail.
+- Inspect Windows/Linux runtime imports and retained package/smoke artifacts.
+- Publish only project code, documentation and synthetic fixtures; private originals and local captures remain excluded.
+- Use fresh output directories and retain correlated state, logs, frames, source hashes and reproduction commands.
+- Distinguish native M4 checks, headless Linux checks, hosted compilation and deferred native Windows/Linux sessions.
 
-## Current scaffold closure pass
+## Current status
 
-Continue TASK-052/053/055/056/062/063 with the hardened viewer and optimized developer launch. Preserve the existing automatic dependency policy while manual license and Windows/Linux desktop checks remain deferred. Add package build identity (target, binary/lock hashes and source revision/dirty flag), record hosted runtime imports, and exercise the actual packaged Linux executable in software-rendered CI. Verify a fresh packaged Mac binary against the existing synthetic capture checks. Publish only tracked code, documentation and synthetic fixtures; the owner's JPEG and local captures stay ignored.
+S0 is accepted on native M4 evidence and the verified portable run identified in [CI results](ci-results.md). The closure snapshot's expanded workflow and current Windows/Linux packages still need fresh hosted execution and artifact inspection. Source push requires authorization; this plan does not authorize publishing.
 
-The bootstrap playbook must provide fresh-output setup, launch, smoke, failure inspection and packaging steps without reconstructing historical reports. A current hosted run and its retained package/smoke artifacts are required before closing the S0 gate. Only then may TASK-064 finalize the already adopted M1 decisions. Missing or failed evidence remains outstanding, not inferred from an older green run.
+The [bootstrap playbook](bootstrap-playbook.md) is locally verified using a clean checkout with a warm shared Cargo cache. Its current Windows/Linux package verification remains unfinished. Manual Windows/Linux desktop and manual license reviews are deferred. Editor implementation remains on hold.

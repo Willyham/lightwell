@@ -17,13 +17,15 @@ macOS 14 is a conservative project baseline above Rust's Apple Silicon minimum; 
 - Windows: Visual Studio Build Tools with the C++ toolchain and Windows SDK for the MSVC target, plus a compatible DX12 driver and desktop session. Inspect the produced artifact's runtime imports before declaring packaging self-contained.
 - Linux: C/C++ build tools and pkg-config, development/runtime window and keyboard libraries for winit X11/Wayland, Vulkan loader/driver, and XDG desktop portal plus a working GNOME file chooser backend. Use the native Ubuntu 24.04 build environment to avoid accidentally raising the glibc baseline. Record actual package names in the verified setup instructions when the selected configuration builds there.
 
-The current rfd trial uses the XDG portal rather than GTK development bindings. An absent portal is a runtime file-picker failure, not proof of a working Linux app. Software Vulkan may support functional CI; label it and do not use it as native GPU performance evidence.
+The selected rfd configuration uses the XDG portal rather than GTK development bindings. An absent portal is a runtime file-picker failure, not proof of a working Linux app. Software Vulkan may support functional CI; label it and do not use it as native GPU performance evidence.
 
-## Evidence inventory and closure
+## Evidence and outstanding checks
 
-Available host: M4 Pro, 14 CPU/20 GPU cores, 48 GB unified memory, macOS 26.5.2. Existing native Metal renderer-readback captures at 2× scale are documented in [probe results](s0-probe-results.md). The owner's latest answer explicitly permits locally built software to run; a subsequent UI attempt was blocked by a locked Mac, not missing owner permission. Native picker/focus/resize checks resume when the desktop is unlocked.
+The available host is an M4 Pro with 14 CPU/20 GPU cores, 48 GB unified memory and macOS 26.5.2. Native Metal renderer-readback, shortcut/cancel/resize/close checks and owner-observed manual JPEG opening are documented in [hardening results](s0-hardening-results.md). S0 is accepted.
 
-Windows and Linux hardware/session access, minimum-version checks, and packaging/runtime validation remain outstanding. This explicitly records missing test routes and does not prevent platform **decision** TASK-023 from completing. TASK-055/056 retain automated packaging. The owner has deferred TASK-058/059 native desktop checks; they no longer block TASK-063. M4 hardening and native acceptance remain required. No VM installation, infrastructure purchase or public distribution is part of this matrix decision.
+Automated three-platform build/package results exist for the baseline identified in [CI results](ci-results.md). Fresh hosted verification of the closure snapshot and runtime/package inspection remain unfinished. Minimum-OS execution, native Windows/Linux sessions and full accessibility are unverified. Manual desktop/license reviews are deferred.
+
+No VM is installed or verified by this matrix. Native runs, virtual/software functional checks and GPU performance evidence must remain distinct.
 
 ## Sources and selection basis
 
@@ -31,6 +33,6 @@ The [Rust Apple target documentation](https://doc.rust-lang.org/rustc/platform-s
 
 ## Windows test availability
 
-The owner confirmed on 2026-09-19 that no Windows 11 x64 machine is currently available. Native Windows launch/load acceptance is deferred by the owner; a hosted CI compilation or another operating system's smoke run cannot substitute. Continue independent local scaffold work without treating this as an unresolved product decision.
+The owner confirmed on 2026-09-19 that no Windows 11 x64 machine is currently available. Native Windows launch/load acceptance is deferred by the owner; a hosted CI compilation or another operating system's smoke run cannot substitute.
 
-Linux X11 runtime requires `libxkbcommon-x11-0` in addition to the development libraries. Hosted renderer startup exposed the missing runtime library; `libxkbcommon-dev` alone did not supply it. Headless smoke installs Xvfb and Mesa Vulkan drivers separately from native desktop prerequisites.
+Linux X11 runtime requires `libxkbcommon-x11-0` in addition to the development libraries. `libxkbcommon-dev` alone does not supply it. Headless smoke installs Xvfb and Mesa Vulkan drivers separately from native desktop prerequisites.

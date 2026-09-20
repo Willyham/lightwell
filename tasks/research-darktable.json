@@ -3,7 +3,7 @@
   "plan_id": "research-darktable",
   "title": "darktable technical research",
   "objective": "Build a source-grounded darktable technical knowledge base as a companion to the Lightroom research.",
-  "context_summary": "darktable research. Renumbered locally in dependency order on 2026-09-20 at the owner's request. Statuses and completed evidence are preserved; the exact previous plan is archived. TASK IDs have meaning only inside this file. The current editor sequence is history foundation, transforms, tool modules and crop; milestones are described by named outcomes in the roadmap. This research changes no application capability or accepted product decision.",
+  "context_summary": "Completed source-level darktable knowledge base, pinned to the documented release commit. It distinguishes verified source behavior from proposals and unmeasured runtime claims. No application implementation is included. Task IDs are local to this file.",
   "tasks": [
     {
       "id": "TASK-001",
@@ -14,7 +14,7 @@
         "Pin source to an identified released commit; separate release behavior from master and manual drift.",
         "Preserve existing Lightwell decisions; record implications and experiments as proposals.",
         "Completed 2026-09-20: 15 Markdown documents, 81 annotated source entries across 65 pinned repository files plus five official manual pages. Source baseline: darktable 5.6.1, commit 03179f8e080aa9cedebfe14b098b7ba88940a292.",
-        "Research navigation, all pinned source anchors, whitespace checks and all ten active individual task graphs validate. The latest cargo xtask check stops on a concurrent roadmap-migration link to removed tasks/implementation-m1.json, following an earlier obsolete global-ID check. See research-plan.md for scope and check disposition. No application implementation or darktable runtime benchmark performed."
+        "Research navigation, pinned source anchors, whitespace, task graphs and cargo xtask check validate. No application implementation or darktable runtime benchmark performed."
       ],
       "context_links": [
         {

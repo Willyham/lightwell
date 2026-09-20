@@ -1,6 +1,6 @@
 # darktable technical knowledge base
 
-Researched **2026-09-20** for the [darktable research task](../../../tasks/research-darktable.json) (locally numbered TASK-001). Source baseline: **darktable 5.6.1**, commit [`03179f8e080aa9cedebfe14b098b7ba88940a292`](https://github.com/darktable-org/darktable/tree/03179f8e080aa9cedebfe14b098b7ba88940a292), committed 2026-08-26 and released 2026-08-27. Companion to the [Lightroom Classic knowledge base](../lightroom/README.md).
+Researched **2026-09-20** for the [darktable research task](../../../tasks/research-darktable.json). Source baseline: **darktable 5.6.1**, commit [`03179f8e080aa9cedebfe14b098b7ba88940a292`](https://github.com/darktable-org/darktable/tree/03179f8e080aa9cedebfe14b098b7ba88940a292), committed 2026-08-26 and released 2026-08-27. Companion to the [Lightroom Classic knowledge base](../lightroom/README.md).
 
 The central finding: darktable stores editable module state separately from source images, resolves that state into an ordered processing pipeline, and evaluates the needed image regions through module callbacks and shared color/blending/cache services. Its source makes it possible to explain actual formulas and execution paths instead of inferring them from slider labels. See [the complete change-to-pixels trace](pixelpipe-and-rendering.md).
 

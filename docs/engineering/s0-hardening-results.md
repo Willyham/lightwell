@@ -1,12 +1,12 @@
 # S0 hardening evidence — 2026-09-19
 
-The requested local hardening batch and M1 decision tasks are complete. Native M4 checks combine automated evidence with the owner's manual JPEG-opening confirmation. **S0 is not yet closed:** the changed source/workflow has not been rerun on hosted Windows/Linux. Manual Windows/Linux desktop acceptance and manual license reviews are deferred by the owner.
+S0 is accepted. Native M4 checks combine automated evidence with the owner's manual JPEG-opening confirmation. Fresh hosted verification of the closure snapshot remains unfinished; manual Windows/Linux desktop acceptance and manual license reviews are deferred.
 
 ## Implemented and checked
 
 - Shared typed image errors; native path handling and explicit `--data-root` redirection. Configuration/cache locations are resolved without creating unused storage. Normal viewing survives unavailable diagnostic storage; explicit evidence failures return nonzero.
 - Incremental JSONL on a bounded background channel, run/request/generation identity, backend and decode/upload/capture timings. Logging failures are reported; orderly exit flushes logs. An actual killed process retained startup records. Panic details omit potentially private payloads. Ordinary mode uses stderr unless an isolated data root is requested.
-- Explicit renderer allocation readiness. The previous code could capture a blank large-image surface after decoding but before asynchronous texture upload. The application now retains the previous allocation until the new generation is allocated, rejects stale completions and allows only one active upload. Iced 0.14's existing runtime is referenced directly because its allocation re-export is gated on codec-enabled images; no additional decoder formats are enabled.
+- Explicit renderer allocation readiness. The application retains the previous allocation until the new generation is allocated, rejects stale completions and allows only one active upload. Iced 0.14's existing runtime is referenced directly because its allocation re-export is gated on codec-enabled images; no additional decoder formats are enabled.
 - Keyboard Tab focus and Return/Space activation of the sole Open button, alongside Cmd/Ctrl+O. Native close flushes logs without joining a decoder on the UI thread.
 - Decode/EXIF/source-preservation tests plus malformed segment boundaries, read-only Unicode paths, dropping active work, failed replacement/cancel retention and stale upload/readiness checks.
 - Eight native Metal process scenarios: empty, load, invalid initial input, failed replacement, repeated image, alternating landscape/portrait, 24 MP and 60 MP. Pixel checks verify actual bounds, aspect, placement and oriented color regions. Logs, frame states, generations and run identities must agree. Sources remain byte-identical.
@@ -16,17 +16,17 @@ The source checks are `cargo xtask check` (task/link graphs, formatting, strict 
 
 ## Exact package and evidence
 
-Current tested archive: `artifacts/hardening-package-5/lightwell-development.zip`.
+Package used for these measurements: `artifacts/hardening-package-5/lightwell-development.zip`.
 
 Binary SHA-256: `6b92e4f7f998d702c955468c4c19bba4d405d29dc653acc9a6199af0c4782665`.
 
 Lockfile SHA-256: `918f580c8443d810f7e5c34ff73829288dc5e1acf173c40eb5b2a03daeded67e`.
 
-Ignored local evidence: `artifacts/hardening-ready-{empty,load,replacement,invalid,repeated,alternating,large24,large60}`, `artifacts/hardening-ready-process`, and `artifacts/hardening-ready-baseline`. Frame provenance is **window-renderer readback**, 1920×1280 at scale 2. Representative failed-replacement and 60 MP captures were visually inspected in addition to pixel checks. Earlier `hardening-baseline-*` runs before explicit allocation readiness contain blank images and are superseded; their timing numbers must not be used.
+Ignored local evidence: `artifacts/hardening-ready-{empty,load,replacement,invalid,repeated,alternating,large24,large60}`, `artifacts/hardening-ready-process`, and `artifacts/hardening-ready-baseline`. Frame provenance is **window-renderer readback**, 1920×1280 at scale 2. Representative failed-replacement and 60 MP captures were visually inspected in addition to pixel checks.
 
 Native UI observations used the packaged application through computer-use accessibility and OS-window screenshots, separately from renderer capture. Verified: visible oriented photo, Cmd+O, Tab/Return opening the picker, Escape cancellation preserving the photo, native zoom-window resize with Fit, and close with exit 0 plus shutdown in isolated logs (`artifacts/native-session-2` and `native-session-3`). These observations preceded the final texture-readiness fix; final rendering is covered by packaged smoke. AX exposure remains limited.
 
-**Native selection and automation limitation:** the native panel's Open button remained disabled for valid JPEGs selected by automation, including a temporary copied fixture. Removing the extension filter did not change the result; that experiment was reverted. Earlier Iced-probe selection succeeded, but it is not substituted for current packaged picker acceptance. The owner subsequently confirmed **“I can open a JPEG manually.”** This closes manual selection acceptance as owner-observed evidence; the automation itself did not complete selection. There was no approval-review rejection during these checks; the first restricted process launch aborted, and the authorized native launch route succeeded.
+****Native selection and automation limitation:** the owner confirmed manual JPEG opening. Automated selection in the native panel did not complete successfully, so manual selection acceptance is owner-observed evidence, separate from the automated shortcut/cancel/resize checks and packaged renderer smoke.
 
 ## M4 initial baseline
 
@@ -63,4 +63,4 @@ cargo xtask hardening --binary target/release/lightwell --output artifacts/new-f
 cargo xtask measure --binary target/release/lightwell --output artifacts/new-baseline
 ```
 
-The Rust measurement runner currently uses macOS `ps` accounting and is an M4 tool, not a portable performance claim. CI retains the existing three-platform builds/packages and now includes invalid/repeated/alternating/large-image Linux headless scenarios; those workflow changes have not yet executed remotely. Prior hosted results remain in [CI results](ci-results.md).
+The Rust measurement runner currently uses macOS `ps` accounting and is an M4 tool, not a portable performance claim. CI includes three-platform builds/packages and invalid/repeated/alternating/large-image Linux headless scenarios; those workflow changes have not yet executed remotely. Hosted baseline and outstanding checks are in [CI results](ci-results.md).

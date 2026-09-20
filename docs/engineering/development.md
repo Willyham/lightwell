@@ -1,6 +1,6 @@
 # Development, builds and agent verification
 
-Status: **maintained tooling implemented; acceptance hardening in progress**. See [contributing](../../CONTRIBUTING.md) and [scaffold commands](scaffold-commands.md) for working commands. The operation table below defines the maintained-app contract. Scope: bootstrap S0, then reuse the same workflow for M1. Interpret the owner's request for “lighting” as **linting** in this developer-tooling context.
+Status: **maintained tooling implemented; S0 accepted with outstanding hosted/platform follow-ups**. See [contributing](../../CONTRIBUTING.md) and [scaffold commands](scaffold-commands.md) for working commands. The operation table below defines the maintained-app contract. Scope: bootstrap S0, then reuse the same workflow for M1.
 
 ## Repository and toolchain
 
@@ -31,7 +31,7 @@ Handle spaces, Unicode and platform path conventions correctly. Share orchestrat
 
 Use rustfmt and Clippy from the pinned compiler toolchain if Rust is selected; fail on relevant warnings in CI with narrowly justified local exceptions. The Clippy project recommends CI enforcement with `-Dwarnings` and matching the compiler toolchain. Do not adopt blanket pedantic lints that obscure useful diagnostics. [Clippy CI guidance](https://doc.rust-lang.org/clippy/continuous_integration/index.html).
 
-Check dependency licenses against the selected project policy, inspect native libraries/assets and optional features, and report known advisories with narrowly scoped, documented exceptions. Record the exact selected check tool and version; do not depend on a developer's globally installed binary. Check Markdown local links and both active task-plan schemas/DAGs. Optional pre-commit hooks should reuse these commands.
+Check dependency licenses against the selected project policy, inspect native libraries/assets and optional features, and report known advisories with narrowly scoped, documented exceptions. Record the exact selected check tool and version; do not depend on a developer's globally installed binary. Check Markdown local links and every active task plan's schema, local numbering and DAG. Optional pre-commit hooks should reuse these commands.
 
 ## Logs and state
 
@@ -54,7 +54,7 @@ Separate assertions:
 - UI review: inspect screenshot layout, clipping, empty/loading/error states and visual hierarchy.
 - Native checks: exercise dialogs, keyboard focus, resizing, OS presentation and shutdown in a real desktop session.
 
-Compare deterministic fixtures using geometry/region assertions and documented tolerances. Store per-platform baselines only when necessary; a reviewed baseline change must not conceal a functional regression. M1 extends the same harness to edit/export/MCP parity instead of starting a second automation system.
+Compare deterministic fixtures using geometry/region assertions and documented tolerances. Store per-platform baselines only when necessary; a reviewed baseline change must not conceal a functional regression. Extend this harness through the history, transform, module and crop milestones, then the retained export/MCP follow-ups. Each stage checks UI/API parity.
 
 ## CI and packaging
 
@@ -74,12 +74,12 @@ Automated uploads must use synthetic fixtures and the designated evidence direct
 4. Fix failures and rerun affected checks. Record native checks separately from headless evidence.
 5. Report exact commands, artifact paths, results and remaining unsupported cases; update task/feature state only when acceptance is met.
 
-No undocumented clicking or guessed screen coordinates should be required to determine whether an image loaded correctly. The development harness is not the M1 public command API or MCP server; it provides early observability while sharing production operations.
+No undocumented clicking or guessed screen coordinates should be required to determine whether an image loaded correctly. The development harness is not the planned editor command API or MCP server; it provides early observability while sharing production operations.
 
 ## Maintained workspace setup
 
 The selected S0 workspace uses Rust **1.94.0**, pinned in `rust-toolchain.toml`, with rustfmt/Clippy and a committed Cargo.lock. Install that toolchain explicitly with `rustup toolchain install 1.94.0 --profile minimal --component rustfmt --component clippy`. Native requirements and outstanding platform checks are in [platforms](platforms.md). macOS builds set a 14.0 deployment target unless deliberately overridden; floor execution remains to verify.
 
-Implemented commands and flags are listed in [scaffold commands](scaffold-commands.md): Doctor, check, fmt, lint, test, build, develop, smoke, inventory, audit and host packaging. Use `cargo xtask develop --open "path to/image.jpg"`; positional image/capture arguments are no longer supported. Cargo needs network on the first locked fetch; subsequent builds can be offline. The Rust runner works on all three targets.
+Implemented commands and flags are listed in [scaffold commands](scaffold-commands.md): Doctor, check, fmt, lint, test, build, develop, smoke, inventory, audit and host packaging. Use `cargo xtask develop --open "path to/image.jpg"`; image/capture paths require named flags. Cargo needs network on the first locked fetch; subsequent builds can be offline. The Rust runner works on all three targets.
 
-Crates: `lightwell-core` owns image/profile/resource/request logic; `lightwell-app` owns the Iced adapter; `xtask` owns developer command orchestration. Probes remain outside this workspace. Error/state/log expansion follows TASK-042/044/048. Native macOS setup has been exercised; Windows/Linux setup instructions remain unverified and are not represented as passing tests.
+Crates: `lightwell-core` owns image/profile/resource/request logic; `lightwell-app` owns the Iced adapter; `xtask` owns developer command orchestration. Probes remain outside this workspace. Error/state/log evidence is recorded in the S0 engineering reports. Native macOS setup has been exercised; Windows/Linux setup instructions remain unverified and are not represented as passing tests.

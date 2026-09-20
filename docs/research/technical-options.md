@@ -1,6 +1,6 @@
 # Technical options and evidence
 
-Status: research and recommendations, checked 2026-09-19. No comparative benchmarks have been run. Upstream capabilities are distinguished below from our engineering judgments. Pin and recheck concrete dependency versions during M0; moving documentation can describe unreleased code.
+Status: research and recommendations, checked 2026-09-19. No comparative benchmarks have been run. Upstream capabilities are distinguished below from our engineering judgments. Concrete dependency versions are pinned in the workspace; moving upstream documentation can describe unreleased code. Rust/Iced is selected for S0; other candidates below are research references, not open scaffold decisions.
 
 Related reference: the [Lightroom Classic technical knowledge base](lightroom/README.md), researched 2026-09-20, covers non-destructive storage, processing, previews/performance, tool semantics and public engineering evidence. It separates documented behavior from conceptual algorithms and potential Lightwell experiments. The [darktable companion](darktable/README.md), pinned to release 5.6.1, adds inspectable algorithms, pixelpipe/cache contracts, module and automation boundaries, and [comparative implications](darktable/lightwell-implications.md).
 
@@ -67,11 +67,11 @@ Use short transactions and one application-level writer. [WAL documentation](htt
 
 ## Agent and extension interfaces
 
-The command API is the application boundary; MCP is an adapter. Use JSON-schema-described operations with state queries, bounded previews, structured errors, revision checks, and jobs. UI code calls the same service directly without JSON serialization overhead. The owner brought **MCP and simultaneous GUI/agent control into M1** on 2026-09-19; implement local IPC and shared-state coordination explicitly rather than maintaining separate CLI and GUI catalogs.
+The command API is the application boundary; MCP is an adapter. Use JSON-schema-described operations with state queries, bounded previews, structured errors, revision checks, and jobs. UI code calls the same service directly without JSON serialization overhead. M1 includes simultaneous GUI/agent control through local JSON/IPC and shared-state coordination. MCP is a follow-up adapter using the same catalog owner.
 
 The official [MCP tools specification](https://modelcontextprotocol.io/specification/2026-07-28/server/tools) supplies tool schemas and structured results. [stdio transport](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/stdio) fits a local client-launched process. Prefer the [official Rust SDK](https://github.com/modelcontextprotocol/rust-sdk), verifying its actual released protocol support against intended clients. Do not mix protocol examples from different revisions or introduce a hosted service to serve a desktop app.
 
-The owner now requires full operation coverage, a small module host and actual external module loading (D19–D21). Presets/workflow modules are candidate first use cases, not the limit of the API. The [module/API design](../design/modules-and-api.md) distinguishes built-in boundaries, optional enablement and binary loading; TASK-033/067 choose and measure the first external proof. Consider capability-limited WebAssembly if that use case warrants it. [Wasmtime's security model](https://docs.wasmtime.dev/security.html) provides isolation machinery, but the host controls granted access. Resource limits and a narrow API still need to be designed. WASM is not our assumed execution path for every image kernel. Third-party native binaries or GPU shaders require a separate trust, performance, and failure-isolation design.
+The product requires full operation coverage, a small module host and actual external module loading. Presets/workflow modules are candidate first use cases, not the limit of the API. The [module/API design](../design/modules-and-api.md) distinguishes built-in boundaries, optional enablement and binary loading; the first external proof requires a selected use case and activation measurements. Consider capability-limited WebAssembly if that use case warrants it. [Wasmtime's security model](https://docs.wasmtime.dev/security.html) provides isolation machinery, but the host controls granted access. Resource limits and a narrow API still need to be designed. WASM is not our assumed execution path for every image kernel. Third-party native binaries or GPU shaders require a separate trust, performance, and failure-isolation design.
 
 ## Reuse versus a new application
 
@@ -79,16 +79,8 @@ The owner now requires full operation coverage, a small module host and actual e
 
 An existing-engine fork could reach sophisticated RAW output sooner. Its cost is inheriting a large processing/UI architecture and license obligations, and still needing a coherent command interface. A fresh core makes the proposed interaction model easier to control, but takes on significant image-science work. Our recommendation is a new small application using established libraries, with an explicit owner decision about whether early RAW quality warrants reusing a larger engine. Do not copy GPL implementation into a differently licensed core without resolving compatibility.
 
-## License decision
+## License policy
 
-The owner clarified an **open-source-only preference** on 2026-09-19. Our leading recommendation is **GPL-3.0-or-later** for Lightwell, with compatible open-source dependencies and bundled/official extensions. Formal selection and application of the license remain in M0 after checking the configured build. The earlier alternatives remain here as research history:
+Lightwell uses GPL-3.0-or-later with an open-source project/extension direction. See the [repository license](../../LICENSE) and [dependency review](../engineering/dependency-review.md). Native SDK/toolchain prerequisites are distinct from redistributed components.
 
-- **Apache-2.0** is a permissive candidate when proprietary forks and integrations are acceptable; its text includes copyright and patent grants. [License](https://www.apache.org/licenses/LICENSE-2.0).
-- **MPL-2.0** is a candidate when distributed changes to covered files should remain open while separate files can use other licenses. It does not require every file in a larger application to become open. [Mozilla FAQ](https://www.mozilla.org/en-US/MPL/2.0/FAQ/).
-- **GPLv3** is the direction to evaluate for broader reciprocity and direct reuse of GPL photo engines. Plugin compatibility depends on the actual integration; a process or WASM boundary is not an automatic licensing exception. [GNU license text](https://www.gnu.org/licenses/gpl.en.html).
-
-Apache/MPL are no longer the leading project-license choices given that preference, although compatible permissively licensed dependencies remain usable. Open-source distribution policy does not require replacing macOS/Windows system APIs. For Slint, evaluate its GPL route; avoid making a proprietary license essential to building Lightwell.
-
-GPL covers distribution of the program and covered derivative work; private modifications need not be published, and commercial use is permitted. It also does not automatically require every independent program calling a public API to adopt GPL. Plugin obligations depend on how the software combines; requiring official extensions to be open source is a project policy as well as a dependency-license question. [GNU GPL text](https://www.gnu.org/licenses/gpl.en.html), [GNU licensing FAQ](https://www.gnu.org/licenses/gpl-faq.en.html).
-
-Before distributing a build, inspect the exact native libraries, optional decoder packs, UI modules, and image/profile assets it contains. Native binaries do not have to be single statically linked files; app bundles and shared libraries may be the appropriate distribution shape. No license file has been applied by this planning update.
+Before distribution, review exact native libraries, optional decoder packs, UI modules and image/profile assets. A process or WebAssembly boundary is not automatically a licensing exception. Preserve notices and seek an appropriate review of concrete integrations; manual native/asset/license review is currently deferred.

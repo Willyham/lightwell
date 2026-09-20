@@ -1,74 +1,42 @@
-# Task plans and sequencing
+# Task planning and milestone order
 
-**Current owner override (2026-09-19):** manual Windows/Linux desktop checks and manual license reviews are deferred. S0 currently requires native M4 evidence and automated portable checks; deferred checks are not passing results. See [hardening scope](engineering/s0-hardening.md).
+Task plans use independent IDs and follow the history-first delivery sequence. S0 is accepted; editor implementation remains on hold.
 
-Status: **maintained scaffold executing; S0 product and stack gates complete**. The latest owner instruction makes S0, a cross-platform image-loading skeleton, the first end-to-end build. Editing remains the subsequent M1 milestone.
+## Local plans
 
-## Active plans
+Each active JSON plan listed in [the index](../tasks/README.md) starts with `TASK-001`. IDs are unique only inside that plan, so the same ID can occur in every file. Read tasks top to bottom in dependency order. Dependencies refer only to earlier tasks in the same file; independent tasks share an execution wave. Do not serialize unrelated work just to make every wave contain one task.
 
-- [Product decisions](../tasks/product-decisions.json): unresolved choices, research/interview questions and owner decision records. A task completes when its answer and consequences are documented, not when software is built.
-- [Implementation](../tasks/implementation.json): technical probes, repository setup, tooling, linting, builds, image loading, diagnostics, verification and packaging; followed by the retained M1 editor work.
-- [Original foundation snapshot](../tasks/archive/v0-foundation.json): historical record only. Do not execute or update this archived plan.
+A plan contains its own behavior, context, acceptance and tests. Link Markdown specifications or code for context, and describe required existing capabilities by name. Do not link another task plan, place its ID in prose, or add a checker dependency on its completion. Product decisions become authoritative through the recorded decision/specification, not a cross-file ID lookup.
 
-IDs are globally unique across the two active files. TASK-001 moves to the product plan; TASK-002 through TASK-022 retain their IDs in implementation. New IDs start at TASK-023. The earlier broad setup task TASK-006 now creates just the workspace; environment setup, checks, build orchestration and CI have separate tasks. Existing tasks are narrowed/resequenced rather than falsely completed. No implementation task is completed by this planning update.
+Milestone sequencing belongs in the [history-first roadmap](design/history-first-roadmap.md). M1 establishes a usable history/pixel editor; M2 adds transforms; M3 introduces tool modules; M4 delivers the crop module. Each later plan begins from the named working capability. Local `ready` status is not authorization to begin a milestone or resume paused implementation.
 
-## Current plan size and starting points
+## Current plans
 
-The product plan has 14 tasks in one dependency wave: TASK-001 is the ongoing interview, TASK-023–TASK-025 are completed S0 decisions, and TASK-026–TASK-030 are completed M1 decisions, and TASK-031–TASK-034 remain ready for their scoped interview/research work. TASK-070 is completed: the owner accepted appending Restore actions while retaining all history; it is an additional M1 gate input. D19–D21 already settle full programmability and the small module-host direction; TASK-033/034 retain use-case/lifecycle and performance questions, not whether to support external modules.
+| File | Tasks | Waves | Starting state |
+| --- | --- | --- | --- |
+| [S0](../tasks/implementation-s0.json) | 37 | 13 | Accepted milestone; follow-ups remain unfinished |
+| [M1 history](../tasks/implementation-m1-history.json) | 9 | 7 | TASK-001 ready; implementation on hold |
+| [M2 transforms](../tasks/implementation-m2-transforms.json) | 5 | 5 | Pending activation after the history foundation |
+| [M3 modules](../tasks/implementation-m3-modules.json) | 6 | 5 | Pending activation after transforms |
+| [M4 crop](../tasks/implementation-m4-crop.json) | 6 | 6 | Pending activation after modules |
+| [Editor follow-ups](../tasks/implementation-editor-followups.json) | 6 | 4 | Planned export, Locate, MCP and verification |
+| [Later extensions](../tasks/implementation-extensions.json) | 1 | 1 | Pending a selected use case and working module editor |
+| [Product decisions](../tasks/product-decisions.json) | 14 | 1 | Existing decisions and unresolved questions retained |
+| [Lightroom research](../tasks/research-lightroom.json) | 1 | 1 | Completed |
+| [darktable research](../tasks/research-darktable.json) | 1 | 1 | Completed; see its research verification |
 
-The implementation plan has 57 tasks in 23 derived waves: 32 originally required S0 tasks, one optional Linux VM task, 19 subsequent M1 tasks (including the explicit history browser TASK-071), two dependency-exception follow-ups (TASK-065/066), one later module measurement/planning task (TASK-067), and the completed real-JPEG performance investigation (TASK-068), and Rust-only tooling migration (TASK-069). The owner override above changes the current S0 gate. The original ready tasks TASK-002 (fixtures), TASK-035 (S0 decision gate) and TASK-037 (repository conventions) are completed. Current statuses and dependencies in the JSON are authoritative for ongoing scaffold work. TASK-067 is pending after the verified M1 handoff in TASK-018; this architecture update makes no new implementation task immediately runnable and marks no existing task complete. See the [execution evidence](engineering/s0-probe-results.md) for completed work and limitations.
+## Maintaining plans
 
-## Milestone boundaries
+Preserve local IDs during routine updates. Each status describes actual work, and completed tasks retain the evidence needed to support their status. Keep only current plans with concise context and no planning-change logs. A planning edit does not complete implementation.
 
-| Work | Implementation tasks | Completion rule |
-| --- | --- | --- |
-| Fixtures, narrow framework/image probes and stack choice | TASK-002, TASK-003, TASK-005, TASK-035, TASK-036 | Supports loading/display only; does not wait for editor decisions |
-| Repository, workspace, toolchain and build/check setup | TASK-006, TASK-037–TASK-042, TASK-052 | Repeatable local and three-OS build/check workflow |
-| Window, diagnostics, loading and Fit display | TASK-043–TASK-048 | Read-only image viewer with truthful states and shared open path |
-| Agent captures, correctness, smoke tests and CI evidence | TASK-049–TASK-053 | Observable actual rendering, retained results and failure evidence |
-| Packages, native checks, measurements and playbook | TASK-054–TASK-062 | Platform-specific evidence; TASK-060 Linux VM work is optional and not on the S0 gate |
-| S0 acceptance | TASK-063 | Three-platform launch/load gate; no editing tools |
-| M1 specification gate and editor work | TASK-064; TASK-004; TASK-007–TASK-022; TASK-071 | Retains catalog, geometry, persistent navigable history with preview/restore, export, live agents and Locate after S0 |
-| Module activation and external-loader planning | TASK-067 after TASK-018 | Measure the selected use case and produce scoped loader/proof implementation tasks; external loading itself remains undelivered |
+## Verification
 
-TASK-052/TASK-053 appear in two rows because CI connects the build and evidence workflows. See JSON dependencies for the authoritative order, not numeric IDs or table order.
+Use the Create Tasks schema without extending it with cross-file dependency fields. Validate every changed plan and synchronize its derived waves. Run `cargo xtask check`, which validates every active top-level JSON file, unique plan names, contiguous ordered local IDs, local dependency status and Markdown links.
 
-## Dependencies across separate files
+The checker deliberately allows matching task IDs in different plans. It rejects duplicate IDs inside a plan, gaps/out-of-order numbering, dependencies on later/unknown tasks, stale waves and file links into another task plan. Milestone sequencing and owner decisions are assessed from the named acceptance outcomes and specifications.
 
-The Create Tasks schema validates dependencies within one file. Do not invent cross-file IDs in `dependencies`. Link external decisions with a file context link and a task locator. Two milestone gates and one later planning prerequisite bridge the plans:
+The S0 advisory policy explicitly reads the S0 plan: its paste and ttf-parser follow-ups are local TASK-016 and TASK-017. Expiry/version enforcement remains in place. This code lookup has no bearing on another plan's TASK-016 or TASK-017.
 
-- **TASK-035:** checks the S0 platform matrix (TASK-023), license disposition (TASK-024), and minimal shell scope/visual direction (TASK-025). Its acceptance requires those product tasks completed and recorded. Fixture preparation and technical probes can proceed independently.
-- **TASK-064:** checks M1 workspace/geometry, state/history, export and live-agent decisions (TASK-026–TASK-030), plus restore/navigation policy (TASK-070), and requires S0 acceptance. It does not make later RAW, storage or extension decisions a skeleton prerequisite.
-- **TASK-067:** checks that product TASK-033 has selected the external use case/lifecycle before dependent prototype/design work; consults TASK-034 priorities without inventing settled budgets. Its local dependency is the verified M1 host/API handoff. Completion must record the external input and validated follow-on tasks for actual module loading. It cannot complete the external feature merely by documenting an API client.
+## Proportionate planning
 
-Execution waves are topological views within each plan, not a global schedule or an instruction to dispatch agents. A ready gate may inspect its missing inputs; it must not mark itself complete while its external decisions remain unresolved. Check current product JSON statuses and decision notes and record referenced IDs when completing the gates or TASK-067. The repository checker covers TASK-035 and the original TASK-026–030 inputs to TASK-064; the additional TASK-070 history-policy prerequisite currently requires explicit inspection before TASK-064 can complete; TASK-067's external input currently requires inspection and must be covered when the later loader tasks/checks are implemented.
-
-The [module/API contract](design/modules-and-api.md) is binding context for new feature planning: every operation needs a common API, module-owned feature semantics use core change/history services, and UI/programmatic parity is an acceptance criterion. M1 TASK-007/008/009/011 implement that boundary and TASK-014/021/016 expose and verify it. Later feature plans must carry these requirements into exposure, white balance, clone/mask tools and external modules as those features are scoped; those examples do not add tools to M1.
-
-Product tasks marked ready are available for short interview/research rounds, not a demand to answer everything before coding. Their `extra_context` states when each answer is needed. TASK-001 keeps the existing interview in progress without making the entire interview a dependency of the first window.
-
-## Detailed bootstrap sequence
-
-First gather the S0-specific decisions and fixtures while trying the minimal photo surface. Record the selected stack; establish repository conventions, pinned tools and a workspace; add the task runner, linting, dependency checks and isolated runtime paths. Build a window, diagnostics and bounded decode independently where their prerequisites allow, then connect Fit rendering and file opening.
-
-Add deterministic state/readiness controls and frame capture through the real app. Use them in correctness and process-level smoke tests. Package the same app for each OS, verify it in a desktop session, collect M4 baseline measurements, and publish a developer/agent playbook with real commands. Only then close S0 and enter the editor gate.
-
-The current documents specify future command outcomes; task `test_strategy.commands` arrays are populated as real commands are implemented. Task outputs must add runnable commands and evidence paths when implemented.
-
-## Current hardening handoff
-
-TASK-042–046, TASK-048–051, TASK-054 and TASK-061 now have local completion evidence in [hardening results](engineering/s0-hardening-results.md). TASK-047 and TASK-057 are also complete after the owner confirmed manual JPEG opening, with automated selection limits kept explicit. TASK-052/053 retain fresh hosted execution; prior hosted results remain historical evidence. The packaging and measurement dependencies now express actual build outputs rather than waiting on manual picker work.
-
-TASK-041 and TASK-058/059 are deferred and removed from current S0 gates. Existing automated dependency policy and TASK-065/066 follow-ups remain. M1 TASK-026–030 now have [owner-accepted decisions](design/m1-decisions.md); the product round is complete. S0 and M1 gates remain incomplete.
-
-## M1 history coverage review
-
-The owner clarified that history is a core log of every committed image action, with preview and restore at any point. The previous tasks allowed an undo/redo-only implementation. The [history specification](specs/edit-history.md) now defines saved states, retention, read-only preview, restore, concurrency and acceptance. TASK-007/008/009/011 establish the common model/storage/render/service; TASK-071 adds a visible history browser after TASK-010/011. TASK-015 depends on it, so the existing verification and M1 handoff gates cannot bypass the history UI. JSON/IPC/MCP, native and portability tasks include the same cases.
-
-Product TASK-028/030 retain their completed decisions; TASK-070 is the completed follow-up decision accepting a new Restore action with all later actions retained. TASK-064 explicitly checks the additional external input. No implementation task becomes newly runnable from this planning change, and no implementation status is marked complete. Both plans are validated: 14 product tasks / 1 wave and 57 implementation tasks / 23 waves. Product ready IDs are TASK-031–034; implementation ready IDs remain TASK-065/066. No M1 implementation task is runnable until its existing upstream gates pass.
-
-## Lightroom technical research (2026-09-20)
-
-Completed TASK-072 in the dedicated research plan adds a [sourced knowledge base](research/lightroom/README.md) covering storage/history, rendering/color, previews/performance, editing controls, RAW/AI, masks and the SDK. Product TASK-031/034 link the research as context; their unresolved decisions remain open. Research implications and experiments are proposals, not new implementation commitments.
-
-Research artifact checks, all active task validators and `cargo xtask check` passed. See [research verification](research/lightroom/research-plan.md#completion-and-verification) for the exact scope and the resolved initial validation issue.
+Use Markdown design and task decomposition for substantial coordinated changes or when requested. Standalone research, diagnostics, reviews and small contained edits do not require creating a task plan unless requested or already assigned from one. Maintain statuses with actual implementation evidence, and keep future scope explicit.

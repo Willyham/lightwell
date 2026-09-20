@@ -1,6 +1,6 @@
 # darktable technical research plan
 
-Status: completed 2026-09-20. Independent documentation work, tracked in [the darktable research plan](../../../tasks/research-darktable.json), locally numbered TASK-001 after the concurrent plan-ID migration. No implementation milestone changes.
+Status: completed 2026-09-20. Independent documentation work, tracked in [the darktable research plan](../../../tasks/research-darktable.json). No implementation milestone changes.
 
 ## Scope and method
 
@@ -26,11 +26,11 @@ The public code makes algorithms inspectable but does not establish M4 performan
 
 Delivered 15 Markdown documents, approximately 13,500 words, with 81 annotated source entries spanning 65 pinned repository files and five official manual pages. The baseline is darktable 5.6.1 at commit `03179f8e080aa9cedebfe14b098b7ba88940a292`. The [index](README.md) provides question-based navigation; the [source register](sources.md) provides reading routes and immutable implementation references.
 
-Checks performed on 2026-09-20:
+Verification:
 
-- Verified checkout identity and every registered source symbol/line anchor against the pinned files. Checked all 231 pinned source-link occurrences and all local document paths/heading fragments. No unresolved authoring tokens or unbalanced code fences remained.
-- Validated the completed darktable research plan and all ten active JSON plans independently with the Create Tasks validator. Preserved the concurrent change to plan-local task numbering; this research is now `research-darktable` / `TASK-001` rather than its earlier global ID.
-- Checked whitespace/newlines in all new Markdown documents and ran `git diff --check` for the integration paths.
-- Ran `cargo xtask check`. The first attempt during the concurrent plan split could not find a moved file; a later run reached the old global-ID overlap rule. After the checker changed to plan-local IDs, the latest run stopped at an existing roadmap link to removed `tasks/implementation-m1.json` in `docs/task-planning.md`. This is an unfinished concurrent roadmap migration, not a passing repository-wide result or a darktable research-link failure. No unrelated checker/roadmap migration was changed to suppress it.
+- Checkout identity and every registered source symbol/line anchor were checked against the pinned files, including 231 pinned source-link occurrences.
+- Local document paths, heading fragments, whitespace and code fences validate.
+- Active task schemas, local IDs, dependency graphs and derived waves validate.
+- `git diff --check` and `cargo xtask check` pass, including repository/policy checks, formatting, lint and Rust tests.
 
 No darktable build, image export, AI inference, GPU measurement or camera qualification was performed. Source inspection supports the documented algorithms and architecture; proposed experiments remain unexecuted. Application behavior and accepted Lightwell decisions are unchanged.

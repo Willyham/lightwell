@@ -1,12 +1,12 @@
 # First end-to-end build: image-loading skeleton
 
-Status: **maintained S0 in progress; macOS viewer and initial tooling verified**. See [probe evidence](../engineering/s0-probe-results.md). On 2026-09-19 the owner replaced the full editor as the first build with a cross-platform skeleton that loads an image. This is **S0**, before the previously agreed **M1 editor**. All work remains v0.
+Status: **S0 accepted by the owner on 2026-09-20; macOS viewer and initial tooling verified**. Acceptance uses the recorded native M4 evidence and earlier automated portable run. Fresh hosted verification of the closure snapshot and native Windows/Linux desktop checks remain unfinished and must not be reported as passed. See [native verification](../engineering/s0-hardening-results.md). S0 precedes the [history-first editor milestones](../design/history-first-roadmap.md). All work remains v0.
 
 ## Outcome
 
 Build a small desktop application for macOS, Windows and Linux that opens one local JPEG and displays it correctly at Fit. The M4 MacBook Pro remains the first development machine. Current owner instruction defers manual Windows/Linux checks. S0 requires automated portable builds/packages plus native M4 launch/load evidence and local hardening; native Windows/Linux support remains unverified.
 
-JPEG follows the existing JPEG-first requirement. The owner accepted a deliberately documented input subset: 8-bit RGB/greyscale JPEG, EXIF orientations 1–8, untagged-as-sRGB and supported standard tagged sRGB. The stack decision must establish a defensible recognition/display path; the experimental exact-profile allowlist alone does not satisfy this accepted scope. Reject unsupported color profiles/modes explicitly rather than silently display incorrect pixels. Broader ICC conversion and professional display validation remain M1 work unless the selected stack supplies them cleanly in S0.
+The supported input subset is 8-bit RGB/greyscale JPEG, EXIF orientations 1–8, untagged-as-sRGB and supported standard tagged sRGB. Bounded numeric matrix/TRC recognition establishes the accepted tagged subset. Unsupported color profiles/modes are rejected explicitly. Broader ICC conversion and professional display validation are not implemented; color/metadata proof belongs to the editor follow-up scope.
 
 ## User journey
 
@@ -39,7 +39,7 @@ GPU initialization failure must produce an actionable diagnostic. A software-ren
 
 The owner accepted macOS Apple Silicon, Windows x64 and Linux x64 with unsigned development packages. Exact artifact formats, OS/runtime floors and Linux window-system coverage remain to finalize; accepted targets are not already verified support. Linux arm64 is useful for an M4-hosted VM but does not replace testing the selected x64 artifact. A Windows ARM guest running an x64 binary must be labelled as emulated, not native x64. A VM can establish guest functional behavior; record its graphics adapter and software/accelerated path. Native hardware performance remains separate evidence.
 
-No paid signing, store submission, public release, auto-updater, elaborate installer or VM installation is part of this planning change. S0 packages may be unsigned development artifacts with launch requirements documented. Missing machines or desktop sessions remain outstanding checks rather than passing results. Omarchy remains an optional Linux VM candidate, not a requirement for the first build.
+No paid signing, store submission, public release, auto-updater, elaborate installer or VM installation is in S0 scope. Packages are unsigned development artifacts with launch requirements documented. Missing machines or desktop sessions remain outstanding checks rather than passing results. Omarchy is an optional Linux VM candidate, not a requirement for the first build.
 
 ## Agent verification
 
@@ -60,4 +60,4 @@ Use synthetic/licensed fixtures for CI screenshots and logs. Routine logs omit p
 
 S0 needs reproducible checkout/setup instructions; formatting/lint/build checks; packaged binaries for the accepted OS/architecture matrix; valid/invalid/repeated-open tests; observed native desktop behavior; source preservation; and retained logs/screenshots/results. Record optimized-build startup, first-image latency, idle behavior and peak memory on the M4 as an initial baseline. Numerical M1 budgets remain provisional; S0 still requires bounded allocations/queues, responsive loading and no continuous redraw loop when idle.
 
-The full editor cannot be marked delivered by S0. Catalogs, geometry, export and live IPC/MCP resume through the separate M1 gate and existing [single-image specification](single-image.md).
+The full editor cannot be marked delivered by S0. M1 establishes persistent history and live API access; transforms, tool modules and crop follow in separate milestones. Export, Locate and MCP remain explicit editor follow-ups in the [editor specification](single-image.md). Implementation is on hold until the owner resumes it.

@@ -1,35 +1,32 @@
-# S0 stack decision and maintained scaffold
+# S0 stack and boundaries
 
-Status: selected for v0 S0 under the accepted product decisions. No cross-platform verification or S0 completion is implied.
+Status: implemented Rust/Iced viewer; S0 is accepted. Native M4 behavior is verified. Minimum-OS compatibility, native Windows/Linux sessions, full accessibility and broad ICC/display calibration remain unverified.
 
-## Decision and evidence
+## Selected stack
 
-Select Rust 1.94.0, Iced 0.14.0 with wgpu 27.0.1, image 0.25.9 (JPEG input and PNG evidence), moxcms 0.7.11 for conservative sRGB profile recognition, rfd 0.15.4 for native/portal dialogs, and serde_json 1.0.149 for internal evidence. Exact transitive versions stay in Cargo.lock. Select GPL-3.0-or-later for project code as instructed by the owner; configured license/advisory audit remains TASK-041.
+Rust 1.94.0, Iced 0.14.0 with wgpu 27.0.1, image 0.25.9 for JPEG input and PNG evidence, moxcms 0.7.11 for conservative standard-sRGB profile recognition, rfd 0.15.4 for native/portal dialogs, and serde_json 1.0.149 for evidence. Exact transitive versions are in Cargo.lock. Project code is GPL-3.0-or-later; manual dependency/native/asset review remains deferred.
 
-The [probe report](../engineering/s0-probe-results.md) records both Iced/egui builds and M4 Metal captures. The resumed native Iced trial displayed the empty state, opened the native picker with Cmd+O, loaded orientation-6 correctly, recomputed Fit when the native zoom-window action enlarged the window, and retained the image/status after cancelling the picker. OS-window screenshots were inspected in the computer-use session; they are separate from the retained renderer captures. The initial corner-drag automation returned noWindowsAvailable; native zoom supplied the actual resize check. Later automated path entry/selection was unreliable, so native failed-replacement verification remains in the maintained application's acceptance checks. This is not a reason to change UI frameworks.
+Iced supplies explicit state updates, reactive rendering, a simple image surface and window-renderer capture. The isolated [UI probes](../engineering/s0-probe-results.md) verify both Iced and egui rendering on M4 Metal; they do not establish a comparative performance winner. Custom-control accessibility is limited and requires further work.
 
-Prefer Iced's explicit updates, reactive rendering, simple image surface and documented window-renderer capture route. Eframe is viable but provides no decisive advantage in the bounded comparison; its repaired capture trial was successful. Single-run startup/capture figures are not statistically comparable performance evidence. Screen-reader exposure is limited in this probe (native controls/dialogs appear in AX, custom content does not); carry this limitation into the maintained shell instead of claiming full accessibility. Qt fallback is not justified by current evidence.
+## Workspace
 
-## Maintained layout and scope
+- `crates/lightwell-core`: read-only JPEG decode/profile/resource rules, typed errors and bounded open requests.
+- `crates/lightwell-app`: Iced window, native adapters, diagnostics and renderer evidence.
+- `xtask`: Rust development/check/build/package and verification commands.
+- `probes/s0`: isolated UI/decoder comparison workspace, not the maintained application.
 
-Create a Cargo workspace with `crates/lightwell-core` for read-only JPEG decode/profile/resource rules and bounded open requests, `crates/lightwell-app` for window/native adapters and evidence, and `xtask` for actual build/check/package orchestration. Avoid empty catalog/editor/IPC/plugin crates. Keep the isolated comparison probes for reproducibility, excluded from the root workspace.
-
-The first maintained slice must compile a window using the common core, preserve source bytes, open on a worker, reject stale generations, and display accepted sRGB/greyscale JPEG at Fit. Transfer existing tested logic with equivalent tests before extending it. No editor features. Follow the [platform matrix](../engineering/platforms.md), accepted [bootstrap spec](../specs/bootstrap.md), and [tooling contract](../engineering/development.md).
-
-Next tooling slices add typed errors, bounded logs, run/state identity, explicit requested-versus-presented generations, real renderer captures and process-level smoke checks. Smoke output belongs in a fresh ignored directory; captures must be independently checked. Package only native host artifacts; CI definitions and missing Windows/Linux sessions are not equivalent to executed native checks.
+The maintained viewer opens supported JPEGs off the UI thread, applies EXIF orientation once, rejects stale generations and displays a bounded preview at Fit. Source bytes stay unchanged; a failed replacement retains the visible photo. There are no catalog/editor/IPC/plugin crates or implemented editing features.
 
 ## Profile and resource contract
 
-Use the bounded numeric matrix/TRC recognition proven in the follow-up probe, not fixture-byte matching or a profile-name test. Preserve the documented 128 MiB file, 64 MP, 16384-pixel dimension bounds and 512 MiB decoder-allocation bound. Separate decoded image size from upload preview size; bound preview textures to 4096 pixels per side and resize on the worker before upload. This fits within wgpu's conservative texture limits and avoids full 60 MP UI-thread uploads. S0 is Fit-only, so it needs no source-resolution zoom texture.
+Standard-sRGB recognition uses bounded numeric matrix/TRC tests, not fixture bytes or profile names. Limits are 128 MiB source, 64 MP, 16384 pixels per side and a 512 MiB decoder-allocation bound. Preview uploads are bounded to 4096 pixels per side and resized on the worker. Decoder limits are not total process/GPU memory limits.
 
-One active and one latest pending decode; discard stale completion. No thread join on the GUI thread. Error replacement leaves the last image visible. New decode requests, source checks and native path handling belong in the core/service boundary; framework widgets hold display handles only.
+Allow one active and one latest pending decode. Discard stale completions, never join the decoder on the GUI thread, and wait for explicit GPU allocation before reporting rendered readiness. Source-resolution zoom is planned for M1; S0 is Fit-only.
 
-## Acceptance and remaining risks
+## Evidence and development
 
-TASK-006 completes with locked workspace build and testable core boundary, not all S0 tasks. Later tasks require actual command implementations, dependency notices, fixture/evidence checks, native packages, repeatable M4 measurement and M4 desktop evidence plus automated portable checks. macOS floor, Windows/Linux runtime details, complete accessibility and broad ICC/display calibration remain unverified. Manual Windows/Linux and license reviews are now deferred by owner instruction; other limitations must remain explicit.
+Opt-in `--open PATH`, `--evidence-dir NEW_DIRECTORY`, `--window-size WIDTH HEIGHT` and bounded deadlines exercise the same loader as native Open. Records distinguish requested/displayed generations, source/preview dimensions, renderer backend and physical scale. Background work saves state, frames, events, results and reproduction arguments.
 
-## Maintained evidence slice
+Ordinary viewing creates no catalog or source-adjacent files and does not poll while idle. An explicit data root isolates diagnostics. Failures preserve usable viewing and report evidence-write problems rather than claiming success.
 
-Implement opt-in `--open PATH` (repeatable for a deterministic development sequence), `--evidence-dir DIR`, `--window-size WIDTH HEIGHT` and a bounded deadline. Each sequential request uses the same loader as native Open; capture after the resulting UI frame, including failure states retaining the previous texture. Record requested generation separately from displayed generation, source dimensions separately from bounded preview dimensions, renderer backend and physical scale. Save per-step state/frame records and final events/result/reproduction files in the explicit fresh directory, on the background task executor. Native ordinary mode creates no catalog/config and no source-adjacent files. UI polls only during load/capture/deadline monitoring in explicit evidence mode.
-
-Developer runner: cross-platform Rust xtask, with non-mutating Doctor, formatting/lint/test/check/build/develop, fixture-driven smoke and host package assembly. Fail every subprocess error and classify missing desktop evidence honestly. Packaging is a local unsigned development artifact, not a passing license audit or S0 closure. CI uses the same commands and retains only synthetic fixture artifacts; its configuration is not executed CI evidence.
+The [command reference](../engineering/scaffold-commands.md), [hardening evidence](../engineering/s0-hardening-results.md), [CI results](../engineering/ci-results.md) and [platform matrix](../engineering/platforms.md) distinguish verified behavior from outstanding checks. Packages are unsigned development artifacts, not distribution or license-audit approval.

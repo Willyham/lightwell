@@ -10,7 +10,7 @@
 
 **C.** A robust geometric renderer maps destination coordinates back into source coordinates and resamples there. Combining transforms can avoid cumulative resampling loss. But the retrieved sources do not reveal Adobe's exact composition order, interpolation kernel or crop-fitting algorithm. Lens distortion generally requires a nonlinear mapping; a simple affine matrix is insufficient.
 
-**P.** Lightwell's accepted free crop, centered proportional Option resizing and composition-preserving straighten behavior remains defined by its own [M1 specification](../../specs/single-image.md). Similar Lightroom gestures do not settle edge clamping, mask-coordinate transforms, pixel-center conventions or rotation/crop composition.
+**P.** Lightwell's accepted free crop, centered proportional Option resizing and composition-preserving straighten behavior remains defined by its own [editor/crop specification](../../specs/single-image.md). Similar Lightroom gestures do not settle edge clamping, mask-coordinate transforms, pixel-center conventions or rotation/crop composition.
 
 ## A mask is an editable selection plus an effect
 

@@ -2,8 +2,8 @@
   "schema_version": "1.0",
   "plan_id": "product-decisions",
   "title": "Lightwell v0 product decisions",
-  "objective": "Resolve and record product choices separately from engineering, prioritizing the minimal S0 image-loading skeleton and then the M1 non-destructive editor.",
-  "context_summary": "Planning-only update, 2026-09-19. User now requires the first end-to-end build to be a cross-platform skeleton that loads an image with no editing tools. Previously agreed crop, export, persistence, live agents and Locate remain M1 follow-on requirements. TASK-001 preserves the ongoing interview; TASK-023 through TASK-034 track distinct choices and state when they are needed. Dependency-free ready decision tasks can be interviewed independently; future choices do not block S0. Implementation gates TASK-035 and TASK-064 check the specified answers and completion status via file links. No software has been implemented. Current owner instruction (2026-09-19) defers manual Windows/Linux verification and license reviews; existing platform and GPL decisions remain recorded. M1 choices are still awaiting answers. Architecture reaffirmed 2026-09-19: D19–D21 accept complete API coverage, a small shared core/module host and external loading regardless of built-in packaging. Optionality and performance splitting require evidence; TASK-033/034 retain only the unresolved use-case/lifecycle and performance choices. This update implements no software; the existing S0 viewer is tracked in the implementation plan. Owner subsequently adopted TASK-026–030 recommendations and supplied workflow priorities; those decision tasks are complete. History clarification 2026-09-19: the owner requires persistent navigable action history for every edit, with preview and restore at any point. TASK-028/030 remain completed; new TASK-070 resolves the remaining restore/navigation presentation policy before M1 gate TASK-064. On 2026-09-20 the owner answered “Append a restore action and retain all history (Recommended)”, completing TASK-070. Restore appends a semantic action; undo/redo navigation and new edits never delete retained historical states. Research reference 2026-09-20: docs/research/lightroom/README.md will inform later tool/performance choices; research TASK-072 in the implementation plan settles no owner decisions and adds no S0/M1 prerequisite.",
+  "objective": "Resolve and record product choices separately from engineering, retaining accepted S0 decisions and supporting the history-first editor milestones and later scoped work.",
+  "context_summary": "Accepted S0 and editor decisions plus unresolved product questions. The planned editor sequence is history foundation, transforms, tool modules and crop; later workflow, RAW, external-module and performance decisions remain open. Task IDs and dependencies are local to this file.",
   "tasks": [
     {
       "id": "TASK-001",
@@ -11,11 +11,8 @@
       "status": "in_progress",
       "dependencies": [],
       "extra_context": [
-        "Existing interview remains in progress. The latest owner instruction inserts S0: a cross-platform image-loading skeleton without editing tools, before M1.",
-        "TASK-023 through TASK-034 now track concrete unresolved decisions separately. This coordination task is not a prerequisite of every implementation task.",
-        "Preserve all agreed crop, metadata, agent and source-recovery behavior for M1; do not re-ask it as if unresolved.",
-        "D19–D21 are accepted owner requirements: complete programmability, host-owned changes/history and module-owned feature behavior, useful optionality and eventual external loading. Do not reopen these fundamentals while choosing implementation details.",
-        "Owner Lightroom-frustration answer recorded 2026-09-19 with S0/M1/M2/later mapping; no automatic expansion of the current one-image editor scope."
+        "Ongoing product interview. The accepted viewer is followed by history foundation, basic transforms, tool modules and crop; later choices are not prerequisites for starting the history model.",
+        "Preserve accepted behavior in docs/decisions.md and docs/design/history-first-roadmap.md. Planning is proportionate to scope; this coordination task is not a universal execution gate."
       ],
       "context_links": [
         {
@@ -40,13 +37,13 @@
           "kind": "file",
           "label": "Programmable operations and module host",
           "target": "docs/design/modules-and-api.md",
-          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+          "relevance": "Records accepted programmable-operation requirements, host/module responsibilities, staged delivery and measurable acceptance."
         }
       ],
       "acceptance_criteria": [
-        "Maintain a decision index separating accepted requirements, proposals, open questions and superseded sequencing.",
-        "Use short, concrete interview rounds and link each answer to its affected specification and implementation task.",
-        "Resolve each necessary decision before its dependent implementation gate, while leaving future choices outside the S0 critical path.",
+        "Maintain current accepted requirements, proposals and open questions without a planning-change log.",
+        "Use short, concrete interview rounds and record each answer in its affected Markdown specification.",
+        "Resolve necessary behavior choices before implementing their outcomes; leave later product questions outside the history-foundation milestone.",
         "Document scope changes without claiming that any application feature was implemented."
       ],
       "test_strategy": {
@@ -62,17 +59,14 @@
       }
     },
     {
-      "id": "TASK-023",
+      "id": "TASK-002",
       "description": "Define the S0 operating-system, architecture and verification matrix.",
       "status": "completed",
       "dependencies": [],
       "extra_context": [
-        "Needed for S0 gate TASK-035.",
-        "2026-09-19: concrete S0 defaults sent to owner during scaffold execution; awaiting response, not an accepted decision.",
-        "Owner accepted macOS Apple Silicon, Windows x64 and Linux x64, with unsigned development packages. Minimum OS/runtime assumptions and Linux window-system coverage still need resolution; native test routes/evidence remain explicit. See docs/decisions.md scaffold platform interview.",
-        "Owner authorized engineering to choose and document provisional minimum OS versions and Linux desktop configuration from framework requirements (\"Yes fine for now\"). No further owner baseline question needed; finish technical matrix/test-route documentation before completing this task.",
-        "Delegated baseline selection recorded in docs/engineering/platforms.md: macOS 14+ arm64, Windows 11 24H2+ x64, Ubuntu 24.04 x64 GNOME Wayland and X11; unsigned development archives. M4 route available, Windows/Linux routes explicitly outstanding. Decision complete; verification is not.",
-        "2026-09-19: platform target decision retained; owner now defers manual Windows/Linux implementation checks from S0."
+        "Owner accepted macOS Apple Silicon, Windows x64 and Linux x64 with unsigned development artifacts on 2026-09-19.",
+        "Delegated baseline selection is recorded in docs/engineering/platforms.md: macOS 14+ arm64, Windows 11 24H2+ x64 and Ubuntu 24.04 x64 GNOME Wayland/X11. This completes the decision; verification remains separately recorded.",
+        "Manual Windows/Linux desktop checks are deferred by owner instruction; no native performance claim follows."
       ],
       "context_links": [
         {
@@ -85,7 +79,7 @@
           "kind": "file",
           "label": "Planning and gate rules",
           "target": "docs/task-planning.md",
-          "relevance": "Defines separate plans, milestone boundaries and external decision gates."
+          "relevance": "Defines local task plans, milestone boundaries and named outcome prerequisites."
         },
         {
           "kind": "file",
@@ -119,15 +113,13 @@
       }
     },
     {
-      "id": "TASK-024",
+      "id": "TASK-003",
       "description": "Select the project license and document the open-source dependency policy.",
       "status": "completed",
       "dependencies": [],
       "extra_context": [
-        "Needed for S0 gate TASK-035; review configured dependencies again in TASK-041.",
-        "2026-09-19: concrete S0 defaults sent to owner during scaffold execution; awaiting response, not an accepted decision.",
-        "Owner selected recommended GPL-3.0-or-later in one-at-a-time scaffold interview. Policy/responsibilities recorded in docs/decisions.md; TASK-005 applies license and TASK-041 audits configured dependencies. Earlier prototype-only deferral proposal superseded.",
-        "2026-09-19: GPL selection retained; implementation manual license reviews deferred by owner."
+        "Owner selected GPL-3.0-or-later on 2026-09-19; the project license is applied. Existing notices and automated policy remain.",
+        "Manual license/native/asset reviews are deferred. Selection is not proof that every configured dependency has been audited."
       ],
       "context_links": [
         {
@@ -140,7 +132,7 @@
           "kind": "file",
           "label": "Planning and gate rules",
           "target": "docs/task-planning.md",
-          "relevance": "Defines separate plans, milestone boundaries and external decision gates."
+          "relevance": "Defines local task plans, milestone boundaries and named outcome prerequisites."
         },
         {
           "kind": "file",
@@ -150,7 +142,7 @@
         }
       ],
       "acceptance_criteria": [
-        "Record the exact project SPDX license or an explicit owner-approved prototype-only deferral with the condition for settling it.",
+        "Record GPL-3.0-or-later as the selected project SPDX license and distinguish policy selection from a completed dependency audit.",
         "Clarify that open-source project/runtime dependencies and extensions are the goal while native Windows/macOS SDK/toolchain requirements are documented separately.",
         "State the policy for bundled assets/fonts, native libraries, optional features and extension integrations; no proprietary hosted service is required to develop or test the app.",
         "Record the accepted policy and dependency-review responsibilities without implying that a license recommendation was already applied."
@@ -170,15 +162,13 @@
       }
     },
     {
-      "id": "TASK-025",
+      "id": "TASK-004",
       "description": "Set the minimal skeleton layout and loading/error behavior.",
       "status": "completed",
       "dependencies": [],
       "extra_context": [
-        "Needed for S0 gate TASK-035; does not decide the future Library/Edit layout.",
-        "2026-09-19: concrete S0 defaults sent to owner during scaffold execution; awaiting response, not an accepted decision.",
-        "Owner accepted dark background, one Open image button, automatic Fit, brief loading/error messages and retention of previous photo after failed replacement. Input/profile contract still requires resolution; experimental exact-profile allowlist is not implicitly accepted.",
-        "Owner accepted standard sRGB/greyscale JPEG, automatic orientation correction and explicit unsupported-profile errors; broader color support later. Together with accepted shell behavior this completes the product decision, not implementation. Exact-profile probe allowlist is insufficient for general standard-sRGB support."
+        "Owner accepted a dark Open/Fit viewer, concise loading/errors and retention of the previous image after a failed replacement.",
+        "Supported input is standard sRGB/greyscale JPEG with automatic orientation and explicit unsupported-profile errors. The experimental exact-profile allowlist was insufficient; the maintained viewer's recognition is recorded in its evidence."
       ],
       "context_links": [
         {
@@ -191,7 +181,7 @@
           "kind": "file",
           "label": "Planning and gate rules",
           "target": "docs/task-planning.md",
-          "relevance": "Defines separate plans, milestone boundaries and external decision gates."
+          "relevance": "Defines local task plans, milestone boundaries and named outcome prerequisites."
         },
         {
           "kind": "file",
@@ -221,15 +211,13 @@
       }
     },
     {
-      "id": "TASK-026",
-      "description": "Choose the M1 workspace layout and essential keyboard/navigation behavior.",
+      "id": "TASK-005",
+      "description": "Choose the editor workspace layout and essential keyboard/navigation behavior.",
       "status": "completed",
       "dependencies": [],
       "extra_context": [
-        "Needed before M1 gate TASK-064; not required by S0.",
-        "Recommendations presented in hardening session; awaiting owner adoption or individual answers. Do not infer accepted product behavior from the engineering execution request.",
-        "2026-09-19 owner answered workflow frustrations: speed, unused tools, filtering, confusing tagging/collections, lazy shoot subsets in full catalogs, selection/stacking, bracket/panorama identification and export defaults. Recorded with milestone mapping in docs/decisions.md. Layout/shortcut adoption remains unanswered.",
-        "2026-09-19: owner explicitly adopted the recommendations and delegated routine details. Accepted outcomes are recorded in docs/design/m1-decisions.md and synchronized with editor/recovery specs. TASK-026 personal workflow input was separately answered. Earlier awaiting-answer notes are historical."
+        "Owner adopted one workspace, collapsible controls and routine keyboard/focus defaults on 2026-09-19.",
+        "Workflow priorities include speed, unused tools, filtering/tagging/collections, lazy shoot subsets, selection/stacking, bracket/panorama identification and export clarity. These guide later scoped work rather than expanding the four milestones."
       ],
       "context_links": [
         {
@@ -242,26 +230,26 @@
           "kind": "file",
           "label": "Planning and gate rules",
           "target": "docs/task-planning.md",
-          "relevance": "Defines separate plans, milestone boundaries and external decision gates."
+          "relevance": "Defines local task plans, milestone boundaries and named outcome prerequisites."
         },
         {
           "kind": "file",
-          "label": "M1 editor specification",
+          "label": "editor editor specification",
           "target": "docs/specs/single-image.md",
           "relevance": "Preserves subsequent editing, persistence and automation scope."
         },
         {
           "kind": "file",
-          "label": "Accepted M1 decisions",
+          "label": "Accepted editor decisions",
           "target": "docs/design/m1-decisions.md",
           "relevance": "Owner-adopted behavior and delegated routine defaults; implementation remains gated."
         }
       ],
       "acceptance_criteria": [
-        "Resolve the pending one-workspace versus separate Library/Edit question while keeping the M1 one-image scope small.",
+        "Resolve the pending one-workspace versus separate Library/Edit question while keeping the editor one-image scope small.",
         "Choose the essential shortcuts and panel visibility/focus rules; retain agreed zoom/pan/percentage/Fit scope.",
         "Record two or three concrete Lightroom workflow frustrations and map them to immediate or later priorities.",
-        "Update M1 layout/navigation decisions without pulling a full grid or unselected workflow feature into S0."
+        "Update editor layout/navigation decisions without pulling a full grid or unselected workflow feature into S0."
       ],
       "test_strategy": {
         "approach": "manual",
@@ -271,19 +259,18 @@
         ],
         "commands": [],
         "expected_results": [
-          "Update M1 layout/navigation decisions without pulling a full grid or unselected workflow feature into S0."
+          "Update editor layout/navigation decisions without pulling a full grid or unselected workflow feature into S0."
         ]
       }
     },
     {
-      "id": "TASK-027",
+      "id": "TASK-006",
       "description": "Resolve remaining geometry semantics and crop-control details.",
       "status": "completed",
       "dependencies": [],
       "extra_context": [
-        "Needed before M1 gate TASK-064; proportional Option scaling and composition-preserving straightening are already agreed.",
-        "Recommendations presented in hardening session; awaiting owner adoption or individual answers. Do not infer accepted product behavior from the engineering execution request.",
-        "2026-09-19: owner explicitly adopted the recommendations and delegated routine details. Accepted outcomes are recorded in docs/design/m1-decisions.md and synchronized with editor/recovery specs. TASK-026 personal workflow input was separately answered. Earlier awaiting-answer notes are historical."
+        "Owner accepted visible-composition mirroring and quarter-turn crop carry, ratio orientation swap, Free/Original/1:1/3:2/4:3/16:9/custom ratios and Space-drag pan.",
+        "Fixed-center proportional Option scaling and composition-preserving straightening remain accepted. Discrete mapping is addressed with transforms; detailed crop fitting belongs to the crop module."
       ],
       "context_links": [
         {
@@ -296,26 +283,26 @@
           "kind": "file",
           "label": "Planning and gate rules",
           "target": "docs/task-planning.md",
-          "relevance": "Defines separate plans, milestone boundaries and external decision gates."
+          "relevance": "Defines local task plans, milestone boundaries and named outcome prerequisites."
         },
         {
           "kind": "file",
-          "label": "M1 editor specification",
+          "label": "editor editor specification",
           "target": "docs/specs/single-image.md",
           "relevance": "Preserves subsequent editing, persistence and automation scope."
         },
         {
           "kind": "file",
-          "label": "Accepted M1 decisions",
+          "label": "Accepted editor decisions",
           "target": "docs/design/m1-decisions.md",
           "relevance": "Owner-adopted behavior and delegated routine defaults; implementation remains gated."
         }
       ],
       "acceptance_criteria": [
         "Resolve whether horizontal flip mirrors the viewed composition and carries the crop; show an example after rotation/straightening.",
-        "Define quarter-turn behavior for an existing crop and lock, essential aspect-ratio presets and whether custom ratios/numeric edges are needed in M1.",
+        "Define quarter-turn behavior for an existing crop and lock, essential aspect-ratio presets and whether custom ratios/numeric edges are needed in editor.",
         "Choose the pan-versus-crop gesture and any required shortcuts or angle limits without reopening agreed centered Option behavior.",
-        "Record concrete before/after geometry examples for the reference experiment TASK-004."
+        "Record concrete before/after geometry examples for the transform and crop numerical proofs."
       ],
       "test_strategy": {
         "approach": "manual",
@@ -325,20 +312,19 @@
         ],
         "commands": [],
         "expected_results": [
-          "Record concrete before/after geometry examples for the reference experiment TASK-004."
+          "Record concrete before/after geometry examples for the reference experiment the prove the geometry and color contracts with small reference experiments."
         ]
       }
     },
     {
-      "id": "TASK-028",
-      "description": "Confirm M1 edit commit, undo and recovery expectations.",
+      "id": "TASK-007",
+      "description": "Confirm editor edit commit, undo and recovery expectations.",
       "status": "completed",
       "dependencies": [],
       "extra_context": [
-        "Needed before M1 gate TASK-064; catalog backup/sidecar expansion is TASK-031.",
-        "Recommendations presented in hardening session; awaiting owner adoption or individual answers. Do not infer accepted product behavior from the engineering execution request.",
-        "2026-09-19: owner explicitly adopted the recommendations and delegated routine details. Accepted outcomes are recorded in docs/design/m1-decisions.md and synchronized with editor/recovery specs. TASK-026 personal workflow input was separately answered. Earlier awaiting-answer notes are historical.",
-        "2026-09-19 history clarification: core action log plus arbitrary-entry preview/restore is required. Earlier decisions remain accepted; TASK-070 tracks the remaining restore/navigation policy without rewriting this completed task."
+        "Owner accepted Apply/Cancel for crop drafts, transactional autosave, persistent committed history and session-only unapplied drafts.",
+        "Verified manual Locate preserves asset identity and rejects changed or ambiguous content. The catalog is initial storage; sidecar/backup expansion remains a later decision.",
+        "The accepted history and restore policy are recorded in docs/specs/edit-history.md."
       ],
       "context_links": [
         {
@@ -351,11 +337,11 @@
           "kind": "file",
           "label": "Planning and gate rules",
           "target": "docs/task-planning.md",
-          "relevance": "Defines separate plans, milestone boundaries and external decision gates."
+          "relevance": "Defines local task plans, milestone boundaries and named outcome prerequisites."
         },
         {
           "kind": "file",
-          "label": "M1 editor specification",
+          "label": "editor editor specification",
           "target": "docs/specs/single-image.md",
           "relevance": "Preserves subsequent editing, persistence and automation scope."
         },
@@ -367,7 +353,7 @@
         },
         {
           "kind": "file",
-          "label": "Accepted M1 decisions",
+          "label": "Accepted editor decisions",
           "target": "docs/design/m1-decisions.md",
           "relevance": "Owner-adopted behavior and delegated routine defaults; implementation remains gated."
         },
@@ -397,14 +383,13 @@
       }
     },
     {
-      "id": "TASK-029",
-      "description": "Set the remaining M1 JPEG export defaults and supported metadata behavior.",
+      "id": "TASK-008",
+      "description": "Set the remaining editor JPEG export defaults and supported metadata behavior.",
       "status": "completed",
       "dependencies": [],
       "extra_context": [
-        "Needed before M1 gate TASK-064; default stripping and Keep metadata are already agreed.",
-        "Recommendations presented in hardening session; awaiting owner adoption or individual answers. Do not infer accepted product behavior from the engineering execution request.",
-        "2026-09-19: owner explicitly adopted the recommendations and delegated routine details. Accepted outcomes are recorded in docs/design/m1-decisions.md and synchronized with editor/recovery specs. TASK-026 personal workflow input was separately answered. Earlier awaiting-answer notes are historical."
+        "Owner accepted JPEG quality 90, a suggested -edited.jpg name, no existing-file/source-alias overwrite, and optional metadata stripping by default.",
+        "Keep metadata retains supported valid descriptive/capture/GPS fields while geometry/profile and stale thumbnails are corrected. Exact writer/field feasibility belongs to the retained export proof."
       ],
       "context_links": [
         {
@@ -417,17 +402,17 @@
           "kind": "file",
           "label": "Planning and gate rules",
           "target": "docs/task-planning.md",
-          "relevance": "Defines separate plans, milestone boundaries and external decision gates."
+          "relevance": "Defines local task plans, milestone boundaries and named outcome prerequisites."
         },
         {
           "kind": "file",
-          "label": "M1 editor specification",
+          "label": "editor editor specification",
           "target": "docs/specs/single-image.md",
           "relevance": "Preserves subsequent editing, persistence and automation scope."
         },
         {
           "kind": "file",
-          "label": "Accepted M1 decisions",
+          "label": "Accepted editor decisions",
           "target": "docs/design/m1-decisions.md",
           "relevance": "Owner-adopted behavior and delegated routine defaults; implementation remains gated."
         }
@@ -451,16 +436,14 @@
       }
     },
     {
-      "id": "TASK-030",
-      "description": "Resolve M1 human-agent conflict and history presentation.",
+      "id": "TASK-009",
+      "description": "Resolve editor human-agent conflict and history presentation.",
       "status": "completed",
       "dependencies": [],
       "extra_context": [
-        "Needed before M1 gate TASK-064; live GUI/agent editing is already required.",
-        "Recommendations presented in hardening session; awaiting owner adoption or individual answers. Do not infer accepted product behavior from the engineering execution request.",
-        "D19 requires every M1 operation to be programmable, including session/view state and settings when present. This task resolves conflict presentation, not whether agents receive complete feature access.",
-        "2026-09-19: owner explicitly adopted the recommendations and delegated routine details. Accepted outcomes are recorded in docs/design/m1-decisions.md and synchronized with editor/recovery specs. TASK-026 personal workflow input was separately answered. Earlier awaiting-answer notes are historical.",
-        "2026-09-19 history clarification: core action log plus arbitrary-entry preview/restore is required. Earlier decisions remain accepted; TASK-070 tracks the remaining restore/navigation policy without rewriting this completed task."
+        "All implemented operations are programmable, including view/settings state. The owner accepted shared attributed history and one catalog owner.",
+        "An external commit preserves a human draft and marks conflict; explicit discard/reapply resolves it. Reconnect refreshes authoritative state and disconnection does not cancel another client's jobs.",
+        "Live JSON/API access arrives with the history foundation; the MCP adapter remains an explicit editor follow-up."
       ],
       "context_links": [
         {
@@ -473,7 +456,7 @@
           "kind": "file",
           "label": "Planning and gate rules",
           "target": "docs/task-planning.md",
-          "relevance": "Defines separate plans, milestone boundaries and external decision gates."
+          "relevance": "Defines local task plans, milestone boundaries and named outcome prerequisites."
         },
         {
           "kind": "file",
@@ -486,11 +469,11 @@
           "kind": "file",
           "label": "Programmable operations and module host",
           "target": "docs/design/modules-and-api.md",
-          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+          "relevance": "Records accepted programmable-operation requirements, host/module responsibilities, staged delivery and measurable acceptance."
         },
         {
           "kind": "file",
-          "label": "Accepted M1 decisions",
+          "label": "Accepted editor decisions",
           "target": "docs/design/m1-decisions.md",
           "relevance": "Owner-adopted behavior and delegated routine defaults; implementation remains gated."
         },
@@ -520,12 +503,12 @@
       }
     },
     {
-      "id": "TASK-031",
+      "id": "TASK-010",
       "description": "Research storage workflows and decide later catalog portability and backup behavior.",
       "status": "ready",
       "dependencies": [],
       "extra_context": [
-        "Later product work; does not gate S0 or initial manual Locate."
+        "Later product research on storage/backup/sidecars and broader photographer workflows. It does not gate the catalog history foundation or agreed manual Locate."
       ],
       "context_links": [
         {
@@ -538,7 +521,7 @@
           "kind": "file",
           "label": "Planning and gate rules",
           "target": "docs/task-planning.md",
-          "relevance": "Defines separate plans, milestone boundaries and external decision gates."
+          "relevance": "Defines local task plans, milestone boundaries and named outcome prerequisites."
         },
         {
           "kind": "file",
@@ -572,12 +555,12 @@
       }
     },
     {
-      "id": "TASK-032",
+      "id": "TASK-011",
       "description": "Prioritize RAW work and define camera-specific quality expectations.",
       "status": "ready",
       "dependencies": [],
       "extra_context": [
-        "Later milestone planning; no RAW dependency for S0 or M1 JPEG."
+        "Later RAW planning for real Nikon Z6 and Fujifilm X100VI modes/samples. The first four milestones operate on supported JPEGs."
       ],
       "context_links": [
         {
@@ -590,7 +573,7 @@
           "kind": "file",
           "label": "Planning and gate rules",
           "target": "docs/task-planning.md",
-          "relevance": "Defines separate plans, milestone boundaries and external decision gates."
+          "relevance": "Defines local task plans, milestone boundaries and named outcome prerequisites."
         },
         {
           "kind": "file",
@@ -618,12 +601,13 @@
       }
     },
     {
-      "id": "TASK-033",
+      "id": "TASK-012",
       "description": "Choose the first external module use case and user-visible enablement/recovery behavior.",
       "status": "ready",
       "dependencies": [],
       "extra_context": [
-        "Later product work: external module loading is required by D21, while its use case/runtime remain open. S0/M1 do not require a dynamic loader; M1 built-ins must already use the shared host APIs."
+        "External module loading remains required, but the use case, runtime and user-facing lifecycle need a concrete decision.",
+        "The linked tool-module milestone is already selected and does not wait on external packaging or a marketplace."
       ],
       "context_links": [
         {
@@ -636,7 +620,7 @@
           "kind": "file",
           "label": "Planning and gate rules",
           "target": "docs/task-planning.md",
-          "relevance": "Defines separate plans, milestone boundaries and external decision gates."
+          "relevance": "Defines local task plans, milestone boundaries and named outcome prerequisites."
         },
         {
           "kind": "file",
@@ -649,7 +633,7 @@
           "kind": "file",
           "label": "Programmable operations and module host",
           "target": "docs/design/modules-and-api.md",
-          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+          "relevance": "Records accepted programmable-operation requirements, host/module responsibilities, staged delivery and measurable acceptance."
         }
       ],
       "acceptance_criteria": [
@@ -659,7 +643,7 @@
         "Record a scoped extension proof and success criterion, maintaining the open-source direction.",
         "Choose useful independent optional boundaries without assuming one binary per tool/camera; distinguish hidden panels, enabled features and loaded resources.",
         "Resolve dependency, disable/re-enable and restart behavior for the chosen use case; preserve existing recipe/history data and prohibit silent exports with an unavailable effect.",
-        "The proof requires loading a separately authored module without host source changes and exposing its operations through the common APIs; an external script alone is insufficient. Record inputs for implementation TASK-067."
+        "Define success as loading a separately authored module without host source changes and exposing its actions through the common APIs; an external client alone is insufficient."
       ],
       "test_strategy": {
         "approach": "manual",
@@ -675,14 +659,13 @@
       }
     },
     {
-      "id": "TASK-034",
+      "id": "TASK-013",
       "description": "Prioritize performance workloads and settle user-visible responsiveness goals.",
       "status": "ready",
       "dependencies": [],
       "extra_context": [
-        "S0 records measurements; accepted long-term budgets and catalog workloads are needed before scaling work.",
-        "Module performance is an engineering hypothesis. TASK-067 measures a selected use case; no new performance threshold or benchmark result is accepted by this planning update.",
-        "Owner prioritizes speed and lazy subsection editing within a full catalog. M4 initial viewer baseline now measured in s0-hardening-results.md; exact catalog workloads and accepted longer-term budgets remain open."
+        "Record workload priorities and measured native M4 conditions; proposed performance budgets require evidence and owner acceptance.",
+        "Speed and lazy subsection editing within a full catalog are owner priorities. Avoid assuming binary splitting saves memory or latency."
       ],
       "context_links": [
         {
@@ -695,7 +678,7 @@
           "kind": "file",
           "label": "Planning and gate rules",
           "target": "docs/task-planning.md",
-          "relevance": "Defines separate plans, milestone boundaries and external decision gates."
+          "relevance": "Defines local task plans, milestone boundaries and named outcome prerequisites."
         },
         {
           "kind": "file",
@@ -707,7 +690,7 @@
           "kind": "file",
           "label": "Programmable operations and module host",
           "target": "docs/design/modules-and-api.md",
-          "relevance": "Records accepted D19–D21 requirements, host/module responsibilities, staged delivery and measurable acceptance."
+          "relevance": "Records accepted programmable-operation requirements, host/module responsibilities, staged delivery and measurable acceptance."
         },
         {
           "kind": "file",
@@ -736,14 +719,13 @@
       }
     },
     {
-      "id": "TASK-070",
-      "description": "Resolve M1 restore and undo/redo navigation presentation while retaining the complete edit log.",
+      "id": "TASK-014",
+      "description": "Resolve editor restore and undo/redo navigation presentation while retaining the complete edit log.",
       "status": "completed",
       "dependencies": [],
       "extra_context": [
-        "Owner already requires every committed edit in persistent core history, with preview/restore at any point. This task does not reopen that requirement or the completed TASK-028/030 decisions.",
-        "2026-09-20 owner answer: append a Restore action and retain all history. docs/specs/edit-history.md records the accepted policy and routine navigation rules: undo-parent links, persisted redo path and current-state markers; new edits clear shortcut redo without deleting history.",
-        "Required external input to implementation TASK-064, verified by inspection; current repository checker automatically covers TASK-026–030 only."
+        "Owner accepted append-only Restore with all history retained on 2026-09-20.",
+        "Undo/redo navigate undo-parent/redo paths with monotonic revisions, and a new edit may clear shortcut redo while retaining old entries."
       ],
       "context_links": [
         {
@@ -756,14 +738,14 @@
           "kind": "file",
           "label": "History decision record",
           "target": "docs/decisions.md",
-          "locator": "M1 history as a core editor feature — 2026-09-19",
+          "locator": "Editing and storage",
           "relevance": "Records accepted scope and the outstanding restore/navigation recommendation."
         }
       ],
       "acceptance_criteria": [
         "Record the owner choice for restoring an earlier point, preserving the already-required availability of all historical states.",
         "Document Original → Crop → Flip → Straighten → restore Crop → undo/redo → new edit, including current-state markers, any navigation records, shortcut redo invalidation and retention after restart. Repeated undo must traverse actions rather than oscillate on undo entries.",
-        "Synchronize history/editor/architecture specifications and implementation criteria; TASK-064 cannot complete with this choice unanswered."
+        "Synchronize history/editor/architecture specifications with the accepted append-only Restore and navigation policy."
       ],
       "test_strategy": {
         "approach": "inspection",
@@ -783,19 +765,19 @@
       "wave": 1,
       "task_ids": [
         "TASK-001",
-        "TASK-023",
-        "TASK-024",
-        "TASK-025",
-        "TASK-026",
-        "TASK-027",
-        "TASK-028",
-        "TASK-029",
-        "TASK-030",
-        "TASK-031",
-        "TASK-032",
-        "TASK-033",
-        "TASK-034",
-        "TASK-070"
+        "TASK-002",
+        "TASK-003",
+        "TASK-004",
+        "TASK-005",
+        "TASK-006",
+        "TASK-007",
+        "TASK-008",
+        "TASK-009",
+        "TASK-010",
+        "TASK-011",
+        "TASK-012",
+        "TASK-013",
+        "TASK-014"
       ]
     }
   ]

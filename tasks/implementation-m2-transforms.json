@@ -1,0 +1,259 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "m2-transforms",
+  "title": "M2 — basic image transforms",
+  "objective": "Add exact rotations and horizontal/vertical reflection using the existing persistent layer/history service through UI and API.",
+  "context_summary": "All IDs and dependencies are local to this file. Milestone order is described by named outcomes in docs/design/history-first-roadmap.md; no task in another file is a prerequisite. Implementation is on hold by owner instruction. Begin after the saved-history foundation is demonstrated. The first task remains pending until this milestone is activated.",
+  "tasks": [
+    {
+      "id": "TASK-001",
+      "description": "Define exact rotation and reflection layer semantics.",
+      "status": "pending",
+      "dependencies": [],
+      "extra_context": [
+        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "roadmap",
+          "target": "docs/design/history-first-roadmap.md",
+          "relevance": "Defines this task's behavior, scope and observable acceptance."
+        }
+      ],
+      "acceptance_criteria": [
+        "Start from a working saved-history/pixel-edit foundation; record that named baseline in the implementation evidence.",
+        "Define clockwise/counterclockwise quarter turns, Mirror horizontal and Flip vertical with input-stage pixel coordinates, output dimensions and exact integer mappings.",
+        "Specify layer composition and history semantics for transforms before/after pixel edits; four rotations and double reflections are identity mappings.",
+        "Fixtures distinguish all axes and operation order, including EXIF-mirrored sources, odd dimensions and non-square images."
+      ],
+      "test_strategy": {
+        "approach": "mixed",
+        "steps": [
+          "Write coordinate tables and expected buffers for asymmetric 3x2/5x3 images.",
+          "Walk pixel-before-transform and pixel-after-transform cases without introducing crop or interpolation."
+        ],
+        "commands": [
+          "cargo xtask check"
+        ],
+        "expected_results": [
+          "Fixtures distinguish all axes and operation order, including EXIF-mirrored sources, odd dimensions and non-square images."
+        ]
+      }
+    },
+    {
+      "id": "TASK-002",
+      "description": "Implement basic transforms through shared layer/history commands.",
+      "status": "pending",
+      "dependencies": [
+        "TASK-001"
+      ],
+      "extra_context": [
+        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "roadmap",
+          "target": "docs/design/history-first-roadmap.md",
+          "relevance": "Defines this task's behavior, scope and observable acceptance."
+        },
+        {
+          "kind": "file",
+          "label": "history",
+          "target": "docs/specs/edit-history.md",
+          "relevance": "Defines this task's behavior, scope and observable acceptance."
+        }
+      ],
+      "acceptance_criteria": [
+        "Add exact rotate-left/right and horizontal/vertical reflection processors with no unnecessary resampling.",
+        "Each successful command adds one semantic transform layer and history entry through the existing transaction service with shared schemas and revision/retry behavior.",
+        "Snapshot rendering, undo/redo, restore and reopen preserve operation order and correctly transform earlier pixel changes.",
+        "Headless tests verify mappings, dimension swaps, compositions, historical snapshots, no source mutation and rejection without partial state."
+      ],
+      "test_strategy": {
+        "approach": "mixed",
+        "steps": [
+          "Evaluate every primitive and noncommuting combination against explicit expected buffers.",
+          "Test saved stacks containing repeated pixel/transform operations and revision conflicts."
+        ],
+        "commands": [
+          "cargo xtask check"
+        ],
+        "expected_results": [
+          "Headless tests verify mappings, dimension swaps, compositions, historical snapshots, no source mutation and rejection without partial state."
+        ]
+      }
+    },
+    {
+      "id": "TASK-003",
+      "description": "Expose rotation and reflection in the desktop and live API.",
+      "status": "pending",
+      "dependencies": [
+        "TASK-002"
+      ],
+      "extra_context": [
+        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "roadmap",
+          "target": "docs/design/history-first-roadmap.md",
+          "relevance": "Defines this task's behavior, scope and observable acceptance."
+        },
+        {
+          "kind": "file",
+          "label": "verification",
+          "target": "docs/engineering/development.md",
+          "relevance": "Defines this task's behavior, scope and observable acceptance."
+        }
+      ],
+      "acceptance_criteria": [
+        "Add Rotate left/right, Mirror horizontal and Flip vertical controls with matching programmatic actions and unambiguous axis labels.",
+        "Update viewport dimensions and history markers after transforms; preserve selected historical previews on external commits.",
+        "Handle preview mode, drafts and errors through the shared service; keyboard and pointer operations produce the same stack/history.",
+        "Native UI and external-client tests display expected transformed pixels and use one history."
+      ],
+      "test_strategy": {
+        "approach": "mixed",
+        "steps": [
+          "Use asymmetric fixtures at Fit/100%, then undo/restore and reopen.",
+          "Perform transforms from an external process while the GUI is open and verify attribution/state updates."
+        ],
+        "commands": [
+          "cargo xtask check"
+        ],
+        "expected_results": [
+          "Native UI and external-client tests display expected transformed pixels and use one history."
+        ]
+      }
+    },
+    {
+      "id": "TASK-004",
+      "description": "Verify persistence, composition and failure recovery for transforms.",
+      "status": "pending",
+      "dependencies": [
+        "TASK-003"
+      ],
+      "extra_context": [
+        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "history",
+          "target": "docs/specs/edit-history.md",
+          "relevance": "Defines this task's behavior, scope and observable acceptance."
+        },
+        {
+          "kind": "file",
+          "label": "roadmap",
+          "target": "docs/design/history-first-roadmap.md",
+          "relevance": "Defines this task's behavior, scope and observable acceptance."
+        },
+        {
+          "kind": "file",
+          "label": "verification",
+          "target": "docs/engineering/development.md",
+          "relevance": "Defines this task's behavior, scope and observable acceptance."
+        }
+      ],
+      "acceptance_criteria": [
+        "Compare UI/API recipes, exact lossless pixels and retained history across rotations, both reflections, undo/redo, restore and restart.",
+        "Test conflicting revisions, unavailable sources and write failures without corrupting the saved layer stack.",
+        "Correlate actual native M4 captures with image dimensions, snapshot IDs and source hashes.",
+        "Basic transforms extend the working foundation with no regressions in earlier pixel edits or history behavior."
+      ],
+      "test_strategy": {
+        "approach": "mixed",
+        "steps": [
+          "Replay mixed pixel/transform sequences from original bytes and from reopened catalogs.",
+          "Check all operation schemas and source preservation under failure and cancellation."
+        ],
+        "commands": [
+          "cargo xtask check"
+        ],
+        "expected_results": [
+          "Basic transforms extend the working foundation with no regressions in earlier pixel edits or history behavior."
+        ]
+      }
+    },
+    {
+      "id": "TASK-005",
+      "description": "Publish the basic-transform milestone evidence and handoff.",
+      "status": "pending",
+      "dependencies": [
+        "TASK-004"
+      ],
+      "extra_context": [
+        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "roadmap",
+          "target": "docs/design/history-first-roadmap.md",
+          "relevance": "Defines this task's behavior, scope and observable acceptance."
+        },
+        {
+          "kind": "file",
+          "label": "verification",
+          "target": "docs/engineering/development.md",
+          "relevance": "Defines this task's behavior, scope and observable acceptance."
+        }
+      ],
+      "acceptance_criteria": [
+        "Update package/check evidence, supported UI/API commands and measured transform/preview costs.",
+        "Document exact axis, coordinate and operation-order semantics in user/developer references.",
+        "Keep crop and generalized module support marked planned until their own work completes.",
+        "The native M4 transform journey and automated portable checks are reproducible from the documented commands."
+      ],
+      "test_strategy": {
+        "approach": "mixed",
+        "steps": [
+          "Repeat the packaged journey and check documentation against available schemas.",
+          "Record deferred native platform verification separately."
+        ],
+        "commands": [
+          "cargo xtask check"
+        ],
+        "expected_results": [
+          "The native M4 transform journey and automated portable checks are reproducible from the documented commands."
+        ]
+      }
+    }
+  ],
+  "execution_waves": [
+    {
+      "wave": 1,
+      "task_ids": [
+        "TASK-001"
+      ]
+    },
+    {
+      "wave": 2,
+      "task_ids": [
+        "TASK-002"
+      ]
+    },
+    {
+      "wave": 3,
+      "task_ids": [
+        "TASK-003"
+      ]
+    },
+    {
+      "wave": 4,
+      "task_ids": [
+        "TASK-004"
+      ]
+    },
+    {
+      "wave": 5,
+      "task_ids": [
+        "TASK-005"
+      ]
+    }
+  ]
+}

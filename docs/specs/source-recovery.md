@@ -1,16 +1,16 @@
 # Referenced originals and source recovery
 
-Status: **M1 manual Locate agreed on 2026-09-19; owner-facing recovery defaults accepted during TASK-028; unimplemented**. The owner references existing photos, usually edits from local storage, then syncs back to an external drive. Other photographers' storage workflows require later research. Lightwell must preserve edits when originals are moved or reorganized.
+Status: **planned editor recovery follow-up**. Stable asset identity, fingerprints and missing/changed-source protection begin in the history foundation; manual Locate follows the four core milestones. The owner references existing local files then syncs to external storage. See [the current sequence](../design/history-first-roadmap.md).
 
 ## Principles and data model
 
 An asset has a permanent catalog ID. Its path is a changeable locator. A content fingerprint verifies which bytes that locator currently names; it is not the asset's primary ID. Keep the edit recipe and history attached to the asset ID throughout moves, temporary offline states and relinking.
 
-Store source roots separately from relative paths, plus availability state and the last verified source fingerprint. M1 records a full streamed content hash during its background single-file import. Read/hash/decode from a consistent source snapshot where possible and detect concurrent modification; do not pair a hash of one version with pixels from another. File size/mtime and filesystem IDs are fast hints, not proof that two files contain the same photo. Future imports can schedule hashing with bounded background work rather than blocking large-library startup.
+Store source roots separately from relative paths, plus availability state and the last verified source fingerprint. The history foundation records a full streamed content hash during its background single-file import. Read/hash/decode from a consistent source snapshot where possible and detect concurrent modification; do not pair a hash of one version with pixels from another. File size/mtime and filesystem IDs are fast hints, not proof that two files contain the same photo. Future imports can schedule hashing with bounded background work rather than blocking large-library startup.
 
 Byte-identical copies can share a fingerprint without being the same catalog asset. Never merge assets or their edits merely because hashes match. A content change, including a metadata rewrite inside the file, invalidates a strict full-file fingerprint; preserving edits across such a replacement is a future explicitly reviewed workflow.
 
-## M1: Locate missing original
+## Editor follow-up: Locate missing original
 
 1. Detect an unavailable source and retain the asset, recipe and history. Show the last known path and cached preview when present, labelled as unavailable-original content. Missing means unavailable; do not infer deletion simply because an external drive is disconnected.
 2. Offer **Locate original** and allow the user to select an existing file. Do not search the whole disk or all attached drives automatically.
@@ -22,7 +22,7 @@ Cancellation, inaccessible candidates, mismatches and database write failures le
 
 Expose the same operation programmatically, with asset ID, candidate locator and an expected revision. Include proposed command schemas in the shared registry. Human and agent relinking follow the same validation, conflict and progress rules. A source-location change must not erase the geometry undo stack; keep location audit information distinct from recipe undo as needed.
 
-M1 does not move, copy, synchronize or delete original files. The user can point Locate at the verified external-drive copy after their own sync; Lightwell changes only its catalog reference. If both copies remain, selecting the active location is explicit. Automatic local-cache/archive switching and multi-location tracking remain future work.
+The editor does not move, copy, synchronize or delete original files. The user can point Locate at the verified external-drive copy after their own sync; Lightwell changes only its catalog reference. If both copies remain, selecting the active location is explicit. Automatic local-cache/archive switching and multi-location tracking remain future work.
 
 ## Later: folder moves and automated assistance
 
@@ -39,7 +39,7 @@ Proposed follow-up behavior:
 
 Sidecars may eventually help catalog portability and recovery, but add write/conflict/identity choices of their own. Keep the current catalog authoritative until that workflow is specified.
 
-## M1 acceptance
+## Locate acceptance
 
 - Import and edit a JPEG, close the app, rename/move it, reopen, Locate the same bytes, and export the original edits successfully.
 - Repeat using a verified byte-identical copy on another mounted volume; asset ID and edit history remain unchanged.

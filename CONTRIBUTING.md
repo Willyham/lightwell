@@ -1,11 +1,11 @@
 # Contributing to Lightwell
 
-Read [AGENTS.md](AGENTS.md), the [project plan](docs/plan.md), relevant specification and both [active task plans](docs/task-planning.md) before starting. Update the Markdown design before implementation; preserve task IDs/history, and update features and user documentation alongside behavior. Do not execute archived plans or count a prototype as an implemented application feature.
+Read [AGENTS.md](AGENTS.md) and the project context relevant to the change. For substantial feature, milestone, migration or other coordinated multi-step work, also read the [project plan](docs/plan.md), relevant specification and [active task-planning guidance](docs/task-planning.md), then update the Markdown design and task plan before implementation. Routine research, reviews, diagnostics, documentation maintenance and small contained changes do not need a new or updated task plan unless explicitly requested or already assigned from one. When changing a task plan, preserve current task IDs and accurate statuses. Update feature and user documentation when behavior or documented scope changes. Keep documentation focused on current behavior and outstanding work. Do not count a prototype as an implemented application feature.
 
 ## Repository layout
 
 - `docs/`: specifications, decisions, engineering instructions and measured reports.
-- `tasks/`: separate product and implementation plans; `archive/` is immutable history.
+- `tasks/`: separate product, milestone implementation and research plans listed in `tasks/README.md`.
 - `tools/`: portable repository checks and fixture preparation.
 - `fixtures/`: small synthetic inputs with provenance; generated large workloads stay in ignored `fixtures/generated/`.
 - `probes/`: bounded experiments, when introduced, separate from the maintained application.
@@ -23,7 +23,7 @@ Run from the repository root with the pinned Rust toolchain:
 cargo xtask check-repository
 ```
 
-This checks local Markdown/file links, both task schemas and DAGs, task status prerequisites, and external product gates. The pinned Rust toolchain runs these checks. The checked-in schema defines the task format; keep it synchronized if the format is deliberately changed. Application formatting/build/test commands are documented below.
+This checks local Markdown/file links and every active task schema/DAG. Each file has independent IDs starting at TASK-001, in dependency order, and may not reference another task plan. Matching IDs in different files are valid; milestone sequence lives in the roadmap. The pinned Rust toolchain runs these checks. The checked-in schema defines the task format; keep it synchronized if the format is deliberately changed.
 
 Fixture generation has separate pinned tooling; see the [fixture manifest](fixtures/README.md). Routine checks must not rewrite tracked files. Put all run evidence in `artifacts/<run-id>/`; document exact commands, build, fixture hash, backend and capture provenance. A skipped desktop check is not a pass. Do not commit private paths, machine identifiers, screenshots, logs, build outputs or camera originals. Only synthetic/licensed inputs may enter CI.
 

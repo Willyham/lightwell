@@ -85,10 +85,21 @@ fn plan<'a>(root: &Path, p: &'a Value, s: &Value) -> Result<BTreeMap<&'a str, &'
         .map(|t| (t["id"].as_str().unwrap(), t))
         .collect();
     ensure(tasks.len() == array.len(), "Duplicate task IDs")?;
+    for (index, task) in array.iter().enumerate() {
+        ensure(
+            task["id"] == format!("TASK-{:03}", index + 1),
+            "Tasks must be ordered with contiguous local IDs starting at TASK-001",
+        )?;
+    }
     for (id, t) in &tasks {
         for d in t["dependencies"].as_array().unwrap() {
             let dep = d.as_str().unwrap();
             ensure(dep != *id, "Self dependency")?;
+            ensure(
+                dep.trim_start_matches("TASK-").parse::<usize>()?
+                    < id.trim_start_matches("TASK-").parse::<usize>()?,
+                format!("{id}: dependencies must precede their consumer"),
+            )?;
             let target = tasks.get(dep).ok_or("Unknown dependency")?;
             if matches!(
                 t["status"].as_str(),
@@ -109,10 +120,23 @@ fn plan<'a>(root: &Path, p: &'a Value, s: &Value) -> Result<BTreeMap<&'a str, &'
         for link in t["context_links"].as_array().unwrap() {
             let target = link["target"].as_str().unwrap();
             match link["kind"].as_str() {
-                Some("file") => ensure(
-                    root.join(target.split('#').next().unwrap()).is_file(),
-                    format!("{id}: missing {target}"),
-                )?,
+                Some("file") => {
+                    let linked = root.join(target.split('#').next().unwrap());
+                    ensure(linked.is_file(), format!("{id}: missing {target}"))?;
+                    if linked
+                        .extension()
+                        .is_some_and(|extension| extension == "json")
+                    {
+                        ensure(
+                            !linked
+                                .canonicalize()?
+                                .starts_with(root.join("tasks").canonicalize()?),
+                            format!(
+                                "{id}: task files cannot reference other task plans; link a specification"
+                            ),
+                        )?;
+                    }
+                }
                 Some("task") => ensure(tasks.contains_key(target), "Unknown linked task")?,
                 _ => (),
             }
@@ -143,35 +167,46 @@ fn plan<'a>(root: &Path, p: &'a Value, s: &Value) -> Result<BTreeMap<&'a str, &'
     )?;
     Ok(tasks)
 }
+fn active_plans(root: &Path, plans: &[Value], s: &Value) -> Result<Vec<String>> {
+    ensure(!plans.is_empty(), "No active task plans")?;
+    let mut plan_ids = BTreeSet::new();
+    let mut summaries = Vec::new();
+    for value in plans {
+        let tasks = plan(root, value, s)?;
+        let plan_id = value["plan_id"].as_str().ok_or("Missing plan ID")?;
+        ensure(
+            plan_ids.insert(plan_id),
+            format!("Duplicate plan ID {plan_id}"),
+        )?;
+        summaries.push(format!("{plan_id} {}", tasks.len()));
+    }
+    Ok(summaries)
+}
 pub fn check(root: &Path) -> Result {
     let s = read_json(&root.join("tools/task-plan.schema.json"))?;
-    let pp = read_json(&root.join("tasks/product-decisions.json"))?;
-    let ip = read_json(&root.join("tasks/implementation.json"))?;
-    let product = plan(root, &pp, &s)?;
-    let implementation = plan(root, &ip, &s)?;
-    ensure(
-        !product.keys().any(|k| implementation.contains_key(k)),
-        "Task IDs overlap",
-    )?;
-    for (gate, range) in [("TASK-035", 23..26), ("TASK-064", 26..31)] {
-        if implementation.get(gate).ok_or("Missing decision gate")?["status"] == "completed" {
-            for i in range {
-                ensure(
-                    product
-                        .get(format!("TASK-{i:03}").as_str())
-                        .ok_or("Missing product input")?["status"]
-                        == "completed",
-                    "Unresolved product decision",
-                )?
-            }
-        }
-    }
+    let mut plan_paths: Vec<_> = fs::read_dir(root.join("tasks"))?
+        .map(|entry| entry.map(|entry| entry.path()))
+        .collect::<std::io::Result<Vec<_>>>()?
+        .into_iter()
+        .filter(|path| {
+            path.is_file()
+                && path
+                    .extension()
+                    .is_some_and(|extension| extension == "json")
+        })
+        .collect();
+    plan_paths.sort();
+    let plans = plan_paths
+        .iter()
+        .map(|path| read_json(path))
+        .collect::<Result<Vec<_>>>()?;
+    let summaries = active_plans(root, &plans, &s)?;
     let mut paths = vec![
         root.join("README.md"),
         root.join("AGENTS.md"),
         root.join("CONTRIBUTING.md"),
     ];
-    for dir in ["docs", "fixtures"] {
+    for dir in ["docs", "fixtures", "tasks"] {
         paths.extend(
             files(&root.join(dir))?
                 .into_iter()
@@ -203,9 +238,8 @@ pub fn check(root: &Path) -> Result {
         }
     }
     println!(
-        "PASS task schemas/DAGs/product gates ({} + {} tasks), {count} local links",
-        product.len(),
-        implementation.len()
+        "PASS local task schemas/DAGs/order ({}), {count} local links",
+        summaries.join(", ")
     );
     Ok(())
 }
@@ -228,5 +262,63 @@ mod tests {
     #[test]
     fn active_repository_is_valid() {
         check(&root().unwrap()).unwrap();
+    }
+    fn minimal_plan(id: &str) -> Value {
+        json!({
+            "schema_version":"1.0", "plan_id":id, "title":"Local plan",
+            "objective":"Test independent task identities", "context_summary":"A standalone plan",
+            "tasks":[{
+                "id":"TASK-001", "description":"First task", "status":"ready",
+                "dependencies":[], "extra_context":[],
+                "context_links":[{"kind":"other","label":"Fixture","target":"fixture","relevance":"Test context"}],
+                "acceptance_criteria":["One local task"],
+                "test_strategy":{"approach":"inspection","steps":["Inspect"],"commands":[],"expected_results":["Valid"]}
+            }],
+            "execution_waves":[{"wave":1,"task_ids":["TASK-001"]}]
+        })
+    }
+    fn task_schema() -> Value {
+        serde_json::from_str(include_str!("../../tools/task-plan.schema.json")).unwrap()
+    }
+    #[test]
+    fn separate_plans_reuse_local_ids() {
+        let tmp = tempfile::tempdir().unwrap();
+        let first = minimal_plan("one");
+        let second = minimal_plan("two");
+        assert!(active_plans(tmp.path(), &[first.clone(), second], &task_schema()).is_ok());
+        assert!(active_plans(tmp.path(), &[first.clone(), first], &task_schema()).is_err());
+    }
+    #[test]
+    fn numbering_dependency_order_and_plan_references_are_checked() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::create_dir(tmp.path().join("tasks")).unwrap();
+        fs::write(tmp.path().join("tasks/other.json"), "{}").unwrap();
+        let s = task_schema();
+        let base = minimal_plan("test");
+        let mut skipped = base.clone();
+        skipped["tasks"][0]["id"] = json!("TASK-002");
+        assert!(plan(tmp.path(), &skipped, &s).is_err());
+        let mut external = base.clone();
+        external["tasks"][0]["dependencies"] = json!(["TASK-064"]);
+        assert!(plan(tmp.path(), &external, &s).is_err());
+        let mut linked = base.clone();
+        linked["tasks"][0]["context_links"][0] = json!({
+            "kind":"file", "label":"Other plan", "target":"tasks/other.json", "relevance":"Invalid cross-file link"
+        });
+        assert!(plan(tmp.path(), &linked, &s).is_err());
+        let mut ordered = base.clone();
+        let mut second = ordered["tasks"][0].clone();
+        second["id"] = json!("TASK-002");
+        second["status"] = json!("pending");
+        second["dependencies"] = json!(["TASK-001"]);
+        ordered["tasks"].as_array_mut().unwrap().push(second);
+        ordered["execution_waves"] = json!([
+            {"wave":1,"task_ids":["TASK-001"]},{"wave":2,"task_ids":["TASK-002"]}
+        ]);
+        assert!(plan(tmp.path(), &ordered, &s).is_ok());
+        ordered["tasks"][0]["status"] = json!("pending");
+        ordered["tasks"][0]["dependencies"] = json!(["TASK-002"]);
+        ordered["tasks"][1]["dependencies"] = json!([]);
+        assert!(plan(tmp.path(), &ordered, &s).is_err());
     }
 }

@@ -1,6 +1,6 @@
 # Lightroom Classic technical research plan
 
-Status: research completed 2026-09-20. Requested 2026-09-20. This is a documentation investigation, not authorization to implement photo tools or change Lightwell's milestones.
+Status: research completed 2026-09-20. This is a documentation investigation, not authorization to implement photo tools or change Lightwell's milestones.
 
 ## Scope and method
 
@@ -18,7 +18,7 @@ Use Adobe product documentation, first-person Adobe engineering explanations, pu
 - Performance separates browsing, interactive edits, batch work and inference; no Lightroom benchmark is claimed without measurements.
 - Current documentation is checked for version changes, especially AI data/sidecars and Enhance behavior.
 - Lightwell implications remain proposals or references to existing accepted constraints. No feature, migration or algorithm equivalence is silently accepted.
-- Both active task plans validate; project documentation/link checks pass or limitations are recorded.
+- Active task plans validate; project documentation/link checks pass or limitations are recorded.
 
 ## Unresolved questions
 
@@ -28,12 +28,11 @@ Adobe's exact filter coefficients, adaptive tone functions, processing graph, ca
 
 Delivered 13 Markdown files, including the index, ten subject/reference chapters, source register and this plan. The source register contains 44 cited sources. The chapters distinguish documented behavior, historical evidence, conceptual equations, Lightwell proposals and unknowns. No application code or Lightroom benchmarks were produced.
 
-Verification on 2026-09-20:
+Verification:
 
-- At research completion, both then-active task plan validators passed (14 product tasks / 1 wave; the former monolithic 58-task implementation plan / 23 waves). That implementation plan was subsequently split by milestone without changing TASK-072's completed status.
-- Current graph/link inspection covers product, S0, M1, extension and Lightroom-research plans; each has exact derived waves, globally unique task IDs and valid task file links.
-- Local Markdown inspection: five research section anchors and all 44 citation IDs passed; the final repository check verified 225 local links.
-- `git diff --check`: passed.
-- `cargo xtask check`: passed repository/schema/DAG checks, dependency-policy checks, formatting, lint and 26 tests (one existing helper ignored). The first attempt encountered a concurrent S0 task-status inconsistency; that separate update resolved it before the successful rerun. No GUI or Lightroom performance acceptance is implied.
+- Research section anchors, all 44 citation IDs and local document navigation validate.
+- Active task schemas, local IDs, dependency graphs and derived waves validate.
+- `git diff --check` and `cargo xtask check` pass, including repository/policy checks, formatting, lint and Rust tests.
+- No GUI, Lightroom runtime or performance acceptance is implied.
 
 The source review checked key version-sensitive claims against current Adobe pages and retained retrieval limitations in [sources](sources.md). These checks validate the research artifact and its internal navigation, not Adobe's undisclosed algorithms.

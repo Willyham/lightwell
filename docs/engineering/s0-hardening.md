@@ -1,29 +1,21 @@
-# S0 hardening and revised acceptance
+# S0 hardening contract
 
-Owner instruction, 2026-09-19: defer manual Windows/Linux checks and license/review work for now. Preserve their task IDs and unfinished evidence; neither is a current S0 prerequisite. Keep automated portable builds and functional checks. macOS on the available M4 is the current native acceptance target; minimum-version and other desktop claims remain unverified.
+Status: implemented and verified locally; S0 is accepted. Exact package identities, native evidence, measurements and limitations are in [hardening results](s0-hardening-results.md). Fresh hosted verification and deferred native Windows/Linux/license review remain unfinished.
 
-## Scope and behavior
+## Implemented behavior
 
-Complete TASK-042–051, refresh TASK-054/057 and measure TASK-061. Finish the associated CI/playbook gate evidence where available. Existing source-preservation, JPEG subset, Fit-only scope and bounded scheduling remain unchanged. No M1 editor implementation is authorized by this hardening slice; the separately requested product decision tasks must record actual answers before TASK-064 and the geometry/color experiment.
+- Typed image errors at the shared service boundary; source bytes are read-only.
+- Native configuration/cache/log path resolution without creating unused state. An isolated data root redirects diagnostics; ordinary viewing remains usable if diagnostics cannot be written.
+- Fresh, bounded opt-in evidence directories with explicit write failures.
+- Incremental JSONL diagnostics on a bounded background channel, with run/build/request/generation identities and timings but no private source paths. Orderly shutdown flushes; abnormal exit retains written events.
+- File/image encoding off the UI thread, explicit renderer-allocation readiness and stale-generation rejection.
+- One active and one latest pending decode, bounded uploads/previews, and no polling during ordinary idle.
+- Process checks for invalid, repeated and alternating requests, malformed/read-only inputs, close during load, hangs, missing/blank evidence and diagnostic failures.
 
-Use typed errors at the shared image boundary. Resolve native per-user configuration/cache/log locations without creating unused state; an explicit isolated data root redirects all three. Ordinary viewing must work if diagnostics cannot be written. Opt-in evidence directories must be new, bounded and fail explicitly on write errors.
+## Verification contract
 
-Write incremental JSONL diagnostics on a bounded background channel, carrying run/build/request/generation identity and timings without private source paths. Flush on orderly shutdown, retain earlier events on abnormal exit, report logger failures through stderr, and keep all file/image encoding off the UI thread. Record actual renderer provenance and orientation in snapshots. No continuous polling while ordinary viewing is idle.
+Correlate actual rendered frames with state, logs, build identity and unchanged source hashes. Reject stale, blank or missing evidence. Enforce bounded timeouts and child cleanup. Measure packaged native startup, large-image latency, repeated-load memory and idle CPU with hardware/build identity.
 
-Strengthen process tests for invalid initial input, repeated loading, stale generations, malformed/read-only inputs, close during loading, hangs, missing and blank evidence, and diagnostic write failures. Correlate frames/state/logs and source hashes. Measure packaged native M4 startup, large-image latency, repeated-load memory and idle CPU. Label renderer readback, native desktop observations, application-cold versus filesystem-cold measurements and unavailable GPU allocation counters honestly.
+Distinguish renderer readback from OS-window interaction, application-cold from filesystem-cold measurements, and process RSS from unavailable GPU allocation counters. Owner-observed manual JPEG opening is separate from automated picker-selection evidence. Headless Linux functional results are not native desktop/GPU measurements.
 
-## Acceptance
-
-- Headless checks and task graph validation pass.
-- Native packaged M4 scenarios retain correlated logs/state/real frames and preserve source bytes.
-- Failure-injection tests demonstrate rejected stale/blank/missing evidence, bounded timeouts and diagnostic failures.
-- An initial reproducible performance report records hardware/build identity and limitations.
-- Task/feature/user documentation reflects only verified behavior; deferred work is not marked completed.
-
-## Unresolved decisions
-
-M1 TASK-026–030 were subsequently adopted by the owner, who also supplied workflow priorities; see ../design/m1-decisions.md. Windows/Linux native desktop and license reviews remain deferred until requested.
-
-## Completion
-
-Local batch TASK-042–051, TASK-054/057/061 and product TASK-026–030 are complete. See [results](s0-hardening-results.md). The owner confirmed manual JPEG opening and adopted M1 recommendations. Fresh hosted CI remains outside this local completion claim; deferred Windows/Linux manual checks and license reviews are not marked complete.
+Keep feature and user documentation aligned with verified behavior. The [platform matrix](platforms.md) and [CI results](ci-results.md) describe outstanding checks.

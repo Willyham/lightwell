@@ -1,8 +1,8 @@
 # Maintained scaffold commands and evidence
 
-Status: hardened runnable macOS scaffold with measured native Metal evidence; **S0 acceptance is not complete**. Stack rationale is in [S0 stack](../design/s0-stack.md), native requirements in [platforms](platforms.md), and earlier experiments in [probe results](s0-probe-results.md).
+S0 is accepted. The Rust/Iced viewer and native M4 Metal checks are implemented; editor work is planned and on hold. Fresh hosted closure-snapshot verification and native Windows/Linux desktop checks remain unfinished.
 
-For a fresh checkout and end-to-end evidence inspection, follow the [bootstrap playbook](bootstrap-playbook.md). Historical results below retain their original build identities.
+Use the [bootstrap playbook](bootstrap-playbook.md) for fresh-checkout setup and evidence inspection. See [stack boundaries](../design/s0-stack.md) and [platform prerequisites](platforms.md).
 
 ## Commands available now
 
@@ -30,23 +30,23 @@ The application accepts `--data-root DIRECTORY` for isolated diagnostic/config/c
 
 Evidence mode disables manual opening to keep the sequence deterministic. It uses the same image loader, writes state and real window-renderer PNGs per request, then final `events.jsonl`, `state.json`, and `result.json`. PNG encoding and evidence finalization run on the task executor, away from the UI thread. Application status `captured` is not a pixel-test pass: the outer smoke runner verifies fixture colors, Fit, generation/state, backend, exit status and source SHA-256 before writing its own `passed` result. Each bundle also includes subprocess output and reproduction arguments. Errors retain the previous displayed generation and photo. A 25-second app deadline and 35-second process deadline bound hangs.
 
-## Current verification
+## Implemented checks and evidence
 
-The root workspace compiled and passed Clippy/format/core tests on the M4. Native Metal load, empty and invalid-replacement smoke scenarios passed in `artifacts/maintained-load-1`, `artifacts/maintained-empty-1`, and `artifacts/maintained-replacement-1`; 1920×1280 renderer captures at 2× were independently pixel-checked and visually reviewed. Source hashes were unchanged. Subsequent user-facing error wording was made clearer; repeat affected smoke checks after code changes before treating those prior frames as current evidence.
+Core tests cover EXIF orientations, supported/unsupported profiles, malformed/oversized/missing/read-only sources, unchanged input bytes, latest-request scheduling and the 4096-pixel preview bound. App tests cover failed replacement/cancel retention, isolated paths, diagnostic failures and renderer readiness.
 
-Core tests cover all EXIF orientations, accepted and unsupported profiles, malformed/oversized/missing files, preservation and newest-request filtering. Preview tests enforce the 4096-pixel upload bound independently of original dimensions. Original decoder allocation limits are not whole-process memory budgets; CPU/GPU copies and capture buffers are additional bounded allocations.
+Incremental background logs carry run/request identities. Explicit GPU allocation readiness precedes capture. The process runner rejects blank/stale/missing evidence, times out and reaps hung children, and records binary/lockfile hashes and reproduction arguments. Eight native M4 Metal scenarios and adversarial failure checks pass; [hardening results](s0-hardening-results.md) contain exact tested identities, measurements and native picker limitations.
 
-Native Iced probe interaction verified Cmd+O, picker load, cancellation and resize/Fit. Native automated invalid-file selection became unreliable; the maintained process smoke test now verifies the shared failed-replacement path and its actual rendered result. It does not claim another successful manual picker check. AX exposure of custom controls remains limited; full accessibility is not established.
+The owner confirmed manual JPEG opening. Automated picker selection is not claimed to pass. Custom-control accessibility, calibrated display-color management, minimum-OS execution and native Windows/Linux behavior remain unverified.
 
-## Pending work and limitations
+Ordinary viewing writes no catalog/config/cache or source-adjacent files. It logs to stderr unless an explicit data root requests isolated diagnostics; existing logs are not overwritten.
 
-Incremental background logs, typed image errors, run/request identity, controlled diagnostic failure checks, malformed/read-only cases and adversarial smoke checks are implemented. Rendering readiness waits for explicit GPU allocation, including large JPEGs. See [hardening results](s0-hardening-results.md) for exact evidence and native picker automation limitations. Ordinary mode writes no catalog/config/cache; it logs to stderr unless `--data-root` requests an isolated log. That root's existing log is never overwritten.
+## Packaging and CI
 
-Packaging assembles unsigned host development artifacts plus license inventory and copied notices. Inventory lists resolved host dependency licenses but is not a license/advisory audit; manual bundled assets/native runtime review is deferred. No public signing/notarization, deployment, upload or store submission has occurred.
+`cargo xtask package` creates unsigned host development artifacts with package identities, dependency inventory and copied notices. Inventory is not a completed license audit. No public signing/notarization, deployment or store submission is provided.
 
-The checked-in CI workflow runs locked checks/build/package on macOS, Windows and Ubuntu and retains artifacts for seven days. Its first hosted executions are underway; see [CI activation](ci-plan.md). Hosted compile runners are not the required native desktop launch/load checks. Windows 2022 CI build is not Windows 11 user-session evidence. S0 remains open for current hosted verification. The owner confirmed manual native JPEG opening. Windows/Linux manual checks are deferred.
+The CI workflow runs shared locked checks/build/package jobs on macOS, Windows and Ubuntu, with seven-day artifacts, fixture and blocking audit jobs. Linux renderer checks use Xvfb/software Vulkan. The verified baseline, latest local package and outstanding hosted execution are identified in [CI results](ci-results.md). Hosted/headless results do not establish native desktop or GPU performance.
 
-## Dependency policy and latest evidence
+## Dependency policy
 
 Install the pinned audit tool locally once (requires network):
 
@@ -55,26 +55,10 @@ cargo install --locked --version 0.20.2 --root .tools/cargo-deny cargo-deny
 cargo xtask audit
 ```
 
-Audit validates the [expiring exception policy](advisory-policy.md) and fails on expired/changed exceptions or unapproved findings; see [dependency review](dependency-review.md). License/source checks pass. Two maintenance findings have temporary, exact-version exceptions; the full embedded asset/native notice review remains open. This command is intentionally separate from headless `check` and is not represented as passing CI.
+Audit validates [exact-version, expiring advisory exceptions](advisory-policy.md) and fails on expired/changed exceptions or unapproved findings. The base `deny.toml` is strict. Current review results and incomplete manual asset/native notices are in [dependency review](dependency-review.md). Audit is separate from headless `check`.
 
-The host package was built at `artifacts/maintained-package-2/lightwell-development.zip`, with SHA-256 in `checksums.txt`. Its actual app binary passed native Metal replacement smoke using an output directory containing spaces (`artifacts/package smoke 2`). The failed-input capture was visually reviewed: the oriented image remains visible and a readable error replaces the loading status. Earlier empty/load/replacement runs live in `artifacts/maintained-{empty,load,replacement}-1`. These paths are ignored local evidence, not checked-in portable reports. A subsequent bounded CLI change limits evidence sequences to 16 requests; rerun package/smoke after changes rather than treating an old archive as current.
+## Performance and tooling
 
-The runner also verifies a missing executable produces exit 1 and `status: failed`, without a fabricated screenshot. New smoke results record binary and lockfile hashes. Renderer readback proves content; native picker/focus/desktop observations remain separate. Ordinary viewing creates no catalog, config or source-adjacent files. Current hardening and initial measurements are recorded below; full accessibility and Windows/Linux desktop checks are unverified.
+Default `develop` uses release optimization. Explicit `develop --debug` and plain `cargo run` are unoptimized and unsuitable for performance measurements. Stage diagnostics identify read, validation, decode, orientation, resize, RGBA and upload costs; see [JPEG measurements](jpeg-performance.md).
 
-Latest package: `artifacts/maintained-package-3/lightwell-development.zip`. Its replacement smoke passed in `artifacts/package smoke 3` with binary/lockfile hashes recorded. This includes the 16-request limit and friendly error messages. No Windows machine is currently available, as confirmed by the owner.
-
-## Hosted CI activation
-
-CI now includes dedicated fixture and blocking dependency-audit jobs. The audit was initially failing on the maintenance findings; the later reviewed policy permits only the two expiring exceptions. Ubuntu also runs the three renderer smoke scenarios under Xvfb/software Vulkan; this is headless functional evidence, never native Linux desktop or GPU-performance acceptance. Native picker checks remain separate. Job results must be recorded after execution, not inferred from this configuration.
-
-Hosted results are recorded in [CI results](ci-results.md). Linux empty/load/replacement smoke passed under Xvfb with llvmpipe Vulkan after adding the X11 runtime library. All three OS builds/packages have executed successfully. The initial blocking dependency job reproduced the two known maintenance findings; the subsequent reviewed policy is described above.
-
-`cargo xtask check` also runs six advisory-policy regression tests and validates live UTC expiry, exact locked versions and open follow-up tasks. `cargo xtask audit` generates its temporary ignore list only after the same validation. Calling cargo-deny directly against the base deny.toml continues to report the raw maintenance findings.
-
-## Current hardening result
-
-The current package is `artifacts/hardening-package-5/lightwell-development.zip`. Eight native Metal scenarios, actual timeout/abrupt-exit/diagnostic-failure checks, and a pixel-validated 24/60 MP baseline passed. [Results and reproduction](s0-hardening-results.md) record hashes, timing/memory, earlier superseded blank captures and owner-confirmed manual picker success and automated-selection limitations. Existing automated dependency policy is unchanged; manual license reviews are deferred.
-
-`develop` now uses the optimized release profile by default; its first compilation may take longer. Use `develop --debug` for an unoptimized debugger session. Plain `cargo run` remains unoptimized. JPEG diagnostics include worker stage timings and startup records include `debug_assertions` (an assertion setting, not a general proof of optimization). See the [real JPEG investigation](jpeg-performance.md).
-
-All maintained commands now run in Rust. [Rust tooling commands and verification](rust-tooling.md) include fixture generation, capture inspection, native failure checks and measurement.
+All maintained commands run in Rust. [Rust tooling](rust-tooling.md) includes fixture generation, capture inspection, process failure checks and macOS measurement. Measurements stay tied to the tested binary, input and capture provenance; rerun affected checks after code changes.

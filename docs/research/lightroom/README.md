@@ -1,6 +1,6 @@
 # Lightroom Classic technical knowledge base
 
-Researched **2026-09-20**. Documentation research completed for TASK-072. This describes Lightroom Classic, with explicitly labelled Camera Raw/shared-engine evidence. It is a reference for Lightwell, not a feature commitment or a recipe for exact Adobe output.
+Researched **2026-09-20**. Documentation research completed for [the Lightroom research plan](../../../tasks/research-lightroom.json). This describes Lightroom Classic, with explicitly labelled Camera Raw/shared-engine evidence. It is a reference for Lightwell, not a feature commitment or a recipe for exact Adobe output.
 
 There is substantial public information about the architecture and tool behavior, plus a few unusually useful engineering explanations. Exact contemporary kernels, coefficients, scheduling and the complete processing graph remain proprietary or unverified. The source set includes Adobe documentation, engineers' explanations, original papers and SDK references; see the [annotated bibliography](sources.md).
 

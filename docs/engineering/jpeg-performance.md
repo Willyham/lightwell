@@ -1,6 +1,6 @@
 # Real JPEG loading investigation
 
-Status: completed locally, 2026-09-19 (TASK-068).
+Status: optimized development launch and stage diagnostics implemented; local measurements recorded 2026-09-19.
 
 The owner reports roughly ten seconds to open a local 10 MB JPEG. Reproduce using the supplied private `fixtures/jpg/will-sapa-drone.jpg` (3389 × 4236, 10,444,237 bytes) without modifying or committing it. Compare debug and optimized native Metal builds with actual renderer captures. Measure file reading, header/profile validation, pixel decoding, orientation, preview resizing, RGBA conversion and GPU upload separately.
 
@@ -8,7 +8,7 @@ Initial reproduction: debug image preparation 10,219.7 ms and request-to-capture
 
 Scope: expose stage timing in development diagnostics, make `cargo xtask develop` use the optimized release profile by default, retain an explicit debug launch, and document the distinction. Preserve the existing Triangle preview filter, orientation/color behavior, worker scheduling and source bytes. No decoder replacement, image-quality shortcut, editing features or dependency changes are planned.
 
-Acceptance: identify the dominant debug stage; reproduce optimized loading with the normal launcher; inspect actual image content; verify source hash unchanged; pass repository checks and validate both task graphs. Record measurements and limitations here. The original performance baseline covered only optimized synthetic images, so it failed to reveal the slow default development experience.
+Acceptance: identify the dominant debug stage; reproduce optimized loading with the normal launcher; inspect actual image content; verify source hash unchanged; pass repository checks and validate every active task graph. Record measurements and limitations here. The original performance baseline covered only optimized synthetic images, so it failed to reveal the slow default development experience.
 
 ## Measured result
 
@@ -30,7 +30,7 @@ The 4236-pixel source height crosses the 4096-pixel limit and triggers resamplin
 
 Evidence directories (ignored local artifacts): `artifacts/jpeg-investigation-debug`, `artifacts/jpeg-investigation-release`, `artifacts/jpeg-stages-debug`, `artifacts/jpeg-stages-release`. The stage runs exercised the actual `cargo xtask develop --debug` and default `cargo xtask develop` dispatch. The final release frame was visually inspected: terraced fields and the winding road fill the correctly proportioned portrait Fit image. The displayed image rectangle was pixel-identical between the instrumented debug and release renderer captures. This is output equivalence, not an independent color-accuracy certification.
 
-Source SHA-256 before/after: `8706b1fe34fc0e6d62d483a6868a5764e97429ca32a8dd9147dd66501a2e93b5`. The JPEG remains local and is ignored by Git. Repository check passed: both plan graphs and Markdown links, runner regressions, formatting, Clippy, core/application tests and doc tests. No manual license or Windows/Linux desktop checks were added.
+Source SHA-256 before/after: `8706b1fe34fc0e6d62d483a6868a5764e97429ca32a8dd9147dd66501a2e93b5`. The JPEG remains local and is ignored by Git. Repository check passed: task graphs and Markdown links, runner regressions, formatting, Clippy, core/application tests and doc tests. No manual license or Windows/Linux desktop checks were added.
 
 Reproduce with a fresh evidence directory each time:
 
@@ -39,7 +39,7 @@ cargo xtask develop --open fixtures/jpg/will-sapa-drone.jpg --evidence-dir artif
 cargo xtask develop --debug --open fixtures/jpg/will-sapa-drone.jpg --evidence-dir artifacts/jpeg-new-debug
 ```
 
-The earlier synthetic performance baseline used only release builds and missed the default developer launch problem. Both profiles are now distinguishable in startup diagnostics through `debug_assertions`; all six worker stages are logged on each decoded image. This flag describes assertion settings rather than guaranteeing arbitrary custom-profile optimization. The measured optimized full-image resize still costs about 201 ms; viewport-sized previews and reduced-resolution decoding are future performance opportunities requiring separate correctness and zoom requirements, not changes made here.
+Both profiles are distinguishable in startup diagnostics through `debug_assertions`; all six worker stages are logged on each decoded image. This flag describes assertion settings rather than guaranteeing arbitrary custom-profile optimization. The measured optimized full-image resize still costs about 201 ms; viewport-sized previews and reduced-resolution decoding are future performance opportunities requiring separate correctness and zoom requirements, not changes made here.
 
 Measured instrumented binary SHA-256:
 
