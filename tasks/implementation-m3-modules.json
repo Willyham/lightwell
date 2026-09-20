@@ -3,16 +3,14 @@
   "plan_id": "m3-modules",
   "title": "M3 — tool modules",
   "objective": "Build a small declarative tool/action/processing interface and implement the pixel editor and existing transforms through it, preserving saved history.",
-  "context_summary": "All IDs and dependencies are local to this file. Milestone order is described by named outcomes in docs/design/history-first-roadmap.md; no task in another file is a prerequisite. Implementation is on hold by owner instruction. Begin with the working pixel/transform editor. Linked modules are sufficient; external binary loading remains later work.",
+  "context_summary": "Starts from the implemented pixel/transform editor with persistent history. Linked modules are sufficient; external binary loading is later work. Design: docs/design/modules-and-api.md.",
   "tasks": [
     {
       "id": "TASK-001",
       "description": "Specify the tool-module action, control and processing interface.",
       "status": "pending",
       "dependencies": [],
-      "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
-      ],
+      "extra_context": [],
       "context_links": [
         {
           "kind": "file",
@@ -54,9 +52,7 @@
       "dependencies": [
         "TASK-001"
       ],
-      "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
-      ],
+      "extra_context": [],
       "context_links": [
         {
           "kind": "file",
@@ -98,9 +94,7 @@
       "dependencies": [
         "TASK-002"
       ],
-      "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
-      ],
+      "extra_context": [],
       "context_links": [
         {
           "kind": "file",
@@ -148,9 +142,7 @@
       "dependencies": [
         "TASK-003"
       ],
-      "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
-      ],
+      "extra_context": [],
       "context_links": [
         {
           "kind": "file",
@@ -198,9 +190,7 @@
       "dependencies": [
         "TASK-002"
       ],
-      "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
-      ],
+      "extra_context": [],
       "context_links": [
         {
           "kind": "file",
@@ -249,9 +239,7 @@
         "TASK-004",
         "TASK-005"
       ],
-      "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
-      ],
+      "extra_context": [],
       "context_links": [
         {
           "kind": "file",

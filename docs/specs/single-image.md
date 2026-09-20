@@ -1,65 +1,47 @@
-# One-image editor and crop-module contract
+# Crop, export and conflicts
 
-Status: **M1 history and M2 transforms implemented; M3 modules and M4 crop planned**. Export, Locate and MCP are editor follow-ups. See [the current roadmap](../design/history-first-roadmap.md) and [M1/M2 results](../engineering/m1-m2-results.md).
-
-## Staged editor scope
-
-M1 establishes by-reference JPEG import into a local catalog, an ordered non-destructive layer stack, a pixel-change proof, persistent history/undo/redo/restore, historical previews and reopen. A focused UI and live external JSON API use the same service. This milestone is implemented and verified; the [history specification](edit-history.md) owns its contract.
-
-M2's exact rotations and both reflection axes with history and persistence are implemented. M3 adds the tool interface, API/action schemas and semantic controls, migrating the pixel and transform tools. M4 implements the crop/straighten tool through that interface.
-
-The UI uses one workspace with compact collapsible panels, a central photo and visible history. Cmd/Ctrl+O imports; Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z undo/redo. Visible controls have keyboard access and predictable focus. No full grid or placeholder future tools are required.
+Status: the M4 crop module is planned; export, Locate and MCP are editor follow-ups. History behavior comes from [layers and history](edit-history.md).
 
 ## Viewport and coordinates
 
-Fit, editable zoom percentage, 100% and pan are explicit session operations available through UI and API. Define 100% against source pixels and physical framebuffer pixels; do not conflate it with logical UI pixels on Retina. A magnified Fit texture may appear while source detail loads only with a clear loading state. Bound work and reject stale results.
-
-Image-edit coordinates are independent of viewport zoom and DPI. Each layer acts in its input image stage; a later transform must not reinterpret an earlier pixel edit. For crop UI, map the canvas through the view transform into the crop layer's input space. Space-drag pans. Ordinary drag inside the crop repositions the composition/crop relative to the image, with the crop-frame behavior established in the interaction proof.
+Fit, an editable zoom percentage, 100% and pan are session operations available through UI and API. 100% means one source pixel to one physical framebuffer pixel, never a logical UI pixel. A magnified Fit texture may appear while source detail loads only with a clear loading state. Image-edit coordinates are independent of zoom and DPI: each layer acts in its input stage, and a later transform never reinterprets an earlier edit. For crop UI, map the canvas through the view transform into the crop layer's input space. Space-drag pans; ordinary drag inside the crop moves the composition.
 
 ## Geometry contract
 
-Apply source EXIF orientation once before layer evaluation. Basic quarter-turns/reflections are exact integer mappings. M4 crop combines fine straightening and crop into a layer with explicit input/output geometry; user transforms before or after it retain their sequence.
+EXIF orientation is applied once before layer evaluation. Quarter-turns and reflections are exact integer mappings. The crop layer combines fine straightening and crop with explicit input and output geometry; transforms before or after it keep their sequence.
 
-Within the crop layer, clockwise fine straightening rotates its input around the image center and the crop is axis-aligned in the transformed bounding box. Normalize x/y/width/height to that bounding box, top-left origin, x right/y down. Values are finite, extents positive and all crop corners lie inside valid transformed source coverage. Pixel aspect ratio accounts for bounding-box dimensions. Do not apply the earlier single-global-geometry order over an ordered layer stack.
+Within the crop layer, fine straightening rotates the input around the image center and the crop is axis-aligned in the transformed bounding box. Normalize x, y, width and height to that box with a top-left origin; values are finite, extents positive, and every corner lies inside valid transformed source coverage. Before implementation, M4 defines output-size rounding, pixel-center sampling, inverse mapping, interpolation filter and color domain, and tolerances. Candidate convention: floor positive extents to whole pixels, sample through the inverse transform, reject extents below one pixel, and give locked-ratio rounding a documented tolerance. Geometry may be fused only when intervening effect order is preserved.
 
-M4's initial proof defines output-size rounding, pixel-center sampling, inverse mapping, interpolation filter/color domain and tolerances before implementation. The candidate convention is to floor positive extents to whole pixels and sample through the inverse transform, rejecting extents below one pixel; locked-ratio rounding must have a documented pixel tolerance. Cardinal transforms remain exact. Fusion of geometry is allowed only when it preserves intervening effect order.
+## Crop module
 
-## Crop module controls
+Ratios: Free, Original, 1:1, 3:2, 4:3, 16:9 and custom, with a locked ratio able to swap orientation. Original means the upright original's ratio adjusted for preceding quarter-turns. Angle from −45° to +45°, a drag-to-straighten guide, Apply, Cancel and reset; quarter-turn controls handle larger rotation. A later quarter-turn carries the visible crop and swaps its ratio orientation; reflections carry an off-center composition with the image.
 
-Include Free, Original, 1:1, 3:2, 4:3, 16:9 and custom ratios; locked ratio orientation can swap. Original means the upright original's ratio adjusted for preceding quarter-turn orientation. Expose angle (−45° to +45°), a drag-to-straighten guide, Apply, Cancel and reset. Use quarter-turn controls for larger rotation. A later quarter-turn carries the visible crop and swaps its displayed ratio orientation; reflections carry the off-center composition with the image.
+Free edge and corner handles, crop movement and a thirds overlay. In Free mode a side moves independently and a corner changes width and height. Holding Option (Alt on Windows/Linux) applies one scale factor about the fixed center, preserving the current ratio even in Free mode, clamped at the first source boundary without shifting the center or stretching an axis.
 
-Provide free edge/corner handles, crop movement and a thirds overlay. In Free mode a side moves independently and corners can change width/height. Holding Option (Alt on Windows/Linux) applies a common scale factor about the fixed center, preserving the current aspect ratio even in Free mode. A locked ratio stays locked. Clamp the common factor at the first source boundary; do not shift the center or independently stretch an axis.
+Straightening preserves composition as closely as possible, keeping the selected center and ratio where feasible and trimming only enough to avoid empty corners. M4 defines the fitting objective and tie-breaks with off-center and near-edge fixtures. Each pointer update evaluates against the gesture's starting crop and angle so dragging away and back never cumulatively shrinks the crop.
 
-Straightening preserves composition as closely as possible, retaining the selected center/ratio where feasible and trimming only as needed to avoid empty corners. Define the fitting objective and tie-breaks in the M4 proof with off-center and near-edge fixtures. Each pointer update evaluates against the gesture's starting crop/angle snapshot so dragging away and back does not cumulatively shrink the crop.
+A draft is transient. Apply or Enter commits one semantic action and one new snapshot; Cancel or Escape discards. Adjusting an existing crop layer keeps its ID. Reset restores the tool's neutral state through the history service; whole-recipe reset is a separate explicit action. No pointer event commits history or resamples a saved image. Every parameter and action is in the module's API; gesture simulation is unnecessary.
 
-A draft is transient. Apply/Enter commits one semantic action and one new layer-stack snapshot; Cancel/Escape discards it. Adjusting an existing crop layer preserves its ID in the new snapshot. Reset restores that tool's neutral state through the history service, while a whole-recipe reset is an explicit separate action. No pointer event commits history or destructively resamples a saved image.
+## Conflicts
 
-Every parameter and action is exposed in the module's API; gesture simulation is unnecessary. The shell renders semantic controls and supplies a canvas adapter, while the module owns geometry validation and processing.
+An agent commit during a human draft keeps the draft and marks it conflicted, offering Discard or explicit Reapply against the latest revision followed by revalidation. Stale revisions never overwrite silently. Restore, undo and redo do not discard drafts implicitly. During history preview, changes require Return to current or Restore first. Current-state notifications do not retarget the selected historical entry.
 
-## History and conflicts
+## Export (follow-up)
 
-Every committed pixel, transform or crop action uses the core history service. Preview shows a retained snapshot without changing current state, revision or future export input. Restore appends a new action; all historical states survive. Reopen preserves layer IDs, snapshots, current history and redo navigation.
+Export evaluates the committed snapshot and writes a new JPEG at source-scale crop dimensions, quality 90 by default, freezing the revision and metadata option so later changes cannot affect an in-flight job. No resize presets, watermarks or batch export. Output is sRGB with a valid embedded profile, normalized orientation, regenerated dimensions and no obsolete thumbnail. Keep metadata starts off, omitting optional EXIF, IPTC and XMP capture, camera, creator, copyright and GPS fields; when on, the explicitly supported valid fields are retained with corrected structural information. The reader and writer, exact field policy and tolerances must be proven; private manufacturer metadata round-tripping is not promised.
 
-Agent commits during a human draft retain that draft and mark it conflicted. Offer Discard or explicit Reapply against the latest revision, then revalidate; stale revisions never overwrite silently. Restore/undo/redo do not discard drafts implicitly. During history preview, changes require explicit Return to current or Restore first. Current-state notifications do not retarget the selected historical entry.
+A native destination picker suggests the source stem plus `-edited.jpg`. Reject every existing file and source alias, including symlinks and hardlinks. Write and flush a temporary file in the destination directory and publish without replacement; failure or cancellation removes only temporary output. Inspect output pixels, tags, profile, orientation and dimensions independently in both metadata modes.
 
-## Retained export and recovery contract
+Manual Locate and the MCP adapter are specified in [source recovery](source-recovery.md) and [architecture](../design/architecture.md#agent-contract); MCP adds no separate feature logic.
 
-Editor follow-ups evaluate the committed snapshot and write a new JPEG at source-scale crop dimensions, quality 90 by default. There are no resize presets, watermarks or batch export in this slice. Export freezes the revision and effective metadata option so later edits/settings cannot affect an in-flight job.
+## Acceptance
 
-Convert to sRGB and embed a valid profile. Normalize/omit EXIF orientation, regenerate dimensions and remove obsolete thumbnails. Keep metadata starts off: omit optional EXIF/IPTC/XMP capture, camera, creator/copyright and GPS fields. With it on, retain the explicitly supported valid descriptive/capture/GPS fields while correcting structural information. A metadata reader/writer and exact field/container policy must be proven; private manufacturer metadata round-tripping is not promised.
+1. Repeat the M1/M2 saved-history journey through module-based handlers before crop testing.
+2. Exercise every handle, movement, ratio and angle control and Option scaling at Fit, numeric zoom and 100% on supported display scales, with distinct pan and crop gestures.
+3. Sweep angle away and back, use off-center subjects and near-boundary crops, and compose with pixel and transform effects before and after. Check coverage, output size, sampling tolerance and source detail.
+4. Apply, Cancel, reset, undo, redo, preview, restore, edit again and reopen: exactly one action per commit and every snapshot retained.
+5. Live UI and API clients with stale revisions, draft conflicts, restore and preview during reconnect, malformed input and failed writes; compare complete stacks and decoded output.
+6. Native M4 rendered content correlated with state, logs, entry IDs, revisions and render generation, plus queue, memory and latency measurements and unchanged original hashes.
+7. Follow-ups add verified Locate, both export metadata modes, MCP interoperability and complete package acceptance.
 
-Use a native destination picker with a suggested source-stem plus `-edited.jpg`. Reject all existing files and source aliases, including symlinks/hardlinks. Write/flush a temporary file in the destination directory and publish without replacement. Failure/cancellation removes only temporary output. Independently inspect output pixels, tags, profile, orientation and dimensions in both metadata modes.
-
-Manual Locate verifies the expected source fingerprint, updates its locator atomically and preserves asset/layer/history identity. Missing/changed originals retain edits and report their limitations. See [source recovery](source-recovery.md). The MCP adapter exposes the common service and schemas with a real protocol/conformance journey; it adds no separate feature logic.
-
-## Crop and complete-editor acceptance
-
-1. Use the M1 saved-history demo as the baseline; repeat it with M2 transforms and module-based handlers before crop testing.
-2. Test every crop handle, movement, aspect/angle control and Option scaling at Fit, numeric zoom and 100% on supported display scales, with distinct pan/crop gestures.
-3. Sweep angle away/back, use off-center subjects and near-boundary crops, and compose before/after pixel/transform effects. Check coverage, output size, sampling tolerance and source detail.
-4. Apply/Cancel, reset, undo/redo, preview Original/intermediate states, restore, make a new edit and reopen. Verify exactly one action per commit and retention of every snapshot.
-5. Use live UI/API clients with stale revisions, draft conflicts, restore/preview/reconnect, malformed input and failed writes. Compare complete stacks and decoded outputs.
-6. Correlate native M4 actual rendered content with state/logs, entry IDs, revisions and render generation; measure queues/memory/latency and verify original hashes.
-7. In editor follow-ups, add verified Locate, both metadata export modes, MCP interoperability and complete package acceptance. Native Windows/Linux verification remains separately deferred.
-
-RAW, PNG, tonal controls, multi-image library and externally loaded modules remain later scope. A Lightroom-style interaction reference does not imply Adobe rendering compatibility.
+RAW, PNG, tonal controls, a multi-image library and externally loaded modules remain later scope. A Lightroom-style interaction reference does not imply Adobe rendering compatibility.

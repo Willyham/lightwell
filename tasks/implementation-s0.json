@@ -1,625 +1,15 @@
 {
   "schema_version": "1.0",
   "plan_id": "s0-implementation",
-  "title": "Lightwell S0 implementation and retained follow-ups",
-  "objective": "Maintain the accepted cross-platform JPEG-at-Fit skeleton, preserve its verified evidence, and complete the explicitly retained CI, packaging, platform, dependency-review and maintenance follow-ups without expanding into editor features.",
-  "context_summary": "Accepted S0 JPEG viewer with native M4 evidence and a verified portable build/package baseline. Fresh hosted verification of the closure snapshot, native Windows/Linux desktop checks and manual license reviews remain unfinished. Task IDs and dependencies are local to this file; M1/M2 editor work is now implemented without changing S0's retained evidence-mode contract.",
+  "title": "S0 follow-ups — CI, packaging, platform and dependency work",
+  "objective": "Finish the verification, packaging, platform and dependency-review follow-ups retained after S0 acceptance, without expanding into editor features.",
+  "context_summary": "S0 (the JPEG-at-Fit viewer) is accepted on native M4 evidence. These are its remaining follow-ups: fresh hosted CI verification, Windows/Linux packaging and desktop checks, an optional Linux VM route, the license/asset audit and the two expiring advisory exceptions. Native Windows/Linux desktop and manual license reviews are deferred by the owner until requested.",
   "tasks": [
     {
       "id": "TASK-001",
-      "description": "Create the S0 fixture manifest and reproducible image corpus, with later editor cases recorded separately.",
-      "status": "completed",
-      "dependencies": [],
-      "extra_context": [
-        "Synthetic JPEG/orientation/error fixtures and independent hash/geometry checks are implemented. Large synthetic workloads are generated on demand; actual RAW samples remain future scope.",
-        "See fixtures/README.md and CONTRIBUTING.md for working fixture commands."
-      ],
-      "context_links": [
-        {
-          "kind": "file",
-          "label": "Measurement plan",
-          "target": "docs/specs/performance.md",
-          "relevance": "Defines representative image, catalog and machine workloads."
-        },
-        {
-          "kind": "file",
-          "label": "Acceptance journey",
-          "target": "docs/specs/single-image.md",
-          "relevance": "Defines correctness and error cases to cover."
-        },
-        {
-          "kind": "file",
-          "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        }
-      ],
-      "acceptance_criteria": [
-        "Create a Markdown manifest and reproducible synthetic JPEGs for S0: labeled portrait/landscape images, EXIF 1-8, declared sRGB/untagged cases, fine detail, invalid/truncated/oversized inputs and 24/60 MP workloads. Record later geometry, metadata and source-recovery cases as follow-up fixture requirements.",
-        "Specify expected dimensions/orientation/color meaning and source permissions; synthetic fixtures are reproducible and private originals remain outside the repository.",
-        "Document baseline hardware fields and distinguish synthetic metadata scale tests from real-image browsing tests.",
-        "Each acceptance scenario has a traceable fixture or a documented later owner-supplied sample requirement."
-      ],
-      "test_strategy": {
-        "approach": "inspection",
-        "steps": [
-          "Inspect fixture coverage against the single-image acceptance journey.",
-          "Reproduce synthetic examples and verify their metadata independently where feasible."
-        ],
-        "commands": [
-          "cargo xtask check-repository",
-          "cargo xtask fixtures"
-        ],
-        "expected_results": [
-          "Each acceptance scenario has a traceable fixture or a documented later owner-supplied sample requirement."
-        ]
-      }
-    },
-    {
-      "id": "TASK-002",
-      "description": "Check the S0 product decision gate before selecting the maintained stack.",
-      "status": "completed",
-      "dependencies": [],
-      "extra_context": [
-        "Accepted platform, GPL-3.0-or-later license, minimal shell and JPEG input decisions are recorded in docs/decisions.md, docs/engineering/platforms.md and docs/specs/bootstrap.md. Editor decisions are outside this completed S0 gate."
-      ],
-      "context_links": [
-        {
-          "kind": "file",
-          "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
-          "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
-        },
-        {
-          "kind": "file",
-          "label": "Current milestone scope",
-          "target": "docs/design/history-first-roadmap.md",
-          "relevance": "Names the accepted outcomes and sequencing without referring to another task file."
-        },
-        {
-          "kind": "file",
-          "label": "Planning and gate rules",
-          "target": "docs/task-planning.md",
-          "relevance": "Defines local task plans, milestone boundaries and named outcome prerequisites."
-        }
-      ],
-      "acceptance_criteria": [
-        "Verify accepted S0 operating-system/architecture targets, license policy and minimal shell/input behavior in the current specifications.",
-        "Record the linked decisions and any changes to the skeleton spec; do not silently substitute proposals for answers.",
-        "Keep crop, catalogs, export, RAW and live MCP decisions outside this gate.",
-        "Complete the gate only when the required product inputs are recorded; independent fixture/probe tasks may continue while inputs are missing."
-      ],
-      "test_strategy": {
-        "approach": "inspection",
-        "steps": [
-          "Read the current product decisions and platform matrix.",
-          "Compare accepted requirements with the S0 specification and its verification limits."
-        ],
-        "commands": [
-          "cargo xtask check-repository"
-        ],
-        "expected_results": [
-          "Complete the gate only when the required product inputs are recorded; independent fixture/probe tasks may continue while inputs are missing."
-        ]
-      }
-    },
-    {
-      "id": "TASK-003",
-      "description": "Establish repository hygiene and contributor/documentation conventions.",
-      "status": "completed",
-      "dependencies": [],
-      "extra_context": [
-        "Repository hygiene, ignored private/generated output, contribution guidance and local task/document checks are implemented. See CONTRIBUTING.md."
-      ],
-      "context_links": [
-        {
-          "kind": "file",
-          "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
-          "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
-        },
-        {
-          "kind": "file",
-          "label": "Planning and gate rules",
-          "target": "docs/task-planning.md",
-          "relevance": "Defines local task plans, milestone boundaries and named outcome prerequisites."
-        },
-        {
-          "kind": "file",
-          "label": "Contributor constraints",
-          "target": "AGENTS.md",
-          "relevance": "Keeps documentation-first scope and agent behavior explicit."
-        }
-      ],
-      "acceptance_criteria": [
-        "Add scoped ignore rules, line-ending/editor defaults and documented locations for source, fixtures, tools, packages and ignored evidence.",
-        "Define contribution steps and task/spec updates; preserve the indexed active plan set and archived history.",
-        "Specify checks for Markdown local links and per-plan JSON schema, local numbering and dependency validation without requiring a personal absolute skill path in CI.",
-        "Keep private originals, logs/screenshots and build artifacts out of tracked source; conventions are usable on all target OSes."
-      ],
-      "test_strategy": {
-        "approach": "inspection",
-        "steps": [
-          "Inspect rules against representative Windows/macOS/Linux paths and generated outputs.",
-          "Validate Markdown/task links and ensure the future CI schema/validator strategy is documented."
-        ],
-        "commands": [
-          "cargo xtask check-repository"
-        ],
-        "expected_results": [
-          "Keep private originals, logs/screenshots and build artifacts out of tracked source; conventions are usable on all target OSes."
-        ]
-      }
-    },
-    {
-      "id": "TASK-004",
-      "description": "Diagnose real JPEG loading latency and make the normal development launch performant.",
-      "status": "completed",
-      "dependencies": [],
-      "extra_context": [
-        "Default develop uses release optimization; --debug remains explicit. Native measurements on the private JPEG show about 10.33 s debug versus 0.35 s optimized request-to-capture, dominated by CPU preparation.",
-        "Stage diagnostics and actual rendered output were checked; source bytes remain unchanged. See docs/engineering/jpeg-performance.md for identities, reproduction and sampling limits."
-      ],
-      "context_links": [
-        {
-          "kind": "file",
-          "label": "JPEG performance investigation",
-          "target": "docs/engineering/jpeg-performance.md",
-          "relevance": "Defines reproduction, scope and acceptance."
-        }
-      ],
-      "acceptance_criteria": [
-        "Compare debug and optimized native loading on the owner JPEG with stage timings and renderer evidence.",
-        "Use an optimized normal development launch while retaining explicit debug access.",
-        "Preserve preview correctness and source bytes; record evidence and limitations."
-      ],
-      "test_strategy": {
-        "approach": "mixed",
-        "steps": [
-          "Run native evidence captures in both profiles and inspect image content.",
-          "Check source hash and run repository checks."
-        ],
-        "commands": [
-          "cargo xtask check"
-        ],
-        "expected_results": [
-          "The dominant delay is measured and ordinary development uses the verified optimized path."
-        ]
-      }
-    },
-    {
-      "id": "TASK-005",
-      "description": "Implement Rust xtask development commands and verification.",
-      "status": "completed",
-      "dependencies": [],
-      "extra_context": [
-        "All maintained development/fixture/smoke/package/audit commands use Rust xtask. Golden fixtures are unchanged; generated large fixtures are deterministic.",
-        "Local checks, eight M4 scenarios, failure tests and measurement-runner verification pass. Fresh hosted workflow and Windows/Linux package verification remain unfinished; see docs/engineering/rust-tooling.md and docs/engineering/ci-results.md."
-      ],
-      "context_links": [
-        {
-          "kind": "file",
-          "label": "Rust tooling migration",
-          "target": "docs/engineering/rust-tooling.md",
-          "relevance": "Scope, command parity, fixture provenance and acceptance."
-        }
-      ],
-      "acceptance_criteria": [
-        "Run maintained check/build/develop/package/audit/fixture/smoke and diagnostic tooling through Rust.",
-        "Preserve fixture hashes and evidence/policy safeguards, with Rust regression tests.",
-        "Update CI and setup documentation and verify native packaged behavior."
-      ],
-      "test_strategy": {
-        "approach": "mixed",
-        "steps": [
-          "Run Rust checks, fixture verification and failure/pixel/policy regressions.",
-          "Exercise native packaged replacement and large-image smoke; record hosted status."
-        ],
-        "commands": [
-          "cargo xtask check",
-          "cargo xtask fixtures"
-        ],
-        "expected_results": [
-          "The pinned Rust toolchain runs all maintained development commands; truthful evidence and source preservation remain."
-        ]
-      }
-    },
-    {
-      "id": "TASK-006",
-      "description": "Trial the minimal native window and image surface to select a skeleton UI path.",
-      "status": "completed",
-      "dependencies": [
-        "TASK-001"
-      ],
-      "extra_context": [
-        "Isolated Iced/egui trials compile and render synthetic content on M4 Metal. Native Iced Open, orientation, resize/Fit and cancel behavior were observed. Iced is selected.",
-        "These are bounded probe results, not comparative performance or full accessibility/cross-platform claims. See docs/engineering/s0-probe-results.md."
-      ],
-      "context_links": [
-        {
-          "kind": "file",
-          "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
-          "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
-        },
-        {
-          "kind": "file",
-          "label": "Technical options",
-          "target": "docs/research/technical-options.md",
-          "relevance": "Records provisional stack alternatives and primary sources."
-        },
-        {
-          "kind": "file",
-          "label": "Measured S0 probe results",
-          "target": "docs/engineering/s0-probe-results.md",
-          "relevance": "Pins, commands, M4 decoder/render evidence, failures and remaining native checks."
-        }
-      ],
-      "acceptance_criteria": [
-        "Build a narrowly bounded Iced/wgpu trial and small egui comparison, or document a concrete blocker that justifies the Qt fallback.",
-        "Evaluate window startup, Fit image presentation, resize/DPI, focus/Open action integration, backend diagnostics and a capture route from actual rendered content.",
-        "Record exact dependency versions, M4 measurements and available Windows/Linux build/session evidence; distinguish virtual/software rendering and missing native tests.",
-        "Write a selection recommendation with unresolved limits; do not build crop tools, a catalog or a large design system during the trial."
-      ],
-      "test_strategy": {
-        "approach": "mixed",
-        "steps": [
-          "Run the same fixture and empty/image states in the candidate prototypes.",
-          "Inspect native behavior and captured content on the M4; record other-platform checks or missing evidence.",
-          "Compare release-build startup/memory and document the smallest viable choice."
-        ],
-        "commands": [
-          "cargo test --manifest-path probes/s0/Cargo.toml --locked --lib",
-          "cargo clippy --manifest-path probes/s0/Cargo.toml --locked --all-targets --features iced-ui,egui-ui -- -D warnings"
-        ],
-        "expected_results": [
-          "Write a selection recommendation with unresolved limits; do not build crop tools, a catalog or a large design system during the trial."
-        ]
-      }
-    },
-    {
-      "id": "TASK-007",
-      "description": "Probe JPEG decoding, orientation and the minimal display-color path.",
-      "status": "completed",
-      "dependencies": [
-        "TASK-001"
-      ],
-      "extra_context": [
-        "JPEG decode, EXIF orientation, input failures, source preservation and 24/60 MP decode measurements are verified within the documented probe scope.",
-        "Bounded moxcms standard-sRGB matrix/TRC recognition is unit-tested with independent profile serialization, metadata variants, gamma and other-gamut rejection. Native timing/capture evidence is tied to its measured configuration."
-      ],
-      "context_links": [
-        {
-          "kind": "file",
-          "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
-          "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
-        },
-        {
-          "kind": "file",
-          "label": "Technical options",
-          "target": "docs/research/technical-options.md",
-          "relevance": "Records provisional stack alternatives and primary sources."
-        },
-        {
-          "kind": "file",
-          "label": "Measured S0 probe results",
-          "target": "docs/engineering/s0-probe-results.md",
-          "relevance": "Pins, commands, M4 decoder/render evidence, failures and remaining native checks."
-        }
-      ],
-      "acceptance_criteria": [
-        "Try the selected candidate JPEG path on the S0 fixtures, retaining dimensions, EXIF orientation and supported profile information.",
-        "Choose the smallest declared color/input subset and validate the sRGB presentation assumptions; unsupported modes must have a clear outcome.",
-        "Measure decode/allocation behavior for 24/60 MP fixtures, reject excessive dimensions early and record required native dependencies.",
-        "Write a reproducible technical result for stack selection without implementing crop, full RAW development or the editor color engine."
-      ],
-      "test_strategy": {
-        "approach": "mixed",
-        "steps": [
-          "Decode orientation, tagged/untagged and malformed fixtures.",
-          "Check dimensions, representative pixels and resource bounds independently.",
-          "Document the proposed limits and remaining display-color evidence."
-        ],
-        "commands": [
-          "cargo test --manifest-path probes/s0/Cargo.toml --locked --lib",
-          "cargo clippy --manifest-path probes/s0/Cargo.toml --locked --all-targets --features iced-ui,egui-ui -- -D warnings"
-        ],
-        "expected_results": [
-          "Write a reproducible technical result for stack selection without implementing crop, full RAW development or the editor color engine."
-        ]
-      }
-    },
-    {
-      "id": "TASK-008",
-      "description": "Record the selected skeleton stack, dependency configuration and license disposition.",
-      "status": "completed",
-      "dependencies": [
-        "TASK-006",
-        "TASK-002",
-        "TASK-007"
-      ],
-      "extra_context": [
-        "Selected stack/features are in docs/design/s0-stack.md. GPL-3.0-or-later is applied in LICENSE and workspace manifests.",
-        "The supported JPEG subset uses bounded numeric standard-sRGB recognition. Manual native/asset/license review remains deferred; see docs/engineering/dependency-review.md."
-      ],
-      "context_links": [
-        {
-          "kind": "file",
-          "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
-          "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
-        },
-        {
-          "kind": "file",
-          "label": "Technical options",
-          "target": "docs/research/technical-options.md",
-          "relevance": "Records provisional stack alternatives and primary sources."
-        },
-        {
-          "kind": "file",
-          "label": "Planning and gate rules",
-          "target": "docs/task-planning.md",
-          "relevance": "Defines local task plans, milestone boundaries and named outcome prerequisites."
-        },
-        {
-          "kind": "file",
-          "label": "Selected S0 stack",
-          "target": "docs/design/s0-stack.md",
-          "relevance": "Evidence-based stack, workspace, limits and outstanding verification."
-        }
-      ],
-      "acceptance_criteria": [
-        "Publish an ADR with exact UI/core/decoder/rendering choices, versions/features and native prerequisites based on TASK-006 and TASK-007.",
-        "Apply the accepted license disposition and record initial dependency/asset compatibility; formal configured-build checks remain TASK-013.",
-        "Record the S0 JPEG/profile subset, rendering/capture route and platform/backend limitations without promising editor-wide color support.",
-        "Update affected documentation/tasks and select a minimal maintained workspace that does not depend on editor geometry, catalogs or MCP."
-      ],
-      "test_strategy": {
-        "approach": "inspection",
-        "steps": [
-          "Review the two probe reports and completed S0 decision gate.",
-          "Inspect concrete dependency configuration and license/notice requirements.",
-          "Validate revised plans and cross-links."
-        ],
-        "commands": [],
-        "expected_results": [
-          "Update affected documentation/tasks and select a minimal maintained workspace that does not depend on editor geometry, catalogs or MCP."
-        ]
-      }
-    },
-    {
-      "id": "TASK-009",
-      "description": "Pin the development toolchain and document native prerequisites.",
-      "status": "completed",
-      "dependencies": [
-        "TASK-008"
-      ],
-      "extra_context": [
-        "Rust 1.94.0, rustfmt and Clippy are pinned and verified on macOS. Native prerequisites and intended OS baselines are documented; minimum-version and native Windows/Linux setup acceptance remain unverified."
-      ],
-      "context_links": [
-        {
-          "kind": "file",
-          "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
-          "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
-        }
-      ],
-      "acceptance_criteria": [
-        "Pin the selected compiler/toolchain and formatting/lint components; record exact auxiliary tool versions and lockfile policy.",
-        "Document macOS, Windows and Linux native SDK/linker/runtime requirements and a clean setup path without hidden global tools.",
-        "Define a non-mutating Doctor report and optional editor/debugger/watch setup; no automatic machine-wide changes.",
-        "Verify setup instructions in the available environments and explicitly assign missing platform evidence to the later native checks."
-      ],
-      "test_strategy": {
-        "approach": "mixed",
-        "steps": [
-          "Follow setup from a clean environment where available.",
-          "Inspect exact pins and prerequisites against selected dependencies.",
-          "Record unavailable OS checks without claiming success."
-        ],
-        "commands": [],
-        "expected_results": [
-          "Verify setup instructions in the available environments and explicitly assign missing platform evidence to the later native checks."
-        ]
-      }
-    },
-    {
-      "id": "TASK-010",
-      "description": "Create the minimal maintained application workspace and entry points.",
-      "status": "completed",
-      "dependencies": [
-        "TASK-008",
-        "TASK-003",
-        "TASK-009"
-      ],
-      "extra_context": [
-        "The locked Cargo workspace contains lightwell-core, lightwell-app and xtask, with tested UI/service/decode boundaries. No empty catalog/editor/plugin/IPC crates are introduced."
-      ],
-      "context_links": [
-        {
-          "kind": "file",
-          "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
-          "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
-        },
-        {
-          "kind": "file",
-          "label": "Planning and gate rules",
-          "target": "docs/task-planning.md",
-          "relevance": "Defines local task plans, milestone boundaries and named outcome prerequisites."
-        }
-      ],
-      "acceptance_criteria": [
-        "Create the selected application workspace, minimal binary and UI-independent image/service boundary with locked dependencies.",
-        "Use the pinned toolchain and repository conventions, with documented ownership of platform-specific code and errors.",
-        "Provide a minimal runnable entry point and testable library boundary, without dummy editor subsystems.",
-        "Compile the maintained workspace and record the real initial commands; later setup tasks consume this workspace instead of duplicating it."
-      ],
-      "test_strategy": {
-        "approach": "mixed",
-        "steps": [
-          "Compile the minimal workspace from the pinned environment.",
-          "Inspect dependency direction and generated-file exclusions.",
-          "Record actual commands and expected entry-point behavior."
-        ],
-        "commands": [
-          "cargo check --locked --workspace",
-          "cargo test --locked -p lightwell-core"
-        ],
-        "expected_results": [
-          "Compile the maintained workspace and record the real initial commands; later setup tasks consume this workspace instead of duplicating it."
-        ]
-      }
-    },
-    {
-      "id": "TASK-011",
-      "description": "Implement cross-platform development, check, build and package orchestration.",
-      "status": "completed",
-      "dependencies": [
-        "TASK-010"
-      ],
-      "extra_context": [
-        "Rust xtask implements development, checks, build, smoke, inventory, audit and host packaging. Fresh-output, path-with-spaces, subprocess-failure and missing-binary checks pass. CI execution is verified separately."
-      ],
-      "context_links": [
-        {
-          "kind": "file",
-          "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
-          "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
-        }
-      ],
-      "acceptance_criteria": [
-        "Add one maintained command runner for Doctor, develop, format/lint, unit tests, build, smoke and package; unavailable operations report that they are not implemented yet.",
-        "Support locked debug/release builds, fixture/state/artifact overrides and meaningful exit codes without shell-specific assumptions.",
-        "Document the real commands, quoting/path rules and graphical/network prerequisites; later tasks fill the smoke/package integrations.",
-        "Local and CI workflows call the same runner and propagate failures instead of reporting partially completed checks as passes."
-      ],
-      "test_strategy": {
-        "approach": "mixed",
-        "steps": [
-          "Run commands from a path containing spaces and with explicit output directories.",
-          "Inject a failed subordinate command and verify its error/exit propagation.",
-          "Inspect help and Doctor output for missing prerequisites."
-        ],
-        "commands": [
-          "cargo xtask doctor",
-          "cargo xtask check",
-          "cargo xtask package --output artifacts/new-package"
-        ],
-        "expected_results": [
-          "Local and CI workflows call the same runner and propagate failures instead of reporting partially completed checks as passes."
-        ]
-      }
-    },
-    {
-      "id": "TASK-012",
-      "description": "Configure formatting, linting and documentation/task-plan checks.",
-      "status": "completed",
-      "dependencies": [
-        "TASK-010"
-      ],
-      "extra_context": [
-        "Repository schema/local-ID/DAG/link checks, formatting, strict Clippy and Rust tests pass. Negative tests cover malformed schema, ordering, task-plan links and formatter rejection without mutation. CI does not require a personal skill installation."
-      ],
-      "context_links": [
-        {
-          "kind": "file",
-          "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
-          "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
-        },
-        {
-          "kind": "file",
-          "label": "Planning and gate rules",
-          "target": "docs/task-planning.md",
-          "relevance": "Defines local task plans, milestone boundaries and named outcome prerequisites."
-        }
-      ],
-      "acceptance_criteria": [
-        "Configure pinned formatter and linter rules with useful warning enforcement and narrowly justified exceptions.",
-        "Add check-only commands for source formatting, linting, Markdown local links and both active task schemas/DAGs.",
-        "Check that a completed implementation gate has completed external product prerequisites; archive snapshots are excluded from execution/readiness checks.",
-        "The checks run without changing files and fail usefully on representative bad formatting, broken links or invalid task dependencies."
-      ],
-      "test_strategy": {
-        "approach": "mixed",
-        "steps": [
-          "Run the checks against clean source.",
-          "Use temporary malformed examples to confirm failures without committing them.",
-          "Verify no developer-specific absolute path is required."
-        ],
-        "commands": [
-          "cargo xtask check"
-        ],
-        "expected_results": [
-          "The checks run without changing files and fail usefully on representative bad formatting, broken links or invalid task dependencies."
-        ]
-      }
-    },
-    {
-      "id": "TASK-013",
       "description": "Automate dependency, license, asset and advisory checks.",
       "status": "pending",
-      "dependencies": [
-        "TASK-010"
-      ],
+      "dependencies": [],
       "extra_context": [
         "Pinned cargo-deny 0.20.2 enforces configured three-target license/source/advisory policy. Reviewed exact-version exceptions for paste 1.0.15 and ttf-parser 0.25.1 expire exclusively on 2026-12-18 and 2026-10-19 respectively.",
         "Local policy checks and the hosted baseline at c0ad340 pass. Full asset/native notice review remains incomplete and deferred; this task is not completed or a current S0 acceptance prerequisite."
@@ -628,14 +18,8 @@
         {
           "kind": "file",
           "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
           "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
+          "relevance": "Defines the load-only scope and three-platform acceptance."
         }
       ],
       "acceptance_criteria": [
@@ -660,114 +44,10 @@
       }
     },
     {
-      "id": "TASK-014",
-      "description": "Implement isolated configuration, data paths and application errors.",
-      "status": "completed",
-      "dependencies": [
-        "TASK-010"
-      ],
-      "extra_context": [
-        "Implemented and verified locally. See docs/engineering/s0-hardening-results.md for exact package identities, native Metal frames, source-preservation checks and measurement limits. Native Windows/Linux acceptance is not implied."
-      ],
-      "context_links": [
-        {
-          "kind": "file",
-          "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
-          "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
-        },
-        {
-          "kind": "file",
-          "label": "Local hardening evidence",
-          "target": "docs/engineering/s0-hardening-results.md",
-          "relevance": "Records exact package identity, reproducible tests, measurements and verification limitations."
-        }
-      ],
-      "acceptance_criteria": [
-        "Use appropriate per-user configuration/log/cache paths with explicit temporary overrides for development and smoke runs.",
-        "Provide small typed error categories for startup, unsupported input, file access, decode, render and diagnostics output.",
-        "Handle spaces/Unicode and preserve native path semantics; no source-adjacent writes or catalog schema in S0.",
-        "An isolated test run leaves real user configuration and source directories unchanged, including unwritable-directory failures."
-      ],
-      "test_strategy": {
-        "approach": "mixed",
-        "steps": [
-          "Run with fresh temporary paths and inspect created files.",
-          "Exercise read-only/unwritable locations and unusual path names.",
-          "Verify useful errors without panics or writes beside originals."
-        ],
-        "commands": [
-          "cargo xtask check"
-        ],
-        "expected_results": [
-          "An isolated test run leaves real user configuration and source directories unchanged, including unwritable-directory failures."
-        ]
-      }
-    },
-    {
-      "id": "TASK-015",
-      "description": "Implement the read-only image-open service and bounded background decode.",
-      "status": "completed",
-      "dependencies": [
-        "TASK-010"
-      ],
-      "extra_context": [
-        "Implemented and verified locally. See docs/engineering/s0-hardening-results.md for exact package identities, native Metal frames, source-preservation checks and measurement limits. Native Windows/Linux acceptance is not implied."
-      ],
-      "context_links": [
-        {
-          "kind": "file",
-          "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
-          "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
-        },
-        {
-          "kind": "file",
-          "label": "Local hardening evidence",
-          "target": "docs/engineering/s0-hardening-results.md",
-          "relevance": "Records exact package identity, reproducible tests, measurements and verification limitations."
-        }
-      ],
-      "acceptance_criteria": [
-        "Implement the chosen JPEG adapter and one shared open-image operation for UI and automated entry points.",
-        "Validate dimensions/profile/input limits and decode off the UI thread with bounded concurrency and generation-based replacement.",
-        "Retain the previous successful image on replacement failure, distinguish errors and stop/drop obsolete work safely.",
-        "Valid and invalid image requests preserve source bytes and cannot publish stale pixels or allocate without bounds."
-      ],
-      "test_strategy": {
-        "approach": "mixed",
-        "steps": [
-          "Run the synthetic supported/unsupported/orientation fixture set.",
-          "Issue rapid A/B opens and close during decode; verify only the current generation is accepted.",
-          "Check source hashes and peak allocation behavior."
-        ],
-        "commands": [
-          "cargo xtask check"
-        ],
-        "expected_results": [
-          "Valid and invalid image requests preserve source bytes and cannot publish stale pixels or allocate without bounds."
-        ]
-      }
-    },
-    {
-      "id": "TASK-016",
+      "id": "TASK-002",
       "description": "Remove or re-review the temporary paste maintenance exception before 2026-12-18.",
       "status": "ready",
-      "dependencies": [
-        "TASK-010"
-      ],
+      "dependencies": [],
       "extra_context": [
         "Expires exclusively on 2026-12-18; UTC expiry is enforced by the audit wrapper. Review sooner for new security information, distribution or font-input scope changes."
       ],
@@ -775,7 +55,7 @@
         {
           "kind": "file",
           "label": "Advisory review and enforcement",
-          "target": "docs/engineering/advisory-policy.md",
+          "target": "docs/engineering/dependencies.md",
           "relevance": "Records exposure, upstream constraints and expiry."
         }
       ],
@@ -800,12 +80,10 @@
       }
     },
     {
-      "id": "TASK-017",
+      "id": "TASK-003",
       "description": "Remove or re-review the temporary ttf-parser maintenance exception before 2026-10-19.",
       "status": "ready",
-      "dependencies": [
-        "TASK-010"
-      ],
+      "dependencies": [],
       "extra_context": [
         "Expires exclusively on 2026-10-19; UTC expiry is enforced by the audit wrapper. Review sooner for new security information, distribution or font-input scope changes."
       ],
@@ -813,7 +91,7 @@
         {
           "kind": "file",
           "label": "Advisory review and enforcement",
-          "target": "docs/engineering/advisory-policy.md",
+          "target": "docs/engineering/dependencies.md",
           "relevance": "Records exposure, upstream constraints and expiry."
         }
       ],
@@ -838,133 +116,19 @@
       }
     },
     {
-      "id": "TASK-018",
-      "description": "Build the native window and application lifecycle.",
-      "status": "completed",
-      "dependencies": [
-        "TASK-010",
-        "TASK-014"
-      ],
-      "extra_context": [
-        "Implemented and verified locally. See docs/engineering/s0-hardening-results.md for exact package identities, native Metal frames, source-preservation checks and measurement limits. Native Windows/Linux acceptance is not implied."
-      ],
-      "context_links": [
-        {
-          "kind": "file",
-          "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
-          "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
-        },
-        {
-          "kind": "file",
-          "label": "Local hardening evidence",
-          "target": "docs/engineering/s0-hardening-results.md",
-          "relevance": "Records exact package identity, reproducible tests, measurements and verification limitations."
-        }
-      ],
-      "acceptance_criteria": [
-        "Implement the accepted empty shell, title, initial sizing, focus order and clear loading/error presentation states.",
-        "Handle resize, display-scale changes and close events without continuously redrawing an idle window.",
-        "Initialize/report renderer availability and show actionable failure if no supported backend can start.",
-        "The window launches and exits cleanly on the primary machine; UI state logic is testable separately from native event delivery."
-      ],
-      "test_strategy": {
-        "approach": "mixed",
-        "steps": [
-          "Launch, resize, change scale where possible and close the app.",
-          "Exercise renderer-init failure and repeated lifecycle transitions.",
-          "Inspect empty-state focus and screenshot layout when capture becomes available."
-        ],
-        "commands": [
-          "cargo xtask check"
-        ],
-        "expected_results": [
-          "The window launches and exits cleanly on the primary machine; UI state logic is testable separately from native event delivery."
-        ]
-      }
-    },
-    {
-      "id": "TASK-019",
-      "description": "Add structured logs, timings and failure diagnostics.",
-      "status": "completed",
-      "dependencies": [
-        "TASK-010",
-        "TASK-014"
-      ],
-      "extra_context": [
-        "Implemented and verified locally. See docs/engineering/s0-hardening-results.md for exact package identities, native Metal frames, source-preservation checks and measurement limits. Native Windows/Linux acceptance is not implied."
-      ],
-      "context_links": [
-        {
-          "kind": "file",
-          "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
-          "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
-        },
-        {
-          "kind": "file",
-          "label": "Local hardening evidence",
-          "target": "docs/engineering/s0-hardening-results.md",
-          "relevance": "Records exact package identity, reproducible tests, measurements and verification limitations."
-        }
-      ],
-      "acceptance_criteria": [
-        "Implement human-readable diagnostics and JSONL events with run/request/generation IDs, build/backend context and stage timings.",
-        "Route protocol-safe diagnostics to stderr/files, bound log volume and omit private paths/EXIF by default.",
-        "Capture controlled panic/exit information and expose log-write failures without breaking normal image viewing.",
-        "An agent can correlate a request from startup through failure/success and shutdown using machine-readable logs."
-      ],
-      "test_strategy": {
-        "approach": "mixed",
-        "steps": [
-          "Parse emitted JSONL and correlate representative success/failure event sequences.",
-          "Exercise unavailable log output and verify bounded, useful fallback diagnostics.",
-          "Inspect logs for unexpected source paths, GPS or per-frame noise."
-        ],
-        "commands": [
-          "cargo xtask check"
-        ],
-        "expected_results": [
-          "An agent can correlate a request from startup through failure/success and shutdown using machine-readable logs."
-        ]
-      }
-    },
-    {
-      "id": "TASK-020",
+      "id": "TASK-004",
       "description": "Add the three-platform build and check CI workflow.",
       "status": "in_progress",
-      "dependencies": [
-        "TASK-011",
-        "TASK-012"
-      ],
+      "dependencies": [],
       "extra_context": [
-        "Three-platform hosted checks/packages pass at c0ad340. The expanded closure workflow at 6b13871 has no hosted result; current source/runtime-import/package verification remains unfinished.",
-        "See docs/engineering/ci-results.md for exact run/package identities and source-push authorization requirements."
+        "Three-platform hosted checks/packages pass at c0ad340. The expanded closure workflow at 6b13871 has no hosted result; current source/runtime-import/package verification remains unfinished."
       ],
       "context_links": [
         {
           "kind": "file",
           "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
           "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
+          "relevance": "Defines the load-only scope and three-platform acceptance."
         }
       ],
       "acceptance_criteria": [
@@ -987,287 +151,19 @@
       }
     },
     {
-      "id": "TASK-021",
-      "description": "Display the decoded image at Fit with correct resize and orientation.",
-      "status": "completed",
-      "dependencies": [
-        "TASK-018",
-        "TASK-015"
-      ],
-      "extra_context": [
-        "Implemented and verified locally. See docs/engineering/s0-hardening-results.md for exact package identities, native Metal frames, source-preservation checks and measurement limits. Native Windows/Linux acceptance is not implied."
-      ],
-      "context_links": [
-        {
-          "kind": "file",
-          "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
-          "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
-        },
-        {
-          "kind": "file",
-          "label": "Local hardening evidence",
-          "target": "docs/engineering/s0-hardening-results.md",
-          "relevance": "Records exact package identity, reproducible tests, measurements and verification limitations."
-        }
-      ],
-      "acceptance_criteria": [
-        "Present the current image through the selected actual renderer with declared sRGB semantics and EXIF orientation applied exactly once.",
-        "Preserve aspect ratio and center/fit the photo at current canvas size and display scale; no edit or interactive zoom tools.",
-        "Respect texture/resource limits and release replaced resources; image upload must not create an unbounded UI-thread stall.",
-        "Portrait/landscape/oriented fixtures display correctly across resize/DPI changes, with rendering readiness tied to the current generation."
-      ],
-      "test_strategy": {
-        "approach": "mixed",
-        "steps": [
-          "Compare labeled fixtures to expected orientation and Fit bounds.",
-          "Resize across aspect ratios and supported display scales.",
-          "Repeat image replacement and inspect resource use and backend diagnostics."
-        ],
-        "commands": [
-          "cargo xtask check"
-        ],
-        "expected_results": [
-          "Portrait/landscape/oriented fixtures display correctly across resize/DPI changes, with rendering readiness tied to the current generation."
-        ]
-      }
-    },
-    {
-      "id": "TASK-022",
-      "description": "Expose deterministic launch, state and readiness controls for development tests.",
-      "status": "completed",
-      "dependencies": [
-        "TASK-018",
-        "TASK-019",
-        "TASK-015"
-      ],
-      "extra_context": [
-        "Implemented and verified locally. See docs/engineering/s0-hardening-results.md for exact package identities, native Metal frames, source-preservation checks and measurement limits. Native Windows/Linux acceptance is not implied."
-      ],
-      "context_links": [
-        {
-          "kind": "file",
-          "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
-          "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
-        },
-        {
-          "kind": "file",
-          "label": "Local hardening evidence",
-          "target": "docs/engineering/s0-hardening-results.md",
-          "relevance": "Records exact package identity, reproducible tests, measurements and verification limitations."
-        }
-      ],
-      "acceptance_criteria": [
-        "Add opt-in fixture-path, isolated-state, window-size and evidence-output controls through the shared application path.",
-        "Expose structured empty/loading/ready/error state including generation, fixture identity, dimensions, orientation and backend.",
-        "Wait for explicit lifecycle/render readiness with a bounded timeout; normal app behavior is unchanged outside smoke mode.",
-        "A driver can launch and inspect the real app without a catalog, MCP server, network listener or arbitrary fixed sleeps."
-      ],
-      "test_strategy": {
-        "approach": "mixed",
-        "steps": [
-          "Launch with supported and failing fixture inputs and inspect state transitions.",
-          "Verify timeout and stale-generation cases return meaningful outcomes.",
-          "Compare automated opening with the same UI service operation."
-        ],
-        "commands": [
-          "cargo xtask check"
-        ],
-        "expected_results": [
-          "A driver can launch and inspect the real app without a catalog, MCP server, network listener or arbitrary fixed sleeps."
-        ]
-      }
-    },
-    {
-      "id": "TASK-023",
-      "description": "Connect native file opening, keyboard actions and visible failure states.",
-      "status": "completed",
-      "dependencies": [
-        "TASK-021"
-      ],
-      "extra_context": [
-        "Native Open/Cancel, shortcuts, shared failure behavior, resize and close are verified. The owner confirmed manual JPEG opening.",
-        "Automated native picker selection is not claimed to pass. Manual confirmation is distinct from exact-package renderer/state/log evidence; see docs/engineering/s0-hardening-results.md."
-      ],
-      "context_links": [
-        {
-          "kind": "file",
-          "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
-          "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
-        },
-        {
-          "kind": "file",
-          "label": "Native verification and owner result",
-          "target": "docs/engineering/s0-hardening-results.md",
-          "relevance": "Separates owner-observed manual picker success from automated native frame, resize and shutdown evidence."
-        }
-      ],
-      "acceptance_criteria": [
-        "Wire Open image and the standard platform Open shortcut through the shared open service.",
-        "Cancel the native picker without state loss, show bounded loading feedback and provide useful unsupported/missing/decode errors.",
-        "Keep the prior successful photo after a failed replacement and support selecting another file without restarting.",
-        "The user can launch, choose, view, replace and close an image with no editing tools or catalog dependency."
-      ],
-      "test_strategy": {
-        "approach": "mixed",
-        "steps": [
-          "Exercise picker success/cancel and keyboard focus in an actual desktop session.",
-          "Try invalid, missing and unreadable files after a successful load.",
-          "Record per-platform picker/runtime requirements for packaging."
-        ],
-        "commands": [],
-        "expected_results": [
-          "The user can launch, choose, view, replace and close an image with no editing tools or catalog dependency."
-        ]
-      }
-    },
-    {
-      "id": "TASK-024",
-      "description": "Capture actual application frames and record screenshot provenance.",
-      "status": "completed",
-      "dependencies": [
-        "TASK-021",
-        "TASK-022"
-      ],
-      "extra_context": [
-        "Implemented and verified locally. See docs/engineering/s0-hardening-results.md for exact package identities, native Metal frames, source-preservation checks and measurement limits. Native Windows/Linux acceptance is not implied."
-      ],
-      "context_links": [
-        {
-          "kind": "file",
-          "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
-          "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
-        },
-        {
-          "kind": "file",
-          "label": "Local hardening evidence",
-          "target": "docs/engineering/s0-hardening-results.md",
-          "relevance": "Records exact package identity, reproducible tests, measurements and verification limitations."
-        }
-      ],
-      "acceptance_criteria": [
-        "Capture a PNG of the real application content after the requested generation renders, using the selected renderer integration.",
-        "Store generation, physical dimensions, scale and color/capture provenance with the frame; distinguish offscreen, renderer and OS-window captures.",
-        "Return explicit unsupported/failed capture status and retain logs; never manufacture a successful screenshot or silently use another renderer.",
-        "Fixture captures can detect blank/stale frames and show the image plus application content required for layout review."
-      ],
-      "test_strategy": {
-        "approach": "mixed",
-        "steps": [
-          "Capture empty, ready and error states and inspect the PNGs visually.",
-          "Force a stale/blank render and verify evidence does not count as success.",
-          "Check frame/state generation agreement and high-DPI dimensions."
-        ],
-        "commands": [
-          "cargo xtask check"
-        ],
-        "expected_results": [
-          "Fixture captures can detect blank/stale frames and show the image plus application content required for layout review."
-        ]
-      }
-    },
-    {
-      "id": "TASK-025",
-      "description": "Package the S0 skeleton for macOS arm64.",
-      "status": "completed",
-      "dependencies": [
-        "TASK-021",
-        "TASK-011"
-      ],
-      "extra_context": [
-        "Implemented and verified locally. See docs/engineering/s0-hardening-results.md for exact package identities, native Metal frames, source-preservation checks and measurement limits. Native Windows/Linux acceptance is not implied."
-      ],
-      "context_links": [
-        {
-          "kind": "file",
-          "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
-          "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
-        },
-        {
-          "kind": "file",
-          "label": "Local hardening evidence",
-          "target": "docs/engineering/s0-hardening-results.md",
-          "relevance": "Records exact package identity, reproducible tests, measurements and verification limitations."
-        }
-      ],
-      "acceptance_criteria": [
-        "Implement host packaging for the accepted macOS arm64 architecture/runtime matrix as a app bundle and archive.",
-        "Include required native libraries/assets/notices, build identity and checksums; document any external runtime prerequisite.",
-        "Make package creation callable through the shared runner without public signing, store submission or an auto-updater.",
-        "Produce an install/unpack-and-launch artifact whose later smoke evidence can be tied to the exact tested binary, not an older build."
-      ],
-      "test_strategy": {
-        "approach": "mixed",
-        "steps": [
-          "Build from pinned inputs and inspect the assembled artifact.",
-          "Check dynamic/runtime dependencies and verify assets/notices are included.",
-          "Record actual package commands and remaining clean-environment checks."
-        ],
-        "commands": [
-          "cargo xtask check"
-        ],
-        "expected_results": [
-          "Produce an install/unpack-and-launch artifact whose later smoke evidence can be tied to the exact tested binary, not an older build."
-        ]
-      }
-    },
-    {
-      "id": "TASK-026",
+      "id": "TASK-005",
       "description": "Package the S0 skeleton for Windows.",
       "status": "in_progress",
-      "dependencies": [
-        "TASK-021",
-        "TASK-011"
-      ],
+      "dependencies": [],
       "extra_context": [
-        "Windows packages passed for the hosted c0ad340 baseline. Fresh closure-snapshot packaging/runtime-import inspection remains unfinished; no native Windows desktop acceptance is implied. See docs/engineering/ci-results.md."
+        "Windows packages passed for the hosted c0ad340 baseline. Fresh closure-snapshot packaging/runtime-import inspection remains unfinished; no native Windows desktop acceptance is implied."
       ],
       "context_links": [
         {
           "kind": "file",
           "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
           "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
+          "relevance": "Defines the load-only scope and three-platform acceptance."
         }
       ],
       "acceptance_criteria": [
@@ -1290,13 +186,10 @@
       }
     },
     {
-      "id": "TASK-027",
+      "id": "TASK-006",
       "description": "Package the S0 skeleton for Linux.",
       "status": "in_progress",
-      "dependencies": [
-        "TASK-021",
-        "TASK-011"
-      ],
+      "dependencies": [],
       "extra_context": [
         "Linux packages and headless software-renderer smoke passed for the hosted c0ad340 baseline. Fresh closure-snapshot packaging/runtime-import inspection and expanded packaged smoke remain unfinished; no native Linux desktop/GPU acceptance is implied."
       ],
@@ -1304,14 +197,8 @@
         {
           "kind": "file",
           "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
           "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
+          "relevance": "Defines the load-only scope and three-platform acceptance."
         }
       ],
       "acceptance_criteria": [
@@ -1334,198 +221,22 @@
       }
     },
     {
-      "id": "TASK-028",
-      "description": "Add focused decode, state and rendered-image correctness checks.",
-      "status": "completed",
-      "dependencies": [
-        "TASK-015",
-        "TASK-021",
-        "TASK-024"
-      ],
-      "extra_context": [
-        "Implemented and verified locally. See docs/engineering/s0-hardening-results.md for exact package identities, native Metal frames, source-preservation checks and measurement limits. Native Windows/Linux acceptance is not implied."
-      ],
-      "context_links": [
-        {
-          "kind": "file",
-          "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
-          "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
-        },
-        {
-          "kind": "file",
-          "label": "Local hardening evidence",
-          "target": "docs/engineering/s0-hardening-results.md",
-          "relevance": "Records exact package identity, reproducible tests, measurements and verification limitations."
-        }
-      ],
-      "acceptance_criteria": [
-        "Cover valid/unsupported input, EXIF 1-8, state transitions, source preservation and out-of-bounds dimensions with targeted tests.",
-        "Use captured image-region assertions for Fit bounds/orientation/representative color rather than universal text/pixel byte equality.",
-        "Check repeated opens, stale generation rejection, close during load and resource cleanup.",
-        "Failures identify the mismatched state/region and retain expected/actual evidence with documented tolerances."
-      ],
-      "test_strategy": {
-        "approach": "mixed",
-        "steps": [
-          "Run fixture-based tests and inspect a known orientation failure.",
-          "Inject obsolete requests and malformed input with bounded time/allocation expectations.",
-          "Review captures and source hashes independently."
-        ],
-        "commands": [
-          "cargo xtask check"
-        ],
-        "expected_results": [
-          "Failures identify the mismatched state/region and retain expected/actual evidence with documented tolerances."
-        ]
-      }
-    },
-    {
-      "id": "TASK-029",
-      "description": "Measure skeleton startup, image loading, memory and idle behavior on M4.",
-      "status": "completed",
-      "dependencies": [
-        "TASK-025"
-      ],
-      "extra_context": [
-        "Implemented and verified locally. See docs/engineering/s0-hardening-results.md for exact package identities, native Metal frames, source-preservation checks and measurement limits. Native Windows/Linux acceptance is not implied.",
-        "Native M4 measurements include startup, 24/60 MP loading, repeated-load RSS and ordinary idle; this is not a long-run plateau or cold-filesystem claim."
-      ],
-      "context_links": [
-        {
-          "kind": "file",
-          "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
-          "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
-        },
-        {
-          "kind": "file",
-          "label": "Measurement rules",
-          "target": "docs/specs/performance.md",
-          "relevance": "Defines honest baseline and platform reporting."
-        },
-        {
-          "kind": "file",
-          "label": "Local hardening evidence",
-          "target": "docs/engineering/s0-hardening-results.md",
-          "relevance": "Records exact package identity, reproducible tests, measurements and verification limitations."
-        }
-      ],
-      "acceptance_criteria": [
-        "Record exact M4/RAM/OS/display/storage and optimized packaged-build identity.",
-        "Measure warm/cold startup, request-to-present image latency, decode/upload breakdown, repeated-load memory and idle CPU/redraw behavior on the specified fixtures.",
-        "Keep source/render allocation limits and queues bounded; investigate UI stalls, monotonic resource growth and continuous idle redraws.",
-        "Publish an initial baseline with limitations; do not claim provisional editor budgets, VM timings or unmeasured platforms were validated."
-      ],
-      "test_strategy": {
-        "approach": "mixed",
-        "steps": [
-          "Repeat defined workloads with timing/log evidence and explicit warm/cold conditions.",
-          "Inspect memory/resource behavior over repeated image replacements.",
-          "Measure idle behavior after all work has settled."
-        ],
-        "commands": [
-          "cargo xtask check",
-          "cargo xtask measure --binary target/release/lightwell --output artifacts/new-baseline"
-        ],
-        "expected_results": [
-          "Publish an initial baseline with limitations; do not claim provisional editor budgets, VM timings or unmeasured platforms were validated."
-        ]
-      }
-    },
-    {
-      "id": "TASK-030",
-      "description": "Build a process-level agent smoke runner and evidence bundle.",
-      "status": "completed",
-      "dependencies": [
-        "TASK-021",
-        "TASK-022",
-        "TASK-024",
-        "TASK-028"
-      ],
-      "extra_context": [
-        "Implemented and verified locally. See docs/engineering/s0-hardening-results.md for exact package identities, native Metal frames, source-preservation checks and measurement limits. Native Windows/Linux acceptance is not implied.",
-        "The process runner tests shared loading/rendering with bounded deadlines and rejects stale, blank or missing evidence. Native picker automation is a separate check."
-      ],
-      "context_links": [
-        {
-          "kind": "file",
-          "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
-          "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
-        },
-        {
-          "kind": "file",
-          "label": "Local hardening evidence",
-          "target": "docs/engineering/s0-hardening-results.md",
-          "relevance": "Records exact package identity, reproducible tests, measurements and verification limitations."
-        }
-      ],
-      "acceptance_criteria": [
-        "Drive the actual executable through empty, load, replacement, invalid-file and shutdown scenarios with per-run isolation and deadlines.",
-        "Write result.json, state.json, JSONL logs, captures when supported, subprocess output and a reproduction summary to an ignored run directory.",
-        "Fail on wrong/blank/stale content, timeout or missing required evidence; classify unsupported GUI environments explicitly.",
-        "An agent can reproduce a scenario, inspect logs and the actual PNG, and determine the result without guessing GUI coordinates."
-      ],
-      "test_strategy": {
-        "approach": "mixed",
-        "steps": [
-          "Run success and deliberate failure scenarios and inspect all evidence.",
-          "Kill or hang a test subprocess and verify timeout cleanup plus retained diagnostics.",
-          "Verify source paths/data are sanitized for CI fixture runs."
-        ],
-        "commands": [
-          "cargo xtask check",
-          "cargo xtask smoke --scenario alternating --output artifacts/new-alternating",
-          "cargo xtask hardening --binary target/release/lightwell --output artifacts/new-failure-checks"
-        ],
-        "expected_results": [
-          "An agent can reproduce a scenario, inspect logs and the actual PNG, and determine the result without guessing GUI coordinates."
-        ]
-      }
-    },
-    {
-      "id": "TASK-031",
+      "id": "TASK-007",
       "description": "Integrate GUI smoke results and artifact retention into CI.",
       "status": "pending",
       "dependencies": [
-        "TASK-030",
-        "TASK-020"
+        "TASK-004"
       ],
       "extra_context": [
         "CI configures artifact retention and expanded Linux headless smoke against the packaged binary. Fresh hosted execution and artifact inspection remain unfinished; the c0ad340 baseline covers empty/load/replacement scenarios.",
-        "See docs/engineering/ci-results.md; software-renderer checks are not native desktop/GPU evidence."
+        "Software-renderer checks are not native desktop/GPU evidence."
       ],
       "context_links": [
         {
           "kind": "file",
           "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
           "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
+          "relevance": "Defines the load-only scope and three-platform acceptance."
         }
       ],
       "acceptance_criteria": [
@@ -1548,62 +259,11 @@
       }
     },
     {
-      "id": "TASK-032",
-      "description": "Verify packaged launch and image loading in a native macOS desktop session on the M4.",
-      "status": "completed",
-      "dependencies": [
-        "TASK-025",
-        "TASK-030"
-      ],
-      "extra_context": [
-        "Packaged native M4 smoke and OS-window shortcut/cancel/resize/close checks pass. Manual JPEG opening is owner-observed; automated picker selection remains unverified. Exact evidence boundaries are in docs/engineering/s0-hardening-results.md."
-      ],
-      "context_links": [
-        {
-          "kind": "file",
-          "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
-          "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
-        },
-        {
-          "kind": "file",
-          "label": "Native verification and owner result",
-          "target": "docs/engineering/s0-hardening-results.md",
-          "relevance": "Separates owner-observed manual picker success from automated native frame, resize and shutdown evidence."
-        }
-      ],
-      "acceptance_criteria": [
-        "Launch the current packaged artifact in the accepted native macOS environment on the M4 without relying on the developer toolchain.",
-        "Exercise the native picker/Open shortcut, valid/invalid replacement, resize/DPI behavior and clean shutdown; record actual OS/architecture/backend.",
-        "Collect correlated logs, state, application capture and observed native window/dialog evidence with the exact tested build identity.",
-        "Report native, emulated, software and virtual paths separately; unavailable desktop/hardware checks remain outstanding, never passing by inference."
-      ],
-      "test_strategy": {
-        "approach": "mixed",
-        "steps": [
-          "Follow package setup in a clean user/environment where available.",
-          "Run the agent smoke suite, then inspect visible window/dialog/focus behavior.",
-          "Compare source hashes and record artifacts plus any manual observations."
-        ],
-        "commands": [],
-        "expected_results": [
-          "Report native, emulated, software and virtual paths separately; unavailable desktop/hardware checks remain outstanding, never passing by inference."
-        ]
-      }
-    },
-    {
-      "id": "TASK-033",
+      "id": "TASK-008",
       "description": "Verify packaged launch and image loading in a Windows desktop session.",
       "status": "pending",
       "dependencies": [
-        "TASK-026",
-        "TASK-030"
+        "TASK-005"
       ],
       "extra_context": [
         "Deferred by the owner. No Windows 11 x64 machine/session is available; CI compilation is not native launch/load acceptance. Not a current S0 completion prerequisite."
@@ -1612,14 +272,8 @@
         {
           "kind": "file",
           "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
           "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
+          "relevance": "Defines the load-only scope and three-platform acceptance."
         }
       ],
       "acceptance_criteria": [
@@ -1642,12 +296,11 @@
       }
     },
     {
-      "id": "TASK-034",
+      "id": "TASK-009",
       "description": "Verify packaged launch and image loading in a Linux desktop session.",
       "status": "pending",
       "dependencies": [
-        "TASK-027",
-        "TASK-030"
+        "TASK-006"
       ],
       "extra_context": [
         "Deferred by the owner. Native Linux desktop/X11/Wayland acceptance remains unverified; software-rendered CI is functional evidence only. Not a current S0 completion prerequisite."
@@ -1656,14 +309,8 @@
         {
           "kind": "file",
           "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
           "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
+          "relevance": "Defines the load-only scope and three-platform acceptance."
         }
       ],
       "acceptance_criteria": [
@@ -1686,12 +333,11 @@
       }
     },
     {
-      "id": "TASK-035",
+      "id": "TASK-010",
       "description": "Document and optionally establish a reproducible Linux VM test route.",
       "status": "pending",
       "dependencies": [
-        "TASK-027",
-        "TASK-030"
+        "TASK-006"
       ],
       "extra_context": [
         "Optional portability aid, deferred by the owner. No VM installation or infrastructure purchase is authorized; a VM is not native Linux GPU evidence."
@@ -1700,14 +346,8 @@
         {
           "kind": "file",
           "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
           "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
+          "relevance": "Defines the load-only scope and three-platform acceptance."
         }
       ],
       "acceptance_criteria": [
@@ -1730,37 +370,22 @@
       }
     },
     {
-      "id": "TASK-036",
-      "description": "Write and verify the developer and agent bootstrap playbook.",
+      "id": "TASK-011",
+      "description": "Verify the developer setup and evidence guide (docs/engineering/development.md) on Windows and Linux.",
       "status": "pending",
       "dependencies": [
-        "TASK-011",
-        "TASK-030",
-        "TASK-025",
-        "TASK-026",
-        "TASK-027"
+        "TASK-005",
+        "TASK-006"
       ],
       "extra_context": [
-        "The bootstrap playbook is written and locally verified from a clean clone with a warm shared Cargo cache, including actual packaged replacement smoke. Completion still requires current Windows/Linux package verification."
+        "The guide is locally verified on macOS from a clean clone, including packaged replacement smoke. Completion requires current Windows/Linux package verification."
       ],
       "context_links": [
         {
           "kind": "file",
           "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
           "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
-        },
-        {
-          "kind": "file",
-          "label": "Working bootstrap playbook",
-          "target": "docs/engineering/bootstrap-playbook.md",
-          "relevance": "Verified local setup, launch, evidence inspection and packaging workflow."
+          "relevance": "Defines the load-only scope and three-platform acceptance."
         }
       ],
       "acceptance_criteria": [
@@ -1781,57 +406,6 @@
           "A contributor can follow the playbook from a clean checkout and produce an inspectable result without reconstructing undocumented steps."
         ]
       }
-    },
-    {
-      "id": "TASK-037",
-      "description": "Close S0 after automated portable checks and current native M4 acceptance.",
-      "status": "completed",
-      "dependencies": [
-        "TASK-032",
-        "TASK-029"
-      ],
-      "extra_context": [
-        "S0 is owner-accepted on recorded native M4 evidence and the green portable c0ad340 baseline.",
-        "Fresh hosted closure-snapshot verification, current Windows/Linux package/playbook checks and deferred desktop/license reviews remain unfinished; acceptance does not relabel these gaps as passing results."
-      ],
-      "context_links": [
-        {
-          "kind": "file",
-          "label": "S0 skeleton contract",
-          "target": "docs/specs/bootstrap.md",
-          "relevance": "Defines the load-only scope and three-platform acceptance."
-        },
-        {
-          "kind": "file",
-          "label": "Development and verification",
-          "target": "docs/engineering/development.md",
-          "relevance": "Defines setup, checks, logs, screenshots and build evidence."
-        },
-        {
-          "kind": "file",
-          "label": "Planning and gate rules",
-          "target": "docs/task-planning.md",
-          "relevance": "Defines local task plans, milestone boundaries and named outcome prerequisites."
-        }
-      ],
-      "acceptance_criteria": [
-        "Review current native M4 packaged launch/load, source preservation, invalid-input and clean-shutdown results plus automated portable build/package evidence. Manual Windows/Linux desktop checks and manual license reviews are deferred by owner instruction.",
-        "Verify the developer checks, agent result/log/capture workflow and M4 baseline are reproducible and linked.",
-        "Confirm no catalog/edit/export/MCP subsystem is required for the skeleton and do not mark editor tools implemented.",
-        "Update the feature matrix and handoff with exact verified scope and limitations. The 2026-09-20 owner acceptance may close this milestone on recorded M4 and earlier portable evidence while fresh hosted closure-snapshot checks remain explicitly unfinished follow-ups."
-      ],
-      "test_strategy": {
-        "approach": "inspection",
-        "steps": [
-          "Audit the S0 acceptance checklist against current build identities and artifacts.",
-          "Reproduce a representative valid and failing scenario from the playbook.",
-          "Validate every active task plan and documentation state."
-        ],
-        "commands": [],
-        "expected_results": [
-          "The feature matrix and handoff state the exact accepted scope and remaining limitations without converting deferred or stale platform evidence into passing results."
-        ]
-      }
     }
   ],
   "execution_waves": [
@@ -1842,99 +416,18 @@
         "TASK-002",
         "TASK-003",
         "TASK-004",
-        "TASK-005"
+        "TASK-005",
+        "TASK-006"
       ]
     },
     {
       "wave": 2,
       "task_ids": [
-        "TASK-006",
-        "TASK-007"
-      ]
-    },
-    {
-      "wave": 3,
-      "task_ids": [
-        "TASK-008"
-      ]
-    },
-    {
-      "wave": 4,
-      "task_ids": [
-        "TASK-009"
-      ]
-    },
-    {
-      "wave": 5,
-      "task_ids": [
-        "TASK-010"
-      ]
-    },
-    {
-      "wave": 6,
-      "task_ids": [
-        "TASK-011",
-        "TASK-012",
-        "TASK-013",
-        "TASK-014",
-        "TASK-015",
-        "TASK-016",
-        "TASK-017"
-      ]
-    },
-    {
-      "wave": 7,
-      "task_ids": [
-        "TASK-018",
-        "TASK-019",
-        "TASK-020"
-      ]
-    },
-    {
-      "wave": 8,
-      "task_ids": [
-        "TASK-021",
-        "TASK-022"
-      ]
-    },
-    {
-      "wave": 9,
-      "task_ids": [
-        "TASK-023",
-        "TASK-024",
-        "TASK-025",
-        "TASK-026",
-        "TASK-027"
-      ]
-    },
-    {
-      "wave": 10,
-      "task_ids": [
-        "TASK-028",
-        "TASK-029"
-      ]
-    },
-    {
-      "wave": 11,
-      "task_ids": [
-        "TASK-030"
-      ]
-    },
-    {
-      "wave": 12,
-      "task_ids": [
-        "TASK-031",
-        "TASK-032",
-        "TASK-033",
-        "TASK-034",
-        "TASK-035",
-        "TASK-036"
-      ]
-    },
-    {
-      "wave": 13,
-      "task_ids": [
-        "TASK-037"
+        "TASK-007",
+        "TASK-008",
+        "TASK-009",
+        "TASK-010",
+        "TASK-011"
       ]
     }
   ]

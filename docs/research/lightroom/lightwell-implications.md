@@ -2,7 +2,7 @@
 
 [Knowledge base index](README.md)
 
-**Status: proposals and unexecuted experiments.** This chapter translates the evidence into engineering questions. It does not accept a new product decision, implement an effect, or expand S0/M1. Existing [module/API design](../../design/modules-and-api.md), [history specification](../../specs/edit-history.md), [source recovery](../../specs/source-recovery.md) and [accepted editor decisions](../../design/m1-decisions.md) remain authoritative.
+**Status: proposals and unexecuted experiments.** This chapter translates the evidence into engineering questions. It does not accept a new product decision, implement an effect, or expand S0/M1. Existing [module/API design](../../design/modules-and-api.md), [history specification](../../specs/edit-history.md), [source recovery](../../specs/source-recovery.md) and [product decisions](../../decisions.md) remain authoritative.
 
 ## Architectural lessons worth evaluating
 

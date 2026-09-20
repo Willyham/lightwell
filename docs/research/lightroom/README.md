@@ -1,6 +1,6 @@
 # Lightroom Classic technical knowledge base
 
-Researched **2026-09-20**. Documentation research completed for [the Lightroom research plan](../../../tasks/research-lightroom.json). This describes Lightroom Classic, with explicitly labelled Camera Raw/shared-engine evidence. It is a reference for Lightwell, not a feature commitment or a recipe for exact Adobe output.
+Researched September 2026. This describes Lightroom Classic, with explicitly labelled Camera Raw/shared-engine evidence. It is a reference for Lightwell, not a feature commitment or a recipe for exact Adobe output.
 
 There is substantial public information about the architecture and tool behavior, plus a few unusually useful engineering explanations. Exact contemporary kernels, coefficients, scheduling and the complete processing graph remain proprietary or unverified. The source set includes Adobe documentation, engineers' explanations, original papers and SDK references; see the [annotated bibliography](sources.md).
 
@@ -20,7 +20,6 @@ The [darktable companion](../darktable/README.md) examines corresponding behavio
 | What can plugins and programs actually control? | [SDK and interoperability](sdk-and-interoperability.md) |
 | Which facts changed recently? Which sources conflict? | [Version notes and evidence caveats](versions-and-caveats.md) |
 | What should Lightwell learn, and what needs experiments? | [Engineering implications and research gaps](lightwell-implications.md) |
-| What was the research scope? | [Research plan](research-plan.md) |
 
 ## Main findings
 
@@ -43,4 +42,4 @@ The [darktable companion](../darktable/README.md) examines corresponding behavio
 
 **U — Unknown:** no adequate public evidence found. Absence of a source is not proof that the behavior does not exist.
 
-The user's example “contract” is interpreted as **Contrast**. S0 remains the JPEG viewer; M1 remains the agreed geometry/history/IPC editor. Tonal, RAW, masking and AI research does not move those features into either milestone.
+This research informs decisions; it does not commit Lightwell to any Lightroom feature or algorithm.

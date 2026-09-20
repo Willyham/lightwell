@@ -1,71 +1,68 @@
-# Performance and correctness measurement plan
+# Performance measurement plan
 
-Status: **provisional targets, not measured results**. The owner's M4 MacBook Pro is the first reference target. The initial native M4 configuration and measurements are recorded in [hardening results](../engineering/s0-hardening-results.md); each new run records its actual conditions. Minimum hardware, catalog scale and accepted budgets remain separate decisions. Fast interaction, background throughput, and output correctness must be evaluated separately. The engineering rules every core and desktop change must follow, with a review checklist, are in [performance rules](../engineering/performance-rules.md).
+Status: provisional budgets, not accepted requirements. The owner's M4 MacBook Pro is the reference machine. The engineering rules every core and desktop change must follow are in [performance rules](../engineering/performance-rules.md). Fast interaction, background throughput and output correctness are evaluated separately.
 
-## S0 first-build baseline
-
-The first build is now the [image-loading skeleton](bootstrap.md). Measure optimized-build startup, request-to-present JPEG loading, idle redraw/CPU and repeated-open memory on M4 through the structured logging/smoke workflow. No geometry, export, catalog or RAW benchmark gates S0. Record 24/60 MP behavior and resource limits; the table below remains a provisional editor target set. S0 must still keep allocations/queues bounded and loading responsive. S0 is owner-accepted on recorded native M4 and earlier portable evidence; fresh hosted and Windows/Linux manual follow-ups remain open.
-
-## Proposed reference workloads
+## Reference workloads
 
 | Workload | What it reveals |
 | --- | --- |
-| 24 MP and 60 MP RGB JPEGs, rotated EXIF variants, embedded sRGB/Adobe RGB/Display P3 profiles | First-open latency, memory, geometry and color |
-| Huge/invalid dimensions, truncated files, malformed profiles | Resource bounds and error recovery |
-| M4 MacBook Pro with its actual display resolution/scaling recorded; optional external SDR 4K case | Primary preview/input, color, text/DPI and Metal resource measurements |
-| Linux ARM64 VM on the Mac; later native Windows/Linux GPU machines | Functional portability versus native GPU behavior, measured separately |
-| 100,000 metadata rows; 1,000,000-row stress catalog with skewed dates/ratings | Index selection, pagination, filtering, startup independent of total image bytes |
-| At least 1,000 real images for warm/cold browsing, then a larger owner dataset | Thumbnail decode and cache behavior that synthetic rows cannot establish |
-| Local SSD; later removable SSD and representative NAS source storage | Distinguish CPU/GPU throughput from storage latency |
-| Nikon Z6 NEF and Fujifilm X100VI RAF, including the owner's actual compression/bit-depth modes | Later RAW decode, image quality and peak memory; sample dimensions must be recorded rather than inferred from brand |
+| 24 MP and 60 MP JPEGs, EXIF-rotated variants, embedded sRGB/Adobe RGB/Display P3 profiles | First-open latency, memory, geometry and color |
+| Huge or invalid dimensions, truncated files, malformed profiles | Resource bounds and error recovery |
+| M4 with its actual display scale recorded; optional external SDR 4K | Preview, input, color, DPI and Metal resource measurements |
+| Linux ARM64 VM, later native Windows/Linux GPU machines | Functional portability versus native GPU behavior, measured separately |
+| 100,000 metadata rows; 1,000,000-row stress catalog | Index selection, pagination and startup independent of image bytes (later library) |
+| At least 1,000 real images, then a larger owner dataset | Thumbnail decode and cache behavior synthetic rows cannot show |
+| Local SSD, later removable SSD and NAS | CPU/GPU throughput versus storage latency |
+| Nikon Z6 NEF and Fujifilm X100VI RAF in the owner's real modes | Later RAW decode quality and peak memory |
 
-All datasets need provenance, dimensions, profile/orientation and redistribution permission. Use synthetic geometry/color fixtures in the repository and a documented local manifest for private camera originals. Never commit an owner's photo library by default.
+Datasets need provenance, dimensions, profile and orientation, and redistribution permission. Synthetic fixtures live in the repository; private originals stay in a local manifest and are never committed.
 
 ## Provisional budgets
 
-Apply the initial budgets to the owner's M4 MacBook Pro, recording unified-memory capacity, exact chip configuration, storage, macOS and display settings before running measurements. Use the measured machine configuration rather than assuming 16 GB or inventing a minimum hardware requirement. Keep the existing budgets as engineering hypotheses until measured and accepted; do not claim they were agreed or achieved. Measure first in SDR with the display color contract recorded.
+Engineering hypotheses until measured and accepted on the recorded M4 configuration, in SDR with the display contract recorded.
 
-| Metric | Proposed budget | When |
-| --- | --- | --- |
-| Launch to usable empty shell | p95 < 1 s warm; < 2 s cold | M1 |
-| Select uncached local 24 MP JPEG to fit preview | p95 < 750 ms; show loading feedback within 100 ms | M1 |
-| Crop overlay frame time with loaded preview | p95 <= 16.7 ms at 60 Hz | M4 crop |
-| Geometry input to presented preview | p95 < 50 ms after source preview is ready | M2 transforms / M4 crop |
-| Empty steady-state process memory | Target <= 150 MiB, measured per OS including helper processes | M1 |
-| 24 MP one-image edit working set | Target <= 600 MiB CPU-resident allocation/RSS accounting reported separately | M1 |
-| 60 MP import/export peak | Target <= 1 GiB total process RSS; GPU memory reported independently and unified-memory overlap explained | Foundation import / editor export follow-up |
-| Idle app CPU | Target < 1% of one core over 30 s after background work settles | M1 |
-| First page of 100,000-row indexed filter | p95 < 100 ms; warm metadata, thumbnails excluded | Later Library |
-| Warm adjacent-image fit preview | p95 < 150 ms, cache hit | Later Library |
+| Metric | Proposed budget |
+| --- | --- |
+| Launch to usable empty shell | p95 < 1 s warm, < 2 s cold |
+| Uncached 24 MP JPEG to Fit preview | p95 < 750 ms; loading feedback within 100 ms |
+| Crop overlay frame time | p95 ≤ 16.7 ms at 60 Hz |
+| Geometry input to presented preview | p95 < 50 ms once the source preview is ready |
+| Empty steady-state process memory | ≤ 150 MiB including helper processes |
+| 24 MP single-image edit working set | ≤ 600 MiB CPU-resident |
+| 60 MP import or export peak | ≤ 1 GiB process RSS, GPU memory reported separately |
+| Idle CPU | < 1% of one core over 30 s after background work settles |
+| First page of a 100,000-row indexed filter | p95 < 100 ms warm (later library) |
+| Warm adjacent-image Fit preview | p95 < 150 ms on a cache hit (later library) |
 
-Do not establish an export throughput claim before measuring JPEG decode, transform/color and encoding separately. Report wall time, megapixels/sec, peak memory, and cancellation latency. No full float32 60 MP RGBA allocation is needed for the crop prototype: that single buffer alone would be about 916 MiB, before decoded bytes and GPU copies.
+A single float32 RGBA buffer for 60 MP is about 916 MiB, so unrestricted full-resolution float processing needs tiling before it is promised.
 
-## History foundation measurements
+## Recorded baselines
 
-Use tiny exact pixel fixtures plus 24/60 MP sources, short logs and generated long histories. Record first-page query size/latency, restore/undo commit latency, 100% detail readiness, rapid-selection cancellation and peak resident/cache memory. The first page must not materialize every historical snapshot or allocate a pixel buffer per entry. Establish measurements before accepting numerical thresholds.
+Native M4 Pro, release builds, warm filesystem cache, synthetic fixtures. Diagnostic observations, not accepted budgets or cross-platform claims.
 
-## Method and reporting
+| Measurement | Result |
+| --- | --- |
+| S0 viewer launch to observed frame (empty / 24 MP / 60 MP) | median 233 / 296 / 412 ms |
+| S0 request to captured frame (24 / 60 MP) | median 237 / 361 ms |
+| S0 sampled peak RSS (empty / 24 / 60 MP) | 111 / 506 / 772 MiB; 965 MiB after sixteen 60 MP loads |
+| S0 idle CPU after settling | 0.033% of one core over 30 s |
+| Core import of a 24 / 60 MP JPEG | 58 / 126 ms |
+| Core one transform on 24 / 60 MP (p50) | 11.7 / 24.6 ms; 200 composed transforms 13.4 / 27.1 ms |
+| Pixel edit after a rotate on 24 MP | 0.2 ms (sampling path) |
+| Editor RSS after M1/M2 journey with a small fixture | about 101 MiB, 0.2% CPU idle |
 
-Use optimized builds with recorded commit, dependency lockfile, OS, CPU/GPU/driver, RAM, display resolution/profile, and storage type. Report cold and warm runs separately, define whether “cold” means application caches or OS filesystem caches, and exclude neither failures nor long-tail samples without explanation. Collect at least 30 latency samples for initial comparisons; use longer runs when investigating tails. Do not compare debug builds with release builds.
+Core figures exclude desktop scheduling, GPU upload and presentation. Reproduce with `editor-performance` and `measure` as described in [development](../engineering/development.md).
 
-Instrument time from user event to presented frame rather than reporting shader duration as interaction latency. Include decode, color transform, upload, queue delay and presentation. Measure CPU RSS, cache bytes, GPU allocations, and transient copies; avoid adding shared CPU/GPU allocations twice on unified-memory systems. Capture idle behavior after all background work stops.
+## Method
 
-Use deterministic geometry fixtures, EXIF orientations 1–8, gradients, color patches, fine detail, and photo references. Check coordinate round trips, crop coverage, CPU/GPU render differences and export interpretation. Verify centered proportional Option resizing and composition-preserving straightening at multiple zoom/DPI settings, including angle sweeps that return to their starting point without cumulative crop shrinkage. At 100%, check actual source detail, detail-load latency and memory during rapid pan/zoom; an enlarged Fit preview is only a temporary loading state. Inspect metadata tags/containers independently for both default stripping and Keep metadata export. The editor color/export proof must choose numerical tolerances and display-viewing conditions; tolerances are not assumed from JPEG byte equality. Later RAW tests separate decode success, sensor interpretation, baseline appearance and subjective detail quality.
+Optimized builds only, with commit, lockfile, OS, CPU/GPU, RAM, display and storage recorded. Report cold and warm runs separately and say which cold is meant. Keep at least 30 samples and never drop failures or tails silently. Measure user event to presented frame, not shader time, and account CPU RSS, cache bytes, GPU allocations and transient copies without double-counting unified memory. Capture idle after all background work stops. No timing gates in CI; CI enforces exactness, deterministic bounds and coverage. VM checks record hypervisor, guest graphics path and software versus accelerated rendering, and never stand in for native timings.
 
-Avoid flaky CI timing gates on shared runners. CI should enforce numerical correctness, allocation/queue bounds where deterministic, and build/test coverage. Compare performance on the recorded M4 reference machine and preserve measurement reports. S0 is accepted with rendering/VM limitations and unfinished follow-ups explicit. Manual Windows/Linux checks are deferred. Each core milestone extends the native Mac journey; later portability work rechecks the added editor behavior on Windows/Linux; earlier skeleton success does not prove later editing/IPC features. Cross-compilation or a Linux VM alone does not prove native desktop/GPU support.
+Correctness checks use deterministic fixtures across all EXIF orientations, gradients, patches and fine detail: coordinate round trips, crop coverage, CPU versus GPU differences and export interpretation, including centered Option resizing and angle sweeps that return without cumulative shrinkage. Color and export proofs choose explicit numerical tolerances and viewing conditions.
 
-For VM checks, record guest architecture, hypervisor/runtime version, guest graphics API/adapter, software versus accelerated rendering, memory allocation and shared-folder use. An OpenGL-to-Metal virtual GPU path does not establish Vulkan support or native Linux timings. Keep the active catalog inside the guest's local filesystem rather than a host shared folder. [VM research](../research/technical-options.md#apple-silicon-and-linux-vm-testing).
+## Module activation
 
-## Module activation measurements
-
-The [module design](../design/modules-and-api.md#resources-and-external-loading) requires evidence before splitting basic functionality into separately loaded binaries. Logical code boundaries and user enablement do not by themselves establish lower memory use or faster launch. No Lightwell module-loading benchmark has run.
-
-After the first use case is selected, later extension work compares the working built-in baseline with a focused activation prototype on the M4. Measure minimal/default configurations, disabled optional modules, enabled-but-unused modules and first use. Where worthwhile, compare lazy linked resources with separate runtime loading at equivalent functionality/output. Record module/dependency manifests, actual resource initialization, cold/warm launch, RSS/peak memory, CPU/GPU allocations, idle work and first-use latency. Use the same fixtures/build settings and the sampling/reporting rules above; note packaging size separately from resident memory.
-
-Check that disabled modules start no workers or background jobs and allocate no processor resources. Account for shared decoder dependencies: disabling one camera family may not remove its shared library cost. Compare the saved work with loader/dispatch/IPC overhead where applicable, and report latency merely deferred to first use. Reject a claimed optimization if it changes output or skips an existing recipe effect. If the benefit is immaterial, retain the simpler built-in implementation and API boundary; the external-loader requirement remains. The product performance interview determines relevant user priorities, not an invented percentage improvement target. Windows/Linux portability evidence stays separate from native M4 performance.
+Logical boundaries and user enablement do not by themselves reduce memory or launch time. After the first external use case is selected, compare the built-in baseline with an activation prototype on the M4: minimal and default configurations, disabled and enabled-but-unused modules, first use, cold and warm launch, RSS, CPU/GPU allocations, idle work and first-use latency, with packaging size reported separately. Disabled modules must start no workers and allocate no processor resources. Reject any optimization that changes output or skips a recipe effect. If the benefit is immaterial, keep the simpler built-in implementation; the external-loader requirement remains regardless.
 
 ## Growth rules
 
-Catalog opening must not enumerate/decode all originals. Grid memory should depend on visible items and cache quotas. Import, hashing, thumbnailing and AI indexing use backpressure and resumable batches. A user switching photos cancels/deprioritizes obsolete preview requests. The app must stay interactive while exports and indexing run.
-
-Introduce full-resolution tiling and neighborhood halos before declaring unrestricted large-image local processing. A cleanly reported resource limit is acceptable during M1 if documented; silently exhausting memory is not.
+Catalog opening never enumerates or decodes all originals. Grid memory depends on visible items and cache quotas. Import, hashing, thumbnailing and indexing use backpressure and resumable batches. Switching photos cancels obsolete preview requests, and the app stays interactive during exports and indexing. Introduce tiling with neighborhood halos before promising unrestricted large-image local processing. A cleanly reported resource limit is acceptable; silent exhaustion is not.

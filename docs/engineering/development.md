@@ -1,86 +1,77 @@
-# Development, builds and agent verification
+# Development, verification and packaging
 
-Status: **maintained tooling implemented; S0 accepted and M1/M2 locally verified with outstanding hosted/platform follow-ups**. See [contributing](../../CONTRIBUTING.md), [scaffold commands](scaffold-commands.md) and [M1/M2 results](m1-m2-results.md). The operation table below defines the maintained-app contract.
+All tooling is Rust: `cargo xtask <command>`. Commands reject unknown arguments and pass paths to child processes without shell interpolation. `cargo xtask help` lists everything.
 
-## Repository and toolchain
+## Setup
 
-The selected Rust workspace has an application crate, a UI-independent core and xtask orchestration. M1 persistence uses bundled SQLite through pinned `rusqlite`. The application lockfile and Rust toolchain remain pinned; native SDK/runtime prerequisites are recorded per OS. [Cargo workspace reference](https://doc.rust-lang.org/cargo/reference/workspaces.html).
+Install Git and Rust through rustup plus the platform prerequisites in [platforms](platforms.md). Nothing here installs system tools silently.
 
-Repository setup should cover `.gitignore`, line endings, editor defaults, generated-file locations, fixture provenance, contribution steps and documentation links. Do not check in private photos, build products, logs or screenshots. Keep checked-in synthetic fixtures small and reproducible. Retain only the scaffolding needed by the skeleton.
+```sh
+rustup toolchain install 1.94.0 --profile minimal --component rustfmt --component clippy
+cargo xtask doctor
+cargo xtask check
+cargo xtask build --release
+```
 
-Provide platform-specific setup instructions and a non-mutating environment check that reports missing prerequisites and useful installation guidance. Do not silently install SDKs, modify shell profiles, enable global hooks or require a container to run the desktop app. Optional editor settings and local watch workflows must not be required by CI.
+Doctor reports missing tools and the graphics environment without installing anything; it does not prove a desktop or GPU is available. The first build fetches pinned crates and needs network.
 
-## One documented command surface
+## Commands
 
-The following list defines the required tooling outcomes. The maintained Rust `xtask` now implements the commands listed in [scaffold commands](scaffold-commands.md); broader acceptance requirements below remain in force:
-
-| Operation | Required behavior |
+| Purpose | Command |
 | --- | --- |
-| Doctor | Report toolchain, native prerequisites, graphics/display environment and actionable gaps |
-| Develop | Launch a development build, optionally with a fixture and isolated state |
-| Format / lint | Check formatting, compiler/linter diagnostics and documentation/task-plan consistency |
-| Test | Run UI-independent correctness tests without a display |
-| Build | Produce debug/release builds with the locked dependency graph |
-| Smoke | Run one scenario with a deadline, structured status, logs and capture artifacts |
-| Package | Assemble the host's native development artifact and notices |
-| Check | Run the normal local/CI checks and distinguish unavailable GUI checks from passes |
+| Environment report | `cargo xtask doctor` |
+| Full local and CI checks: repository links and task plans, formatting, Clippy, tests | `cargo xtask check` |
+| Individual steps | `cargo xtask check-repository`, `fmt`, `lint`, `test`, `build [--release]` |
+| Run the editor, release build | `cargo xtask develop [--catalog FILE] [--open PATH] [--data-root DIR]` |
+| Run an unoptimized build, debugging only | `cargo xtask develop --debug ...` |
+| Exact M1/M2 journey, display-independent | `cargo run --release --locked --package xtask -- editor-acceptance --output NEW_DIR` |
+| Core timing on a real-sized JPEG | `cargo run --release --locked --package xtask -- editor-performance --source JPEG --output NEW_DIR [--samples N]` |
+| Verify golden fixtures; generate 24 and 60 MP workloads | `cargo xtask fixtures`, `cargo xtask generate-fixtures [--output NEW_DIR]` |
+| Rendered smoke scenario, needs a native graphical session | `cargo xtask smoke --scenario NAME --output NEW_DIR [--binary PATH]` |
+| Inspect a capture | `cargo xtask check-capture --image PNG [--orientation N]` |
+| Process failure checks; macOS measurement | `cargo xtask hardening --binary PATH --output NEW_DIR`, `cargo xtask measure --binary PATH --output NEW_DIR [--samples N]` |
+| Package; dependency inventory | `cargo xtask package --output NEW_DIR`, `cargo xtask inventory --output NEW_DIR` |
+| License, source and advisory policy | `cargo xtask audit`, see [dependencies](dependencies.md) |
+| Isolated UI probes | `cargo xtask probe --candidate iced|egui --output NEW_DIR` |
 
-Handle spaces, Unicode and platform path conventions correctly. Share orchestration logic between local development and CI; avoid separate undocumented shell pipelines. Keep exit codes meaningful, support per-run temporary directories, and document which operations require network dependency downloads or a graphical session. Reproducible setup means pinned inputs and repeatable steps; do not claim byte-for-byte reproducible native binaries without measuring them.
+Every evidence command refuses an existing output directory: use a fresh `artifacts/<run-id>/`. Timing commands must use release builds. A debug build makes image work roughly thirty times slower (a 10 MB JPEG took ten seconds to open), which is why `develop` defaults to release. `check` never implies graphical or dependency-audit acceptance.
 
-## Formatting, linting and dependency checks
+## Running the application
 
-Use rustfmt and Clippy from the pinned compiler toolchain if Rust is selected; fail on relevant warnings in CI with narrowly justified local exceptions. The Clippy project recommends CI enforcement with `-Dwarnings` and matching the compiler toolchain. Do not adopt blanket pedantic lints that obscure useful diagnostics. [Clippy CI guidance](https://doc.rust-lang.org/clippy/continuous_integration/index.html).
+`cargo xtask develop` starts the editor. It owns the catalog (`--catalog FILE`, defaulting to the platform configuration directory), offers native Open with Cmd+O or Ctrl+O and starts an authenticated loopback JSON service. `--data-root DIR` isolates config, cache and log paths. The application also accepts `--window-size W H` (320 to 4096 logical) and `--evidence-dir NEW_DIR` for S0 evidence mode.
 
-Check dependency licenses against the selected project policy, inspect native libraries/assets and optional features, and report known advisories with narrowly scoped, documented exceptions. Record the exact selected check tool and version; do not depend on a developer's globally installed binary. Check Markdown local links and every active task plan's schema, local numbering and DAG. Optional pre-commit hooks should reuse these commands.
+The headless owner reads one JSON request per line:
 
-## Logs and state
+```sh
+target/release/lightwell-json --catalog /path/to/catalog.sqlite < requests.jsonl
+```
 
-Use structured events from the service/decoder/renderer, with a human-readable developer view and JSONL output for agents. Rust's `tracing`/`tracing-subscriber` is a candidate; it supports events/spans and newline-delimited JSON formatting. Configure output deliberately: diagnostics go to stderr/files so future JSON/MCP stdout stays clean. [Structured logging reference](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/fmt/index.html).
+Start with `schema.list`. Request shapes and live-session behavior are in the [user guide](../user-guide.md). Only one process owns a catalog at a time; a second instance exits with an explanatory error. Diagnostics go to stderr, or to isolated logs under an explicit data root, never to protocol stdout. Editor mode writes only the catalog and a temporary live-session file beside it; the source JPEG is never written.
 
-Include run ID, event name, severity, monotonic elapsed time, request/generation ID, build identity, stage timings and error codes. Emit startup/backend information once rather than on every frame. Capture controlled panic/exit diagnostics without claiming recovery from an unrecoverable process crash. Log I/O failure must not crash ordinary image viewing; explain degraded evidence collection. Bound file size/retention and disable noisy per-frame logging by default.
+## Rendered evidence
 
-Routine runs use fixture/asset identifiers instead of private absolute paths or embedded EXIF/GPS values. Diagnostic verbosity and local path inclusion are explicit. No network telemetry is required.
+Smoke runs the built or packaged viewer through a deterministic S0 evidence sequence (repeated `--open`, evidence directory, fixed window size, bounded deadlines) using the production loader. Scenarios: `empty`, `load`, `replacement`, `invalid`, `repeated`, `alternating`, `large24`, `large60`; generate the large fixtures first. Each run writes `result.json`, `app/events.jsonl`, `app/state.json`, `app/frame-*.png` (window-renderer readbacks, not OS screenshots), `subprocess.log` and `reproduce.md`. The runner verifies fixture colors, Fit, generation and state, backend, exit status and unchanged source hashes before writing `passed`; blank, stale or missing frames fail. A 25-second application deadline and a 35-second process deadline bound hangs.
 
-## Screenshot and result contract
+Rules for any UI or image check:
 
-Each smoke run uses its own ignored artifact directory, proposed as `artifacts/<run-id>/`, containing `result.json`, `events.jsonl`, `state.json`, capture PNGs when available, subprocess output and a Markdown reproduction note. The future result schema records scenario, build, OS/architecture, backend/adapter, display scale, fixture hash, request generation, readiness stage, timing, exit status and capture provenance. Stable keys help agents inspect results; this remains an internal v0 format.
+- Capture after the intended generation is rendered, tied to state and logs, with explicit provenance. A PNG's existence is not a pass.
+- Keep state checks, pixel checks with declared tolerances, UI review and native checks (dialogs, focus, resize, shutdown in a real desktop session) separate.
+- Never report a screenshot as taken when capture is unsupported. A skipped or headless run is not native platform verification.
+- Only synthetic fixtures in CI and shared artifacts. Routine logs use fixture identifiers, not private paths or EXIF. Keep personal photos in ignored `fixtures/jpg/` or `private/`.
+- Record what was measured: host, build profile, fixture hash, backend, warm or cold cache. Native M4 timings are hardware evidence; VM or Xvfb runs are functional evidence only.
 
-Capture after the intended frame is ready, not merely after the decoder succeeds. Capture the app's actual render target/content including its UI where supported. Store physical dimensions, scale, color interpretation and whether the capture is offscreen, renderer readback or an OS window screenshot. Confirm a blank, stale or failed render fails the smoke check; existence of a PNG is insufficient.
+## Agent loop
 
-Separate assertions:
+1. Read the applicable spec and task, including any owner-decision gates.
+2. Run `doctor` and the smallest checks appropriate to the change.
+3. For UI or image changes, run a smoke scenario or the acceptance journey and inspect the capture as an image.
+4. For changes under `crates/`, answer the [performance rules](performance-rules.md) checklist and run `editor-performance` on a generated 24 MP input in release.
+5. Report exact commands, artifact paths, results and unsupported cases. Update task and feature status only when acceptance is met.
 
-- State checks: requested fixture, dimensions, orientation, status and generation match.
-- Pixel checks: expected image region, aspect/orientation and representative colors/detail match declared tolerances. JPEG and platform text rendering do not require universal byte equality.
-- UI review: inspect screenshot layout, clipping, empty/loading/error states and visual hierarchy.
-- Native checks: exercise dialogs, keyboard focus, resizing, OS presentation and shutdown in a real desktop session.
+## Packaging
 
-Compare deterministic fixtures using geometry/region assertions and documented tolerances. Store per-platform baselines only when necessary; a reviewed baseline change must not conceal a functional regression. Extend this harness through the history, transform, module and crop milestones, then the retained export/MCP follow-ups. Each stage checks UI/API parity.
+`cargo xtask package` builds an unsigned host development artifact: a ZIP on macOS and Windows or a `.tar.gz` on Linux containing `Lightwell/` with the executable, notices, `build.json` (source revision, dirty state, target, profile, binary and lockfile hashes) and `checksums.txt`. Run smoke against the packaged executable with `--binary`. Packaging is repeatable, not byte-reproducible, and inventory is not a completed license audit. macOS bundles are unsigned and not notarized. No signing, stores or auto-update exist.
 
-## CI and packaging
+## CI
 
-Run dependency-locked compile/unit/lint checks on the selected macOS, Windows and Linux targets. Keep caches separate by toolchain/target/profile and verify clean builds periodically. Build artifacts include target architecture, build identity, runtime dependencies, licenses and checksums. Native packages must launch without a developer toolchain; write down external runtime requirements instead of assuming a fully static binary.
-
-Run GUI tests only in environments with the necessary desktop/GPU access. Distinguish hardware, virtual and software adapters in results. A skipped or unsupported smoke run never counts as native platform verification. Keep a recorded manual/native check when hosted runners cannot supply a suitable desktop session.
-
-If GitHub Actions is selected, store build/test evidence as workflow artifacts, including failure output, with explicit retention. Equivalent open-source/self-hosted CI must be able to call the same runner; no proprietary hosted service is required to build or test Lightwell. [Workflow artifact documentation](https://docs.github.com/en/actions/tutorials/store-and-share-data).
-
-Automated uploads must use synthetic fixtures and the designated evidence directory. Package/run with isolated writable data directories to avoid a developer's real library. Public signing, notarization, stores and auto-updates are later distribution work.
-
-## Agent execution loop
-
-1. Read the applicable spec and active JSON task, including external product decision gates.
-2. Run Doctor and the smallest checks appropriate to the change.
-3. For UI/image changes, run a reproducible smoke scenario and read the result/state/logs; inspect the capture as an image.
-4. Fix failures and rerun affected checks. Record native checks separately from headless evidence.
-5. For changes under `crates/`, answer the [performance rules](performance-rules.md) checklist and run `editor-performance` on a generated 24 MP input in release before claiming a performance result.
-6. Report exact commands, artifact paths, results and remaining unsupported cases; update task/feature state only when acceptance is met.
-
-No undocumented clicking or guessed screen coordinates should be required to determine whether an image loaded correctly. The S0 evidence harness is not the editor command API or MCP server. M1 provides a separate working JSONL owner/API and live loopback transport over the same production service; MCP remains planned.
-
-## Maintained workspace setup
-
-The selected S0 workspace uses Rust **1.94.0**, pinned in `rust-toolchain.toml`, with rustfmt/Clippy and a committed Cargo.lock. Install that toolchain explicitly with `rustup toolchain install 1.94.0 --profile minimal --component rustfmt --component clippy`. Native requirements and outstanding platform checks are in [platforms](platforms.md). macOS builds set a 14.0 deployment target unless deliberately overridden; floor execution remains to verify.
-
-Implemented commands and flags are listed in [scaffold commands](scaffold-commands.md): Doctor, check, fmt, lint, test, build, develop, smoke, inventory, audit and host packaging. Use `cargo xtask develop --open "path to/image.jpg"`; image/capture paths require named flags. Cargo needs network on the first locked fetch; subsequent builds can be offline. The Rust runner works on all three targets.
-
-Crates: `lightwell-core` owns images, recipes, rendering, SQLite history, preview scheduling and the JSON API; `lightwell-app` owns the Iced adapter plus desktop/headless binaries; `xtask` owns developer command orchestration and exact editor acceptance. Probes remain outside this workspace. Error/state/log evidence is recorded in the S0 and M1/M2 engineering reports. Native macOS setup has been exercised; Windows/Linux setup instructions remain unverified and are not represented as passing tests.
+`.github/workflows/check.yml` runs `cargo xtask check`, an optimized build and packaging on macOS arm64, Windows x64 and Ubuntu x64 with seven-day artifact retention, plus separate fixture and dependency-policy jobs. Linux additionally runs every smoke scenario against the packaged binary under Xvfb with software Vulkan and records runtime imports. Hosted results are compilation and functional evidence, never native desktop or GPU acceptance. Inspect actual run results for the tested commit; a configured step is not a passing result. Fresh hosted verification of the current tree and manual Windows/Linux desktop checks are open items in the [S0 follow-ups](../../tasks/implementation-s0.json).

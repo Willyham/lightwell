@@ -3,7 +3,7 @@
   "plan_id": "extension-implementation",
   "title": "Later — external module loading and activation planning",
   "objective": "Measure optional-module activation costs and turn the selected external-module use case into a validated implementation plan for a separately authored loader proof.",
-  "context_summary": "Deferred external-loader measurement and implementation planning after the named core editor milestones. Uses a verified module host and a documented selected external use case. All task IDs and references are local; implementation remains on hold.",
+  "context_summary": "Follows the core editor milestones and a documented selected external use case. Measures optional-module activation costs before planning a separately authored loader proof.",
   "tasks": [
     {
       "id": "TASK-001",

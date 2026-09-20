@@ -3,16 +3,14 @@
   "plan_id": "editor-followups",
   "title": "Editor completion — export, recovery, MCP and verification",
   "objective": "Preserve and deliver the earlier full-editor commitments after the four core milestones: safe JPEG export, metadata/color, manual Locate, MCP and complete editor verification.",
-  "context_summary": "All IDs and dependencies are local to this file. Milestone order is described by named outcomes in docs/design/history-first-roadmap.md; no task in another file is a prerequisite. Implementation is on hold by owner instruction. Export, Locate, MCP and full-editor verification follow the completed crop-module editor. Native Windows/Linux desktop work remains deferred.",
+  "context_summary": "Follows the completed M4 crop editor: safe JPEG export, metadata/color proof, manual Locate, an MCP adapter and complete editor verification. Native Windows/Linux desktop work remains deferred.",
   "tasks": [
     {
       "id": "TASK-001",
       "description": "Prove the complete editor color, metadata and export contracts.",
       "status": "pending",
       "dependencies": [],
-      "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
-      ],
+      "extra_context": [],
       "context_links": [
         {
           "kind": "file",
@@ -54,9 +52,7 @@
       "dependencies": [
         "TASK-001"
       ],
-      "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
-      ],
+      "extra_context": [],
       "context_links": [
         {
           "kind": "file",
@@ -102,9 +98,7 @@
       "description": "Implement verified manual Locate through UI and the shared API.",
       "status": "pending",
       "dependencies": [],
-      "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
-      ],
+      "extra_context": [],
       "context_links": [
         {
           "kind": "file",
@@ -147,9 +141,7 @@
         "TASK-002",
         "TASK-003"
       ],
-      "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
-      ],
+      "extra_context": [],
       "context_links": [
         {
           "kind": "file",
@@ -197,9 +189,7 @@
       "dependencies": [
         "TASK-004"
       ],
-      "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
-      ],
+      "extra_context": [],
       "context_links": [
         {
           "kind": "file",

@@ -1,38 +1,20 @@
-# S0 platform and verification matrix
+# Platforms
 
-Status: **accepted target scope, provisional engineering baselines**. The owner selected macOS Apple Silicon, Windows x64 and Linux x64 with unsigned development packages, then delegated initial OS/runtime and Linux desktop choices to engineering. These are intended support/testing boundaries, not claims of completed compatibility.
+Accepted target scope with provisional engineering baselines. These are intended support and testing boundaries, not verified compatibility.
 
-| Target | Initial baseline | Artifact | Graphics/window path | Verification route |
+| Target | Baseline | Artifact | Graphics and windowing | Verification status |
 | --- | --- | --- | --- | --- |
-| `aarch64-apple-darwin` | macOS 14 or later | `.app` in an unsigned ZIP | Metal, AppKit | Available M4 Pro / macOS 26.5.2 desktop; macOS 14 floor check remains outstanding |
-| `x86_64-pc-windows-msvc` | Windows 11 24H2 or later | executable and notices in ZIP | wgpu DX12, native Win32 picker | Native desktop check deferred; no current session established |
-| `x86_64-unknown-linux-gnu` | Ubuntu 24.04 LTS x64, glibc 2.39 build baseline | directory in `.tar.gz` | Vulkan; GNOME Wayland primary, X11 also required for S0 checks | Native desktop check deferred; no current session established |
+| `aarch64-apple-darwin` | macOS 14 or later | `.app` in an unsigned ZIP | Metal, AppKit | Verified natively on the owner's M4 Pro (macOS 26.5.2); macOS 14 floor unverified |
+| `x86_64-pc-windows-msvc` | Windows 11 24H2 or later | Executable and notices in a ZIP | wgpu DX12, native Win32 picker | Hosted build and package only; native desktop check deferred, no machine available |
+| `x86_64-unknown-linux-gnu` | Ubuntu 24.04 LTS, glibc 2.39 | Directory in a `.tar.gz` | Vulkan; GNOME Wayland primary, X11 required | Hosted build, package and Xvfb software-Vulkan smoke; native desktop check deferred |
 
-macOS 14 is a conservative project baseline above Rust's Apple Silicon minimum; it avoids promising every upstream-supported OS. Windows 11 and Ubuntu 24.04 keep the initial test matrix narrow. Baselines may be revised from measured dependency/runtime evidence, with changes recorded here. A build on a newer SDK does not prove execution on the floor. CI must compile all three targets; desktop test results must separately identify the actual OS, architecture and backend. Linux ARM64 or Windows ARM emulation may supplement, not replace, the x64 matrix.
+A build on a newer SDK does not prove execution on the floor. Desktop results must name the actual OS, architecture and backend. Linux ARM64 or Windows ARM emulation may supplement the x64 matrix, never replace it. No VM is installed or verified.
 
-## Native prerequisites
+## Prerequisites
 
-- All development hosts: Rust 1.94.0 with rustfmt and Clippy, plus Git. Application dependencies remain pinned by the selected workspace and lockfile. Tooling is Rust-only.
-- macOS: Xcode Command Line Tools/SDK, native linker, Metal-capable Apple Silicon and an unlocked graphical desktop for interaction verification. Development bundles are unsigned; no notarization/store signing is promised.
-- Windows: Visual Studio Build Tools with the C++ toolchain and Windows SDK for the MSVC target, plus a compatible DX12 driver and desktop session. Inspect the produced artifact's runtime imports before declaring packaging self-contained.
-- Linux: C/C++ build tools and pkg-config, development/runtime window and keyboard libraries for winit X11/Wayland, Vulkan loader/driver, and XDG desktop portal plus a working GNOME file chooser backend. Use the native Ubuntu 24.04 build environment to avoid accidentally raising the glibc baseline. Record actual package names in the verified setup instructions when the selected configuration builds there.
+- All hosts: Rust 1.94.0 with rustfmt and Clippy, plus Git. Tooling is Rust-only.
+- macOS: Xcode Command Line Tools, Metal-capable Apple Silicon and an unlocked graphical desktop for interaction checks. Bundles are unsigned and not notarized.
+- Windows: Visual Studio Build Tools with the C++ toolchain and Windows SDK, a DX12-capable driver and a desktop session. Inspect the artifact's runtime imports before calling packaging self-contained.
+- Linux: `build-essential pkg-config libx11-dev libxkbcommon-dev libwayland-dev libvulkan-dev` to build; `libxkbcommon-x11-0` (not supplied by `libxkbcommon-dev`), a Vulkan driver and a working XDG desktop portal with a file chooser backend at runtime. Build on Ubuntu 24.04 itself to avoid raising the glibc baseline. Headless smoke additionally needs Xvfb and Mesa Vulkan drivers.
 
-The selected rfd configuration uses the XDG portal rather than GTK development bindings. An absent portal is a runtime file-picker failure, not proof of a working Linux app. Software Vulkan may support functional CI; label it and do not use it as native GPU performance evidence.
-
-## Evidence and outstanding checks
-
-The available host is an M4 Pro with 14 CPU/20 GPU cores, 48 GB unified memory and macOS 26.5.2. Native Metal renderer-readback, shortcut/cancel/resize/close checks and owner-observed manual JPEG opening are documented in [hardening results](s0-hardening-results.md). S0 is accepted.
-
-Automated three-platform build/package results exist for the baseline identified in [CI results](ci-results.md). Fresh hosted verification of the closure snapshot and runtime/package inspection remain unfinished. Minimum-OS execution, native Windows/Linux sessions and full accessibility are unverified. Manual desktop/license reviews are deferred.
-
-No VM is installed or verified by this matrix. Native runs, virtual/software functional checks and GPU performance evidence must remain distinct.
-
-## Sources and selection basis
-
-The [Rust Apple target documentation](https://doc.rust-lang.org/rustc/platform-support/apple-darwin.html) identifies ARM64 macOS support. The [wgpu backend documentation](https://wgpu.rs/doc/wgpu/struct.Backends.html) identifies Metal, DX12 and Vulkan platform routes. The locked `wgpu` 27.0.1, `winit` 0.30.13 and `rfd` 0.15.4 manifests/sources were inspected locally; the [rfd feature list](https://docs.rs/crate/rfd/0.15.4/features) corroborates its selectable portal path. Our narrower OS/version choices are engineering scope decisions under the owner's delegation, not upstream guarantees or measured compatibility results.
-
-## Windows test availability
-
-The owner confirmed on 2026-09-19 that no Windows 11 x64 machine is currently available. Native Windows launch/load acceptance is deferred by the owner; a hosted CI compilation or another operating system's smoke run cannot substitute.
-
-Linux X11 runtime requires `libxkbcommon-x11-0` in addition to the development libraries. `libxkbcommon-dev` alone does not supply it. Headless smoke installs Xvfb and Mesa Vulkan drivers separately from native desktop prerequisites.
+The `rfd` configuration uses the XDG portal rather than GTK bindings; an absent portal is a runtime file-picker failure, not proof of a working app. Software Vulkan supports functional CI and is labelled as such, never used as GPU performance evidence.

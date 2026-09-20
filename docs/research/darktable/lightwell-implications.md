@@ -30,7 +30,7 @@ Evidence: [Lightroom storage](../lightroom/storage-and-history.md), [rendering](
 | Module/mask/order state is needed for recovery | Preserve complete edit intent, including disabled/missing-provider operations | Never silently discard incompatible or unavailable edits |
 | Parameter metadata helps tooling but does not ensure full automation | Make commands, queries and schemas authoritative from the start | Every UI operation must have programmatic parity |
 
-These ideas complement the existing [module/API design](../../design/modules-and-api.md), [history specification](../../specs/edit-history.md), [source recovery](../../specs/source-recovery.md) and [accepted editor decisions](../../design/m1-decisions.md). They do not supersede them.
+These ideas complement the existing [module/API design](../../design/modules-and-api.md), [history specification](../../specs/edit-history.md), [source recovery](../../specs/source-recovery.md) and [product decisions](../../decisions.md). They do not supersede them.
 
 ## A deliberate disagreement: history policy
 

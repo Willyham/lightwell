@@ -1,41 +1,37 @@
 # Feature status
 
-As of 2026-09-20, S0 is owner-accepted and M1/M2 are implemented and locally verified on native M4. M3 modules, M4 crop and the editor follow-ups remain planned.
-
-| Capability | Status | Scope |
+| Capability | Status | Notes |
 | --- | --- | --- |
-| Repository/toolchain, Rust checks, fixtures and diagnostics | Implemented | S0; [working commands](engineering/scaffold-commands.md) |
-| JPEG Open, automatic orientation, Fit and failed-replacement retention | Implemented on native M4 | S0 supported sRGB/greyscale subset |
-| Native macOS package, rendered smoke and baseline measurements | Verified locally; S0 accepted | [hardening evidence](engineering/s0-hardening-results.md) |
-| Windows/Linux automated builds/packages | Earlier hosted scaffold verified; refresh remains open | Native desktop checks deferred |
-| License and dependency policy | GPL applied; policy checks implemented | Manual license/native/asset review deferred; timed maintenance exceptions remain |
-| Stable referenced assets and local catalog | Implemented M1 | SQLite persistence, fingerprints, explicit missing/changed-source errors |
-| Ordered non-destructive edit layers | Implemented M1 | Stable layer IDs and immutable complete recipe snapshots |
-| Test pixel-change tool | Implemented M1 | Integer x/y and sRGB color; exact lossless-buffer proof |
-| Persistent action history, undo/redo and append-only Restore | Implemented M1 | Every real committed action; retained historical branches |
-| History list/inspect/select/preview UI and API | Implemented M1 | Read-only preview, current/selected markers, Return to current |
-| Save/reopen layers, history and navigation state | Implemented M1 | Atomic catalog writes and failure recovery |
-| Fit, numeric zoom, 100% source detail and pan | Implemented M1 | Physical-pixel 100%, independent per-client session state |
-| Live external JSON API and one-owner IPC | Implemented M1 | Same service/history while GUI is open |
-| Rotate left/right, Mirror horizontal, Flip vertical | Implemented M2 | Exact discrete mappings and shared history |
-| Named versions and lineage view | Implemented | Version names a retained entry; lineage query and branch markers; catalog format 2 |
-| Cached source and compiled preview rendering | Implemented M1/M2 optimization | One decoded active source; exact transform stacks use at most one parallel raster pass; pixel samples and no-op checks evaluate without rasterizing |
-| Declarative tool-module interface | Planned M3 | Action/API/control descriptions, validation and processing |
-| Pixel and transform tool modules | Planned M3 | Preserve previous effect identities, snapshots and pixels |
-| Lightroom-style crop/straighten module | Planned M4 | Free handles, ratios, angle/guide, Apply/Cancel and reset |
-| Proportional centered Option crop scaling | Planned M4 | Fixed center/common scale and source-boundary clamp |
-| Composition-preserving straightening and draft conflicts | Planned M4 | No cumulative trim; explicit resolution after agent commits |
-| Safe JPEG export, color/metadata verification | Planned editor follow-up | Quality 90, no overwrite, strip optional metadata by default, Keep metadata |
-| Manual Locate | Retained editor follow-up | Verified content, stable identity/edits; [recovery contract](specs/source-recovery.md) |
-| Standards-compliant MCP adapter | Retained editor follow-up | Common registry/owner, live UI/headless parity |
-| Complete editor packaging and performance/portability verification | Retained editor follow-up | Native M4 handoff; Windows/Linux native scope remains deferred |
-| External module loading | Required later | Separate selected-use-case proof with measured activation costs |
-| Multi-image library, filters, tagging, collections and shoot subsets | Planned later | Scope through owner workflow decisions |
-| Exposure, white balance, tonal controls and PNG | Planned later | Tool-specific numerical and color contracts |
-| Nikon Z6 / Fujifilm X100VI RAW | Planned later | Actual recording-mode fixtures and established-decoder benchmarks |
-| Texture, clarity, dehaze, masks and clone/heal | Future scoped work | Complete APIs required whenever introduced |
-| General bitmap layers, blend modes and layer reordering | Not selected | “Layers” currently means ordered recipe operations |
-| Sidecars, sync, managed-copy import and folder relinking | Later decisions | Local catalog and by-reference import first |
-| Plugin marketplace, mandatory cloud/accounts, Map/Book/Print/Web modules | Excluded from current scope | No prerequisite for the editor |
+| Repository checks, fixtures, smoke evidence, packaging | Implemented | [development](engineering/development.md) |
+| JPEG open, automatic EXIF orientation, Fit, failed-replacement retention | Implemented (S0) | 8-bit sRGB and greyscale subset; broad ICC conversion and display calibration are not established |
+| Windows/Linux automated builds and packages | Hosted baseline verified; refresh open | Native desktop checks deferred |
+| License and dependency policy | Enforced | Manual license, native and asset review deferred; two expiring advisory exceptions ([dependencies](engineering/dependencies.md)) |
+| Referenced assets in a SQLite catalog | Implemented (M1) | Stable IDs, fingerprints, explicit missing or changed-source errors |
+| Ordered non-destructive edit layers | Implemented (M1) | Stable layer IDs, immutable complete recipe snapshots |
+| Test pixel-change tool | Implemented (M1) | Integer x/y and 8-bit sRGB; exact lossless-buffer proof |
+| Persistent history, undo/redo, append-only Restore | Implemented (M1) | Every committed action; all branches retained |
+| History list, inspect, select and preview in UI and API | Implemented (M1) | Read-only preview and Return to current |
+| Save and reopen layers, history and navigation | Implemented (M1) | Atomic catalog writes |
+| Fit, numeric zoom, 100% source detail and pan | Implemented (M1) | Physical-pixel 100%; per-client session state |
+| Live JSON API and single-owner IPC | Implemented (M1) | Same service and history while the GUI is open |
+| Rotate left/right, mirror horizontal, flip vertical | Implemented (M2) | Exact integer mappings |
+| Named versions and lineage view | Implemented | A version names a retained entry; lineage query and branch markers; catalog format 2 ([design](design/versions-and-lineage.md)) |
+| Cached source and compiled one-pass rendering | Implemented | Point queries never rasterize; [performance rules](engineering/performance-rules.md) |
+| Declarative tool-module interface | Planned (M3) | [modules](design/modules-and-api.md) |
+| Pixel and transform tools as modules | Planned (M3) | Saved recipes and history unchanged |
+| Lightroom-style crop and straighten module | Planned (M4) | [crop contract](specs/single-image.md) |
+| Draft conflicts with live agent commits | Planned (M4) | Explicit Discard or Reapply |
+| JPEG export with color and metadata verification | Editor follow-up | Quality 90, no overwrite, Keep metadata option |
+| Manual Locate | Editor follow-up | [source recovery](specs/source-recovery.md) |
+| MCP adapter | Editor follow-up | Same operation registry; the JSON API is not MCP |
+| Complete editor packaging and portability verification | Editor follow-up | Native Windows/Linux remains deferred |
+| External module loading | Required later | Selected use case and measured activation costs first |
+| Multi-image library, filters, tagging, collections | Later | Owner workflow decisions first |
+| Exposure, white balance, tonal controls, PNG | Later | |
+| Nikon Z6 and Fujifilm X100VI RAW | Later | Real recording-mode fixtures; benchmark established decoders |
+| Texture, clarity, dehaze, masks, clone/heal | Later | Full API required whenever introduced |
+| Bitmap layers, blend modes, layer reordering | Not selected | |
+| Sidecars, sync, managed-copy import, folder relinking | Later decisions | |
+| Marketplace, cloud or accounts, Map/Book/Print/Web modules | Excluded | |
 
-The [four-milestone design](design/history-first-roadmap.md) and [task index](../tasks/README.md) are authoritative for ordering. [Lightroom research](research/lightroom/README.md) and [darktable research](research/darktable/README.md) inform decisions; they do not establish implemented features.
+Unverified so far on every milestone: native Windows/Linux desktop behavior, native screen-reader exposure of the custom controls, minimum-OS execution and calibrated display color.

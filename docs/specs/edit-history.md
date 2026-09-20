@@ -1,58 +1,61 @@
-# M1 layers and edit history
+# Layers, history and exact transforms
 
-Status: **M1 implemented and locally verified**. This is the working foundation used by M2 transforms and required before the planned tool-module and crop milestones. See [the roadmap](../design/history-first-roadmap.md) and [implementation evidence](../engineering/m1-m2-results.md).
+Status: implemented (M1 and M2) and verified on the M4 Mac. This is the foundation every later tool uses.
 
 ## State model
 
-A referenced source is read-only and identified independently of its locator. An edit layer contains a stable layer ID, effect type/format and parameters at a declared position in an ordered recipe. Each immutable recipe snapshot contains the complete stack needed to reconstruct the image. A history entry records the action that produced that snapshot.
+A referenced source is read-only and identified independently of its locator. An edit layer has a stable layer ID, effect type and format, and parameters at a position in an ordered recipe. Each immutable recipe snapshot holds the complete stack needed to reconstruct the image. A history entry records the action that produced a snapshot: stable asset, entry, snapshot and layer IDs; per-asset sequence; action and provider identity with validated parameters; actor, timestamp and request ID; base and result revision; the complete resulting stack; undo parent; restore target when applicable. Sequence orders entries; timestamps are display information.
 
-The first proof appends single-pixel replacement layers. Two edits at the same coordinates expose order: the newer replacement wins and undo reveals the older color. Later adjustment of a layer creates a new snapshot retaining its identity; older stacks remain unchanged. A transaction may change several parameters while producing one action entry.
+Import creates Original with an empty stack. Later adjustment of a layer creates a new snapshot that retains the layer's identity; older stacks never change. A transaction may change several parameters while producing one action entry.
 
-Import creates Original with an empty stack. Record stable asset/entry/snapshot/layer IDs; per-asset chronological sequence; action/provider identity and validated parameters; actor/timestamp/request ID; base/result revision; complete resulting stack; undo parent; and restore target when applicable. Sequence orders entries; timestamps are display information.
-
-No full bitmap per history entry, private widget undo stack or module-owned database writes. Evaluate a snapshot from original pixels and ordered operation payloads, without replaying an evolving command-handler log.
+No full bitmap per history entry, no private widget undo stack, no module-owned database writes. A snapshot is evaluated from original pixels and its ordered payloads, never by replaying an evolving command log.
 
 ## Commit, undo, redo and restore
 
-A real image change atomically persists its snapshot/entry, current pointer, monotonic revision, redo state and retry result. Validate all shared and effect invariants first. Rejected actions, failed writes, no-op changes, pointer motion, Cancel and browsing add no successful edit row.
+A real image change atomically persists its snapshot and entry, the current pointer, a monotonic revision, redo state and the retry result, after validating all shared and effect invariants. Rejected actions, failed writes, no-op changes, pointer motion, Cancel and browsing add no row.
 
-Undo navigates to the current entry's undo parent. Redo returns along the persisted redo path. Both change the concurrency revision and save navigation atomically; neither adds an Undo/Redo image row. This prevents repeated undo oscillating between navigation commands.
+Undo moves to the current entry's undo parent; redo follows the persisted redo path. Both change the concurrency revision and save navigation atomically without adding rows. Restore copies any retained snapshot, including Original, into a new Restore action whose undo parent is the previously current entry, keeping all later actions. Restoring an equivalent current state is a no-op. A new edit or restore clears shortcut redo while every state stays in the chronological log.
 
-Restore copies any retained snapshot, including Original, into a new semantic Restore action whose undo parent is the previously current entry. It retains later actions. Restoring an equivalent current state is a no-op. A new edit/restore clears shortcut redo availability while keeping all old states available in the chronological log.
+Example: Original → A → B → Restore A → C keeps A and B. Undo C returns to Restore A; undo again returns to B. Undoing back to A and making D starts a new path from A while B, Restore A and C remain browsable. Reopening restores the complete log and navigation state.
 
-For example: Original → A → B → Restore A → C retains A and B. Undo C returns to Restore A; undo again returns to B. Undoing back to A and making D creates a new path from A while retaining B, Restore A and C for browsing. Reopening restores the complete log and current/redo navigation state.
+## Read-only preview
 
-## Read-only history preview
+The history browser lists Original and bounded pages of attributed actions, marking the current committed state separately from the selected entry, with explicit Previewing, Return to current and Restore controls. Selecting or rendering an entry changes no committed stack, revision, log or redo state. Return to current shows the latest committed snapshot even after an external edit during preview. A headless snapshot render does not change GUI selection unless the caller invokes session selection. Every preview result identifies its source, snapshot, entry and render generation; rapid selection supersedes obsolete work. Editing while previewing requires Return to current or Restore first. Export later captures the committed stack; exporting a historical stack requires restoring it.
 
-The history browser lists Original and bounded pages of attributed semantic actions. Mark the current committed state separately from the selected historical entry. Show explicit Previewing history, Return to current and Restore controls; keyboard and pointer selection use the same service as the API.
+## Pixel proof
 
-Selecting/rendering an entry changes no committed stack, revision, action log or redo state. Return to current displays the latest committed snapshot, even after an external edit during preview. A headless snapshot-render request does not change GUI selection unless the caller explicitly invokes session selection.
+The pixel editor exposes x/y and RGB controls, Apply and optional pointer picking, backed by one semantic command. Coordinates are integers in the input stage after EXIF orientation, x right and y down; values are 8-bit sRGB; invalid input fails explicitly. Replacing a pixel with its current value is a reported no-op. Exact lossless buffers on synthetic fixtures are the correctness oracle; JPEG re-encoding is not. Two writes to the same location prove ordering: the later wins and undo exposes the earlier.
 
-Every preview result identifies the actual source/snapshot/entry and render generation. Rapid selection supersedes obsolete work. Missing sources/providers retain history and produce explicit render limitations. Cache/memory/job bounds must hold for a long log; loading every entry or buffer to show the first page is unacceptable.
+## Exact transforms
 
-Editing while viewing history requires Return to current or explicit Restore. The later export operation captures the committed stack; exporting a historical stack requires restoring it first.
+Coordinates use a top-left origin, x right, y down. Every layer addresses its input stage.
 
-## Catalog and live API
+| Operation | Input to output mapping | Output size |
+| --- | --- | --- |
+| Rotate right | `(x, y) → (h - 1 - y, x)` | `h × w` |
+| Rotate left | `(x, y) → (y, w - 1 - x)` | `h × w` |
+| Mirror horizontal | `(x, y) → (w - 1 - x, y)` | `w × h` |
+| Flip vertical | `(x, y) → (x, h - 1 - y)` | `w × h` |
 
-SQLite is the initial durable storage route. Catalog reopen preserves Original, complete layers/snapshots, entry identities, current state, redo navigation and request deduplication within its documented scope. Internal format errors preserve data and report an actionable recovery path. Unapplied drafts remain session-only.
-
-Use one application service and one catalog owner for UI and JSON/IPC clients. Expose discoverable schemas for asset/layer/state queries, pixel action, list/inspect/render/select-history/return-current/restore/undo/redo, viewport state and jobs. Expected revision and request ID guard mutations; actor attribution is shared. Reusing a request ID with different payload fails. A retry cannot duplicate an entry.
-
-The pixel editor has x/y and RGB controls, Apply, and optional pointer picking, backed by one semantic command. Coordinates are integers in the input stage, x right/y down, after original EXIF orientation. Values are 8-bit sRGB; invalid inputs fail explicitly. Use actual source detail at 100% to inspect a changed pixel.
-
-Draft conflicts become relevant for the crop module: Restore/undo/redo may not silently discard an active draft. Agent commits preserve drafts and mark conflict. Explicit discard/reapply resolves it against the current revision.
+Mappings are integer-exact with no interpolation, accumulated raster edits or irreversible writes. Four matching quarter-turns and two matching reflections are identities. Order stays observable: a pixel edit before a transform moves with the image, one after it uses the transformed dimensions. Tests cover identities, non-commuting combinations, EXIF-mirrored sources and every interleaving with pixel edits.
 
 ## Versions and lineage
 
-A version names one retained entry per asset, unique ignoring case, without changing the recipe, revision or log. Creating, listing and deleting versions are programmable and emit events; restoring a version is the ordinary restore of its entry. Deleting a version never removes history. Lineage walks undo parents from any entry newest first in bounded pages, and the desktop marks loaded entries off the current lineage as branches. Client sessions are held by the catalog owner per registered client and carry a revision; a client adopts only responses at least as new as the session it holds. See [versions and lineage](../design/versions-and-lineage.md).
+A version names one retained entry per asset, unique ignoring case, without changing the recipe, revision or log. Creating, listing and deleting versions are programmable and emit events; restoring a version is the ordinary restore of its entry, and deleting a version never removes history. Lineage walks undo parents from any entry newest first in bounded pages, and the desktop marks loaded entries off the current lineage as branches. Client sessions are held by the catalog owner per registered client and carry a revision; a client adopts only responses at least as new as the session it holds. Design and storage decision: [versions and lineage](../design/versions-and-lineage.md).
 
-## Verified acceptance
+## Catalog and live API
 
-1. Import → pixel A → pixel B. Verify exactly one layer/action per real change, ordered values and unchanged original bytes. Test same-pixel overrides and no-op/invalid requests.
-2. Select Original and every entry through UI and API. Compare complete stack and exact lossless pixel buffers. Preview must leave committed state and revision unchanged.
-3. Undo/redo, restore A, make another edit and reopen. Verify every saved state remains reconstructable with stable IDs, coherent redo/navigation and incrementing revisions.
-4. Exercise an independent live client while the GUI is open, stale revisions, duplicate/different-payload request IDs, event gaps, reconnect and client/job isolation.
-5. Interrupt writes and imports; test malformed/incompatible catalogs, locked or unwritable storage, changed/missing originals and unsupported effect payloads. Preserve the last valid state.
-6. Browse a long history rapidly with bounded queries/jobs/memory. Correlate actual native M4 pixels, entry labels, source detail and render generation using screenshots/state/logs.
+Catalog reopen preserves Original, all layers and snapshots, entry identities, current state, redo navigation and request deduplication. Internal format errors preserve data and report a recovery path. Drafts are session-only.
 
-M1's exact-buffer, persistence, recovery, live-client and native M4 journey passed on 2026-09-20. M2 repeated the relevant cases with transform stacks. M3 must prove unchanged saved data through module integration, and M4 adds crop drafts, geometry snapshots and conflict cases.
+One application service and one catalog owner serve UI and JSON/IPC clients. Discoverable schemas cover asset, layer and state queries, the pixel and transform actions, history list, inspect, render, select, return-to-current, restore, undo and redo, viewport state, pixel sampling and jobs. Expected revision and request ID guard mutations; a retry returns the original result and a reused ID with a different payload fails. Draft conflicts arrive with the crop module: Restore, undo and redo may not silently discard an active draft, and agent commits preserve drafts and mark them conflicted.
+
+## Acceptance
+
+1. Import → pixel A → pixel B: exactly one layer and action per real change, ordered values, unchanged original bytes, same-pixel overrides and rejected no-op or invalid requests.
+2. Select Original and every entry through UI and API, comparing complete stacks and exact buffers, with committed state and revision unchanged.
+3. Undo, redo, restore, edit again and reopen: every state reconstructable with stable IDs, coherent navigation and incrementing revisions.
+4. An independent live client while the GUI is open: stale revisions, duplicate and conflicting request IDs, event gaps, reconnect and client/job isolation.
+5. Interrupted writes and imports, malformed or incompatible catalogs, locked storage, changed or missing originals and unsupported payloads all preserve the last valid state.
+6. Rapid browsing of a long history within bounded queries, jobs and memory, with native M4 pixels correlated to entry labels and render generation.
+
+M3 must prove that saved data survives module integration unchanged; M4 adds crop drafts, geometry snapshots and conflict cases.

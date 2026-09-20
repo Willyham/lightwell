@@ -1,6 +1,6 @@
 # Versions, lineage and the history graph
 
-Status: **implemented and locally verified on 2026-09-20**. This note records what the history graph already is, adds named versions and lineage queries on top of it, and settles the catalog storage question those features raised. The owner chose the name "version" for the Lightroom-style saved state.
+Status: implemented. This note records what the history graph is, the named versions and lineage queries built on it, and the catalog storage decision those features settled. The owner chose the name "version" for the Lightroom-style saved state.
 
 ## The graph that already existed
 

@@ -1,22 +1,26 @@
-# Active task plans
+# Task plans
 
-Each JSON file owns its task IDs. `TASK-001` means the first task in the file being read. Dependencies and task references never point into another task file. Tasks are listed in dependency order, numbered from 001, with per-file execution waves derived from those dependencies.
+Each JSON file is an independent plan. IDs start at `TASK-001` inside every file, dependencies point only at earlier tasks in the same file, and execution waves are derived from those dependencies. Milestone order is expressed in the [roadmap](../docs/plan.md) by named outcome, never by cross-file task references.
 
-| Plan | Tasks / waves | Purpose and activation |
-| --- | --- | --- |
-| [S0](implementation-s0.json) | 37 / 13 | Accepted viewer and outstanding verification/maintenance follow-ups |
-| [M1 — history](implementation-m1-history.json) | 9 / 7 | Completed: layers, pixel proof, history, persistence, UI and live API |
-| [M2 — transforms](implementation-m2-transforms.json) | 5 / 5 | Completed: exact rotations and both reflection axes through shared history |
-| [M3 — modules](implementation-m3-modules.json) | 6 / 5 | Tool schemas, controls and actions after the working transform editor |
-| [M4 — crop](implementation-m4-crop.json) | 6 / 6 | Lightroom-style crop/straighten module after the module host |
-| [Editor follow-ups](implementation-editor-followups.json) | 6 / 4 | Export/color/metadata, Locate, MCP and full-editor verification |
-| [Later extensions](implementation-extensions.json) | 1 / 1 | External-loader measurements and proof planning after a selected use case and working module host |
-| [Product decisions](product-decisions.json) | 14 / 1 | Accepted owner choices and remaining product questions |
-| [Lightroom research](research-lightroom.json) | 1 / 1 | Completed technical research |
-| [darktable research](research-darktable.json) | 1 / 1 | Completed source-level technical research |
+| Plan | Purpose |
+| --- | --- |
+| [S0 follow-ups](implementation-s0.json) | Hosted CI refresh, Windows/Linux packaging and desktop checks, Linux VM route, license audit and expiring advisory exceptions |
+| [M3 — modules](implementation-m3-modules.json) | Tool schemas, controls and actions after the working transform editor |
+| [M4 — crop](implementation-m4-crop.json) | Lightroom-style crop and straighten module after the module host |
+| [Editor follow-ups](implementation-editor-followups.json) | Export, color and metadata, Locate, MCP and full-editor verification |
+| [Later extensions](implementation-extensions.json) | External-loader measurements and proof planning after a selected use case |
+| [Product decisions](product-decisions.json) | Open product questions |
 
-M1 and M2 are completed and locally verified. M3 and later work remain pending until requested. The roadmap defines sequence using named outcomes rather than references between task files.
+M3 and later work wait until the owner asks for them.
 
-Use the [history-first design](../docs/design/history-first-roadmap.md) and [planning conventions](../docs/task-planning.md).
+## Conventions
 
-Validate every changed plan using Create Tasks, then run `cargo xtask check`. The Rust checker discovers active top-level JSON files, checks local IDs/order/dependencies, rejects links to other task plans.
+- A plan holds its own behavior, context, acceptance and tests. Link Markdown specifications or code for context and describe required capabilities by name. Never link another task plan or mention its IDs.
+- Keep IDs stable during routine updates. Statuses describe actual work; completing a task needs the evidence its acceptance asks for. A planning edit never completes implementation.
+- Keep context concise and current. No planning-change logs.
+- Create or update plans for substantial coordinated work, or when asked. Research, reviews, diagnostics, documentation maintenance and small contained changes do not need a plan.
+- Completed plans are deleted, not archived. Their outcome lives in the specs and feature status.
+
+## Validation
+
+`cargo xtask check` validates every JSON file in this directory against `tools/task-plan.schema.json`: unique plan IDs, contiguous ordered local IDs, dependency status and order, derived waves, and that file links do not point into another task plan. The advisory audit reads the S0 plan to confirm its two advisory follow-up tasks remain open.

@@ -1,42 +1,50 @@
 # Working on Lightwell
 
-## Product constraints
+Lightwell is an open-source, non-destructive desktop photo editor for macOS, Windows and Linux, built around a small, fast core that people, programs and agents operate equally. Read this file before changing anything. It is the source of truth for what we are building and how we work.
 
-- Build a non-destructive photo editor for macOS, Windows, and Linux, serving professional and prosumer collections.
-- Target the owner's M4 MacBook Pro first. Keep Windows/Linux portability visible; distinguish VM functional checks from native GPU performance evidence.
-- The first end-to-end build is S0: a cross-platform skeleton that opens and displays a JPEG at Fit. No editing tools, catalog, export or production MCP are required in S0. Current owner override: S0 is accepted on recorded native M4 and earlier portable evidence; fresh hosted closure-snapshot verification and manual Windows/Linux desktop checks remain unfinished follow-ups. M1 history and M2 transforms are implemented and locally verified; M3 modules and M4 crop remain paused until requested.
-- Prefer open-source-only project code and extensions. The owner selected GPL-3.0-or-later and the repository license is applied. Manual license reviews are deferred for now; selection does not imply an audit is complete.
-- Initial RAW compatibility targets are Nikon Z6 and Fujifilm X100VI. Benchmark established libraries before proposing a new decoder; custom work requires a documented support or performance gap.
-- Preserve original files. Keep edits as data and use a common command layer for UI and programmatic operations.
-- Every application operation must be programmable, including every bundled/external edit tool, future masks/clone strokes, settings and module lifecycle. Add discoverable schemas and state access with the feature; GUI gestures cannot be its only interface.
-- Keep a small shell/module host: the core owns recipe transactions, history/undo, shared invariants and bounded services; feature modules own their validation and processing through those APIs. Prefer useful optional modules and lazy resource initialization; require measurements before splitting basic core functionality into separately loaded binaries. External module loading remains required later, even if built-ins stay linked. See `docs/design/modules-and-api.md`; do not add a plugin runtime to S0/M1 or silently drop edits when a provider is disabled/missing.
-- Follow the owner's history-first sequence: M1 implements ordered edit layers, a pixel-change proof, persistent history/undo/redo/restore/preview, catalog save/reopen, UI and live JSON/IPC API; M2 adds exact rotate/flip/mirror; M3 introduces tool/action/control modules; M4 implements the Lightroom-style crop module. See `docs/design/history-first-roadmap.md`.
-- Import references existing files; stable asset IDs and edits survive locator changes. Manual Locate, JPEG export/color/metadata, MCP and full-editor verification remain explicit editor follow-ups after those four milestones. Folder relinking and sync research follow later.
-- Crop controls in M4 include free handles, proportional Option scaling around the fixed center and composition-preserving straightening. M1 already needs zoom/pan with percentages, Fit and actual 100% detail for the pixel proof. Export strips optional metadata by default with a Keep metadata setting and correct output color/geometry.
-- Treat responsiveness, bounded memory, image correctness, and agent access as architectural requirements. Every change under `crates/` follows `docs/engineering/performance-rules.md` and answers its review checklist; measure on 24/60 MP inputs before claiming a performance result.
-- Prefer a small, beautiful core with sensible defaults and deliberate extension points. Use Lightroom Library/Develop as a familiarity reference, not a feature checklist.
-- Consult the owner on consequential product tradeoffs. Record recommendations as proposals until decided; do not turn unanswered interview questions into accepted decisions.
+## Pillars
 
-## Proportionate planning workflow
+Every change is measured against these.
 
-1. Read the product documents relevant to the requested work. When working on an existing milestone or planned task, also read `docs/task-planning.md`, the relevant specification, and its active plan from `tasks/README.md`.
-2. Before implementing a substantial new feature, milestone, architectural change, migration, or other coordinated multi-step body of work, create or update a Markdown design/plan describing behavior, scope, constraints, acceptance criteria, and unresolved decisions.
-3. Use the Create Tasks skill when the user asks for a task plan or when substantial work needs dependency-aware decomposition. Routine research, reviews, diagnostics, documentation maintenance and small contained changes do not require task-plan changes unless requested or already tracked. Each task file has a local ID space starting at TASK-001, ordered by dependencies; do not reference tasks in another file. Keep milestone sequencing in Markdown by named outcomes. Keep IDs and statuses stable during routine updates. Keep documentation and task context focused on current decisions, behavior, evidence and outstanding work; keep only current plans and omit planning-change logs. Validate every changed graph.
-4. Work only on the requested scope. A planning request does not authorize implementing its task list.
-5. Verify behavior with checks proportionate to the change. For work explicitly tracked by a task plan, update its status together with the implementation. Update feature status and user documentation when behavior or documented scope changes.
+1. **Originals are sacred.** Source files are never modified. Edits are data: ordered layers in a recipe, with immutable history. Never silently discard an incompatible catalog, recipe or edit; fail explicitly and keep the data.
+2. **Everything is programmable.** Every operation a person can perform has a discoverable, schema-described programmatic equivalent through the same command service. A GUI gesture is never the only interface. UI and API parity is verified, not assumed.
+3. **Fast, bounded and honest.** Responsiveness, bounded memory and image correctness are architectural requirements, not later tuning. Measure on photo-sized inputs before claiming a performance result. The rules that keep this true are in [performance rules](docs/engineering/performance-rules.md).
+4. **Small core, deliberate extension points.** The core owns recipe transactions, history and undo, shared invariants and bounded services. Tool modules own their validation, controls and processing through those APIs. Prefer lazy, optional modules and measure before splitting the core into loadable binaries. External module loading is required later, not now.
+5. **Open source, first on the owner's Mac.** GPL-3.0-or-later project code and open-source dependencies. Target the owner's M4 MacBook Pro first; keep Windows and Linux portable, and distinguish VM or headless functional checks from native GPU evidence.
+6. **Prove it.** Claims about behavior come with evidence: exact-buffer tests, correlated state, logs and captures for UI, and recorded measurements with their scope. A skipped check is not a pass.
+7. **Beautiful defaults, familiar feel.** A small, focused workspace with sensible defaults. Lightroom Library and Develop are a familiarity reference, not a feature checklist or a rendering target.
 
-Keep prose documentation in Markdown; task plans are the JSON exception when a task plan is warranted. Keep implemented, planned, experimental, and excluded behavior explicit. Do not document proposed CLI examples as working commands.
+## Current state
 
-All current work is v0. Avoid public API compatibility frameworks and release-version planning. Internal recipe/database format markers may be used to detect incompatibility and protect user data. Never silently discard an incompatible catalog or recipe.
+S0 (JPEG viewer) is accepted. M1 (persistent history and live JSON API) and M2 (exact rotate, flip and mirror) are implemented and verified on the M4 Mac. M3 (tool modules) and M4 (Lightroom-style crop) come next, then export, Locate, MCP and full-editor verification. Everything is v0: no public compatibility framework, release planning, cloud, accounts, marketplace or generalized node graph. See the [roadmap](docs/plan.md) and [feature status](docs/features.md).
 
-## Engineering boundaries
+## How we work
 
-- Framework widgets must not contain authoritative editing or catalog business logic.
-- Extend commands and their query/schema documentation whenever adding user-facing operations. Verify UI/programmatic parity.
-- Decode, render, import, and export work must not block the UI thread or the catalog owner thread. Bound worker queues and memory; cancel stale preview work. Decode once through the cached verified source, compile recipes into one raster pass, and never rasterize to answer a point query; see `docs/engineering/performance-rules.md`.
-- Back numerical/image behavior with suitable fixtures; test source preservation and recovery, not just successful rendering.
-- Pin selected dependencies. Manual license/native/asset reviews are deferred by current owner instruction; retain existing notices and do not claim an audit is complete.
-- Establish reproducible setup, lint/build/package commands and agent evidence early. UI checks must inspect real rendered content with correlated state/logs, explicit capture provenance and truthful native-versus-headless results; see `docs/engineering/development.md`.
-- Defer features marked future until scoped through the same process. Do not prebuild a plugin marketplace, generalized node graph, cloud service, or compatibility layer.
+- **Read first.** For any milestone or tracked task, read the relevant spec and its plan in [tasks](tasks/README.md). Product context lives in [decisions](docs/decisions.md).
+- **Plan proportionately.** Substantial features, milestones, migrations and other coordinated multi-step work start with a Markdown design (behavior, scope, constraints, acceptance, open decisions) and a validated JSON task plan. Research, reviews, diagnostics, documentation maintenance and small contained changes do not need a task plan unless asked or already tracked.
+- **Stay in scope.** Do what was asked. A planning request does not authorize implementing the plan. Do not prebuild future features or placeholder controls.
+- **Consult the owner on consequential product tradeoffs.** Record recommendations as proposals until decided. Never turn an unanswered question into an accepted decision.
+- **Verify proportionately.** Run `cargo xtask check` before handing off. UI or image changes need a real rendered check with correlated state and logs. Changes under `crates/` answer the performance-rules checklist.
+- **Keep docs current, not historical.** When behavior or scope changes, update the spec, [feature status](docs/features.md) and [user guide](docs/user-guide.md). Document current behavior and outstanding work only: no change logs, run logs or planning history. Record a lesson only when something was tried and did not work. Never document a proposed command as if it exists.
 
-The maintained workspace has build commands: start with `cargo xtask check` and consult `docs/engineering/scaffold-commands.md` for build, run, smoke, audit and package commands. S0 is accepted; individual follow-ups still require their own verification evidence.
+## Engineering rules
+
+- Framework widgets hold no authoritative editing or catalog logic. Business rules live in the UI-independent core.
+- Every user-facing operation extends the command registry and its schema. Add the API with the feature.
+- Decode, render, import and export never block the UI thread or the catalog owner thread. Bound queues and memory; cancel stale work.
+- Back image behavior with exact fixtures. Test source preservation and recovery, not just successful rendering.
+- Pin dependencies. Manual license, native and asset reviews are deferred by the owner; keep notices and never claim an audit is complete.
+- Internal recipe and catalog format markers may detect incompatibility to protect data. Missing or disabled providers report affected edits; they never silently omit an effect from a render or export.
+
+## Map
+
+| Need | Read |
+| --- | --- |
+| Build, run, smoke, package, CI, evidence rules | [docs/engineering/development.md](docs/engineering/development.md) |
+| Performance rules and review checklist | [docs/engineering/performance-rules.md](docs/engineering/performance-rules.md) |
+| Architecture and crate layout | [docs/design/architecture.md](docs/design/architecture.md) |
+| Milestone contracts M1 to M4 | [docs/design/history-first-roadmap.md](docs/design/history-first-roadmap.md) |
+| History graph, named versions, catalog format 2 | [docs/design/versions-and-lineage.md](docs/design/versions-and-lineage.md) |
+| Specs: history, crop and export, recovery, performance | [docs/specs](docs/specs) |
+| Task plans and conventions | [tasks/README.md](tasks/README.md) |
+| Reference research: stack options, Lightroom, darktable | [docs/research](docs/research) |

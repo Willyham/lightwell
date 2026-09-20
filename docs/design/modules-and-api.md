@@ -1,52 +1,38 @@
 # Tool modules and the shared core
 
-Status: **planned M3**, following the working history foundation and basic transforms. The owner requested a module interface declaring actions, API and controls, with the pixel editor implemented through it. See [the roadmap](history-first-roadmap.md).
+Status: planned for M3, on top of the working history foundation and transforms.
 
-## Delivery order
-
-M1 implements concrete pixel actions and the authoritative layer/history service. M2 proves that the same model supports rotation/reflection. M3 introduces module registration and control descriptions around those working effects. M4 adds the crop tool through that interface.
-
-An operation is semantic and programmable: set one pixel, rotate, set crop parameters, restore history, select a preview or change view state. Scripts never need to simulate pointer movement. Exposure, masks, clone strokes and lifecycle actions inherit this rule when introduced; they remain later scope.
+An operation is semantic and programmable: set one pixel, rotate, set crop parameters, restore history, select a preview or change view state. Scripts never simulate pointer movement. Exposure, masks, clone strokes and lifecycle actions inherit this rule when they arrive.
 
 ## Module contract
 
-| Module contribution | Required meaning |
+| Contribution | Meaning |
 | --- | --- |
-| Identity | Stable provider/effect/action IDs and an internal payload format marker |
-| API | Input/result schemas, ranges, units, coordinate space, defaults, availability and structured errors |
-| Controls | Semantic numbers, colors, enums, actions and grouping, plus optional canvas interaction description/adapter |
+| Identity | Stable provider, effect and action IDs plus an internal payload format marker |
+| API | Input and result schemas, ranges, units, coordinate space, defaults, availability and structured errors |
+| Controls | Semantic numbers, colors, enums, actions and grouping, plus an optional canvas interaction adapter |
 | Validation | Tool-specific parameter and state validation with the same result for every caller |
-| Processing | Deterministic evaluation of immutable layer payloads with declared input/output geometry/color, resource needs and cancellation |
-| State | Inspectable current parameters and capability/availability information |
+| Processing | Deterministic evaluation of immutable layer payloads with declared input/output geometry and color, resource needs and cancellation |
+| State | Inspectable current parameters and capability information |
 
-The GUI chooses layout, visual styling and focus behavior. It binds controls or canvas gestures to declared actions. A control must not have a hidden GUI-only mutation. Every registered action appears through common discovery/API, with explicit treatment if the current GUI cannot display a control type.
+The GUI chooses layout, styling and focus behavior and binds controls or canvas gestures to declared actions. A control never has a hidden GUI-only mutation. Every registered action appears through common discovery, with explicit treatment when the GUI cannot display a control type.
 
-Modules produce validated edit changes. The host alone owns asset identity, shared invariants, atomic recipe/history commits, revisions, undo/redo, request deduplication, job scheduling and notifications. Module code cannot write catalog tables or maintain a separate authoritative history.
+The host alone owns asset identity, shared invariants, atomic recipe and history commits, revisions, undo/redo, request deduplication, job scheduling and notifications. Module code cannot write catalog tables or keep a separate authoritative history. Modules receive snapshots for processing and call host services for commits; preview, undo and restore never ask a module to reverse pixels.
 
-## Pixel module proof
+## Migration proof
 
-Move the existing x/y/RGB pixel operation into a module with its action and control schema. Preserve the effect ID and data meaning; pre-module catalogs and every saved history snapshot must evaluate identically. The first pixel tool is the reference for registration, validation, control rendering and API dispatch.
+Move the pixel operation into a module with its action and control schema, then adapt the transform handlers to the same interface. Preserve effect IDs, axis conventions, operation ordering and data meaning: catalogs saved before M3 and every history snapshot must evaluate identically. The proof is a working registered tool with generated controls, headless calls and live GUI/API parity. It does not need a separate binary.
 
-Adapt M2 transform handlers to the same interface while preserving IDs, axis conventions and operation ordering. The proof is a working registered tool with generated controls, headless calls and live GUI/API parity. It does not require a separate binary.
+## Missing effects
 
-## History and missing effects
-
-A layer stores effect identity and parameters, while each history entry stores a complete immutable stack. Modules receive snapshots for processing and call host services for commits. Preview/undo/restore share this model rather than asking a module to reverse pixels.
-
-Retain unrecognized/unsupported payloads losslessly. A missing or disabled provider reports affected snapshots and blocks trustworthy rendering/export rather than omitting its effect. A cached preview can only be shown with an explicit stale/unavailable label. Re-enabling a compatible provider restores evaluation without rewriting history. Removing an edit from a recipe is a separate explicit undoable action.
-
-Use internal format checks and an explicit tested conversion only when needed. v0 does not require a public compatibility framework or stable ABI.
+Retain unrecognized or unsupported payloads losslessly. A missing or disabled provider reports the affected snapshots and blocks trustworthy rendering and export rather than omitting its effect. A cached preview may only be shown with an explicit stale or unavailable label. Re-enabling a compatible provider restores evaluation without rewriting history. Removing an edit from a recipe is a separate explicit undoable action. Use internal format checks and an explicit tested conversion only when needed; v0 has no public compatibility framework or stable ABI.
 
 ## Resources and external loading
 
-Keep registration cheap and initialize expensive resources on demand. Begin with linked built-ins. Hiding controls is a UI preference, not implicit effect removal or processor disablement. Avoid tying persisted processing order to panel order.
+Registration is cheap and expensive resources initialize on demand. Start with linked built-ins. Hiding controls is a UI preference, not effect removal, and persisted processing order never depends on panel order.
 
-Later external module loading remains required: a separately authored tool must load without editing host source and expose actions through the same APIs. Select a use case, measure startup/first-use/memory/idle costs and define trust, dependencies, cancellation and packaging before implementing that loader. Native binaries, workers or sandboxed runtimes remain options; a marketplace and hot unload are not current requirements.
-
-Module operations added later—exposure, white balance, masks, clone strokes or presets—must specify enough structured data to reproduce results. Keep geometry/color stages explicit; do not prebuild a generalized graph in M3.
+External loading remains required later: a separately authored tool must load without editing host source and expose its actions through the same APIs. Before implementing that loader, select a use case, measure startup, first-use, memory and idle costs, and define trust, dependencies, cancellation and packaging. Native binaries, workers or sandboxed runtimes are all still options; a marketplace and hot unload are not requirements. Later operations such as exposure, white balance, masks, clone strokes or presets must carry enough structured data to reproduce their results. Keep geometry and color stages explicit and do not prebuild a generalized graph.
 
 ## Acceptance
 
-Validate descriptor consistency and reject duplicate identities, missing handlers, invalid controls and unavailable providers explicitly. Invoke pixel and transform actions through generic controls and an independent API client, comparing complete stacks, history, pixels and error results. Reopen fixtures saved before module integration and verify all IDs and undo/restore paths survive.
-
-Measure registration and first-use resources separately. Inspect real native M4 control layout, keyboard behavior and pixels with correlated state. The crop module is the next consumer of this contract.
+Descriptor validation rejects duplicate identities, missing handlers, invalid controls and unavailable providers explicitly. Pixel and transform actions invoked through generic controls and an independent API client produce identical stacks, history, pixels and errors. Fixtures saved before module integration reopen with all IDs and undo/restore paths intact. Registration and first-use resources are measured separately. Real native M4 control layout, keyboard behavior and pixels are inspected with correlated state.

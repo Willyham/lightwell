@@ -3,16 +3,14 @@
   "plan_id": "m4-crop",
   "title": "M4 — Lightroom-style crop module",
   "objective": "Deliver a crop/straighten module with familiar direct manipulation, semantic controls, live API parity and durable non-destructive history.",
-  "context_summary": "All IDs and dependencies are local to this file. Milestone order is described by named outcomes in docs/design/history-first-roadmap.md; no task in another file is a prerequisite. Implementation is on hold by owner instruction. Begin with the working module host and prior saved recipes. The crop workflow follows the recorded interaction research and owner constraints; proprietary Adobe algorithm equivalence is not claimed.",
+  "context_summary": "Starts from the working M3 module host and existing saved recipes. The crop workflow follows docs/specs/single-image.md and the recorded interaction research; proprietary Adobe algorithm equivalence is not claimed.",
   "tasks": [
     {
       "id": "TASK-001",
       "description": "Specify and prove the crop module's geometry and interaction contract.",
       "status": "pending",
       "dependencies": [],
-      "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
-      ],
+      "extra_context": [],
       "context_links": [
         {
           "kind": "file",
@@ -54,9 +52,7 @@
       "dependencies": [
         "TASK-001"
       ],
-      "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
-      ],
+      "extra_context": [],
       "context_links": [
         {
           "kind": "file",
@@ -104,9 +100,7 @@
       "dependencies": [
         "TASK-002"
       ],
-      "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
-      ],
+      "extra_context": [],
       "context_links": [
         {
           "kind": "file",
@@ -154,9 +148,7 @@
       "dependencies": [
         "TASK-003"
       ],
-      "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
-      ],
+      "extra_context": [],
       "context_links": [
         {
           "kind": "file",
@@ -204,9 +196,7 @@
       "dependencies": [
         "TASK-004"
       ],
-      "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
-      ],
+      "extra_context": [],
       "context_links": [
         {
           "kind": "file",
@@ -260,9 +250,7 @@
       "dependencies": [
         "TASK-005"
       ],
-      "extra_context": [
-        "Planning only. Implement when the owner resumes the named milestone; all task references are local to this file."
-      ],
+      "extra_context": [],
       "context_links": [
         {
           "kind": "file",
