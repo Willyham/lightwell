@@ -1,3 +1,5 @@
+mod crop_canvas;
+mod crop_draft;
 mod diagnostics;
 mod editor_app;
 mod paths;

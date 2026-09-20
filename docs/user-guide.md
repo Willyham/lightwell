@@ -24,6 +24,25 @@ Exact transforms are Rotate left, Rotate right, Mirror horizontal and Flip verti
 
 Fit shows the whole image. Enter a percentage from 10 to 1600 and choose Set, or choose 100%. On a high-DPI display, 100% maps one source pixel to one physical framebuffer pixel. Both scroll axes pan content larger than the viewport.
 
+### Crop and straighten
+
+The crop editor appears in the tool panel as soon as a registered module declares a crop frame; the ratios, the angle range and the action it commits all come from that module's descriptor.
+
+Choose Crop to open a draft. The surface then shows the crop layer's own input stage, which is the stack rendered up to but not including that layer, so layers after an existing crop are not drawn while you adjust it. Everything outside the crop rectangle is dimmed, and the rectangle carries a thirds overlay, a border and eight handles.
+
+- Drag a corner handle to move two edges, or a side handle to move one with the opposite edge fixed. Drag inside the rectangle to move the composition; it slides along a boundary instead of stopping. The rectangle never leaves the photograph, so a crop never has an empty corner, and it never shrinks below one pixel on either axis.
+- Hold Option (Alt on Windows and Linux) while dragging any handle to apply one scale factor about the fixed centre, keeping the current width to height even with no ratio locked. The centre does not move.
+- Choose a ratio preset to keep the centre and fit the largest rectangle of that ratio inside the current one. Custom takes the two extents typed beside it. Lock ratio pins whatever the rectangle currently is, Unlock ratio releases it, and Swap inverts a locked ratio the same way.
+- Type an angle from −45 to 45 degrees and press Enter, or use the −0.5° and +0.5° buttons. Every angle is measured against the last handle, move or ratio change, so sweeping the angle away and back returns exactly the rectangle you had. Larger rotations are the quarter-turn transforms.
+- Turn Straighten guide on and drag a line along something that should be level; releasing rotates by the angle that makes that line horizontal or vertical, whichever is nearer.
+- Hold Space and drag to pan at a percentage zoom. Fit, 100% and a typed percentage all work while drafting, and 100% still shows one input pixel per physical pixel.
+
+The panel prints the input stage, the rectangle in whole box pixels, the resulting output size and the exact values the draft would commit.
+
+Apply, or press Enter, commits one action and one new history entry, adjusting the existing crop layer in place and keeping its identity or appending one when there is none. Cancel, or press Escape, discards the draft and changes nothing. Enter and Escape act only when no field has just consumed the key. Reset crop is the module's own control: it commits the neutral crop through history and ends the draft. No pointer movement commits anything, and the rotation shown while drafting is a display filter — the committed render is what counts.
+
+Selecting a historical state pauses the draft rather than discarding it: the historical preview is shown and Return to current resumes drafting. If anything else changes the photograph while a draft is open — another client, or your own Undo, Redo or Restore — the draft is kept and marked "Changed elsewhere". Apply is refused until you choose Discard, which drops the draft, or Reapply, which re-reads the current stack, rebases the draft onto it keeping the angle and the composition as far as it fits, and lets you apply normally.
+
 ## History
 
 History lists Original and every committed action with sequence and actor. The filled marker is current; selecting another row previews that immutable snapshot without changing current state or revision. Return to current leaves the preview; Restore appends a new action containing the selected recipe. Editing is disabled during a historical preview.
