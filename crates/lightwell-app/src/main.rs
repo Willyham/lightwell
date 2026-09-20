@@ -1,4 +1,5 @@
 mod diagnostics;
+mod editor_app;
 mod paths;
 use diagnostics::Diagnostics;
 use iced::{
@@ -20,6 +21,7 @@ struct Config {
     evidence: Option<PathBuf>,
     size: Option<(f32, f32)>,
     data_root: Option<PathBuf>,
+    catalog: Option<PathBuf>,
     diagnostics: Option<Diagnostics>,
     run_id: String,
 }
@@ -37,6 +39,9 @@ fn arguments() -> Result<Config, String> {
             Some("--data-root") => {
                 config.data_root = Some(args.next().ok_or("--data-root requires a path")?.into());
             }
+            Some("--catalog") => {
+                config.catalog = Some(args.next().ok_or("--catalog requires a path")?.into());
+            }
             Some("--window-size") => {
                 let mut number = || {
                     args.next()
@@ -48,7 +53,7 @@ fn arguments() -> Result<Config, String> {
             }
             Some("--help") => {
                 println!(
-                    "Lightwell: --open JPEG (repeatable with evidence) --evidence-dir NEW_DIRECTORY --window-size WIDTH HEIGHT --data-root DIRECTORY"
+                    "Lightwell: --open JPEG --catalog CATALOG --data-root DIRECTORY [--evidence-dir NEW_DIRECTORY --window-size WIDTH HEIGHT]"
                 );
                 std::process::exit(0)
             }
@@ -509,6 +514,13 @@ fn main() {
         std::process::exit(2)
     });
     let size = config.size.unwrap_or((960., 640.));
+    if config.evidence.is_none() {
+        if let Err(error) = editor_app::run(config, size) {
+            eprintln!("Could not start Lightwell editor: {error}");
+            std::process::exit(1);
+        }
+        return;
+    }
     if let Err(error) = iced::application(
         move || Viewer::new(config.clone()),
         Viewer::update,
