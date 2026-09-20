@@ -28,7 +28,9 @@
 | Complete editor packaging and portability verification | Editor follow-up | Native Windows/Linux remains deferred |
 | External module loading | Required later | Selected use case and measured activation costs first |
 | Multi-image library, filters, tagging, collections | Later | Owner workflow decisions first |
-| Exposure, white balance, tonal controls, PNG | Later | |
+| RGB histogram, output clipping indicators/overlays | Proposed plan | [Basic and histogram](design/basic-and-histogram.md); no implementation yet |
+| Exposure, white balance, tone, vibrance and saturation | Proposed plan | JPEG-first slices in [Basic and histogram](design/basic-and-histogram.md); product/numerical choices remain open |
+| PNG input | Later | Separate from the proposed JPEG Basic controls |
 | Nikon Z6 and Fujifilm X100VI RAW | Later | Real recording-mode fixtures; benchmark established decoders |
 | Texture, clarity, dehaze, masks, clone/heal | Later | Full API required whenever introduced |
 | Bitmap layers, blend modes, layer reordering | Not selected | |

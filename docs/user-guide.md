@@ -2,6 +2,8 @@
 
 What works today: opening a JPEG, pixel-proof edits, exact transforms delivered as tool modules with generated controls, persistent history and the JSON API, verified on macOS. Crop, export, Locate and MCP are planned; see [feature status](features.md).
 
+Basic exposure, tone, white balance and color controls, plus a histogram and clipping inspector, have a [proposed design](design/basic-and-histogram.md). They are not available yet.
+
 ## Start the editor
 
 After [developer setup](engineering/development.md), start an optimized build with a catalog and an optional JPEG:
