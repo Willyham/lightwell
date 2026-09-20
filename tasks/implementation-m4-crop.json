@@ -48,7 +48,7 @@
     {
       "id": "TASK-002",
       "description": "Implement crop and straighten processing as module actions.",
-      "status": "in_progress",
+      "status": "completed",
       "dependencies": [
         "TASK-001"
       ],
@@ -96,7 +96,7 @@
     {
       "id": "TASK-003",
       "description": "Describe crop controls and implement the canvas interaction adapter.",
-      "status": "pending",
+      "status": "in_progress",
       "dependencies": [
         "TASK-002"
       ],
