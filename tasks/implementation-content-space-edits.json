@@ -1,0 +1,353 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "content-space-edits",
+  "title": "Content-space edits — pixel tools before the geometry tail",
+  "objective": "Pixel-stage edits address the source after EXIF orientation and are inserted before quarter-turns, reflections and the crop, so changing the crop never moves or invalidates an edit; the canvas pick and a core query map a view point to that content coordinate.",
+  "context_summary": "Accepted by the owner on 2026-09-20 for immediate implementation. The host chooses a new layer's position from its declared effect stage: pixel effects insert before the first geometry layer, geometry effects append. The renderer's meaning of a layer's coordinates (its input stage) is unchanged, so existing stacks render identically and no stored shape changes. Planning validates and samples the stage at the insertion index. The desktop pick and the proposed render.locate query map an output pixel back through the geometry tail to a content pixel. Specs, feature status and the user guide are updated in the same work. Every crates change answers the performance checklist.",
+  "tasks": [
+    {
+      "id": "TASK-001",
+      "description": "Place a committed pixel-stage layer before the geometry tail in the host, and give plan a content-stage sampler.",
+      "status": "ready",
+      "dependencies": [],
+      "extra_context": [
+        "Add the insertion rule to the snapshot/recipe API beside append and with_layer_replaced: insert at the index of the first layer whose effect stage is geometry, else append. The host derives the stage from the registry's effect descriptor; a layer whose effect has no provider already fails before this point.",
+        "Extend StageContext with the insertion index for a Commit of the acting effect's stage and a sampler over the stack prefix before that index. Reuse the existing per-segment evaluation so planning still allocates no frame.",
+        "Keep Update semantics and the whole-stack compile before persisting. Do not change recipe validation to reject interleaved stacks."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "Design",
+          "target": "docs/design/content-space-edits.md",
+          "relevance": "The ordering rule, the content stage and what stays observable."
+        },
+        {
+          "kind": "file",
+          "label": "Action dispatch",
+          "target": "crates/lightwell-core/src/editor.rs",
+          "relevance": "apply_action builds the StageContext and applies Commit and Update."
+        },
+        {
+          "kind": "file",
+          "label": "Recipe and snapshot",
+          "target": "crates/lightwell-core/src/model.rs",
+          "relevance": "appended and with_layer_replaced are the existing stack mutations."
+        },
+        {
+          "kind": "file",
+          "label": "Module contract",
+          "target": "docs/design/modules-and-api.md",
+          "relevance": "plan, StageContext and host dispatch are documented here and must be updated."
+        }
+      ],
+      "acceptance_criteria": [
+        "A pixel-stage Commit on a stack ending in transforms and a crop inserts before the first geometry layer; on a stack with no geometry it appends; geometry Commits still append.",
+        "The StageContext reports the insertion stage and samples the prefix stack; sampling the output stage is still available for modules that need it.",
+        "History entries, layer identities, immutable earlier snapshots, no-op detection, request deduplication and the whole-stack compile behave as before.",
+        "Performance checklist answered: no new frame allocation in planning, one recipe clone per commit as today."
+      ],
+      "test_strategy": {
+        "approach": "unit",
+        "steps": [
+          "Unit tests on recipe insertion for empty, geometry-only, pixel-only and mixed stacks, including a stack with an existing interleaved pixel layer after geometry.",
+          "Editor tests proving a pixel edit after a crop lands before it, renders exactly at angle zero and matches the resample reference at a nonzero angle, and that a subsequent crop move, grow and shrink keep the same content pixel edited and are never rejected because of it."
+        ],
+        "commands": [
+          "cargo test --locked -p lightwell-core",
+          "cargo xtask check"
+        ],
+        "expected_results": [
+          "All existing core tests pass unchanged except those that asserted append-only placement, which are updated to the new rule.",
+          "Exact-buffer proofs pass for the crop journey with a preceding pixel edit."
+        ]
+      }
+    },
+    {
+      "id": "TASK-002",
+      "description": "Plan the pixel module against the content stage and describe its coordinates as such.",
+      "status": "pending",
+      "dependencies": [
+        "TASK-001"
+      ],
+      "extra_context": [
+        "Validate x and y against the insertion stage and sample it for the no-op check. Update the parameter notes and action notes to say the content stage: the source after EXIF orientation.",
+        "The compile path is unchanged: a point replacement applied through the geometry that follows it."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "Pixel module",
+          "target": "crates/lightwell-core/src/modules/pixel.rs",
+          "relevance": "plan currently validates and samples the output stage."
+        },
+        {
+          "kind": "file",
+          "label": "Design",
+          "target": "docs/design/content-space-edits.md",
+          "relevance": "Planning against the content stage."
+        }
+      ],
+      "acceptance_criteria": [
+        "set-pixel with coordinates valid in the content stage but outside the cropped output is accepted and the edit is simply not visible until the crop uncovers it.",
+        "set-pixel with coordinates outside the content stage is a validation error naming the content stage size.",
+        "Replacing a content pixel with its current content value is a reported no-op even when the output shows a different (resampled) value there.",
+        "Descriptor notes and schema.list describe the content stage."
+      ],
+      "test_strategy": {
+        "approach": "unit",
+        "steps": [
+          "Module tests for accept, reject and no-op against a stack with a crop and transforms.",
+          "Registry and API schema tests confirm the updated notes."
+        ],
+        "commands": [
+          "cargo test --locked -p lightwell-core"
+        ],
+        "expected_results": [
+          "Coordinates are interpreted in the content stage in every path."
+        ]
+      }
+    },
+    {
+      "id": "TASK-003",
+      "description": "Map an output-stage point to a content coordinate in the core and expose it as the render.locate query.",
+      "status": "pending",
+      "dependencies": [
+        "TASK-001"
+      ],
+      "extra_context": [
+        "Walk the compiled segments backwards: exact geometry unmaps by integer inverse; a resample maps the output pixel center to fractional input coordinates that round to the nearest input pixel; a point outside any stage is a validation error.",
+        "Method shape: render.locate {asset_id, entry_id?, x, y} -> {content_x, content_y}. It reads only; it never commits or changes session state. Add it to the host method table and schema.list."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "Renderer",
+          "target": "crates/lightwell-core/src/render.rs",
+          "relevance": "Compiled segments, ExactGeometry unmap and Resample input_at are the building blocks."
+        },
+        {
+          "kind": "file",
+          "label": "API methods",
+          "target": "crates/lightwell-core/src/api/methods.rs",
+          "relevance": "render.sample is the existing read-only query to model on."
+        },
+        {
+          "kind": "file",
+          "label": "Design",
+          "target": "docs/design/content-space-edits.md",
+          "relevance": "Mapping a view point to content coordinates."
+        }
+      ],
+      "acceptance_criteria": [
+        "Round trips through every exact transform and an angle-zero crop are exact; through a rotated crop the located content pixel is the nearest to the reference sampler's input position.",
+        "Points outside the output stage fail with a validation error; historical entries can be located too.",
+        "The method appears in schema.list with parameter descriptors and works over the live JSON API."
+      ],
+      "test_strategy": {
+        "approach": "unit",
+        "steps": [
+          "Renderer tests over transform and crop combinations against the reference sampler.",
+          "API tests for the method, its errors and schema listing."
+        ],
+        "commands": [
+          "cargo test --locked -p lightwell-core"
+        ],
+        "expected_results": [
+          "One implementation serves the canvas and the API."
+        ]
+      }
+    },
+    {
+      "id": "TASK-004",
+      "description": "Make the desktop point pick report content coordinates.",
+      "status": "pending",
+      "dependencies": [
+        "TASK-003"
+      ],
+      "extra_context": [
+        "The Fit and percentage picks compute an output-stage pixel today; pass it through the core mapping before filling the action fields. The pointer readout and the canvas_pick event carry both the view pixel and the content pixel.",
+        "A pick that lands outside the content stage shows a status message and fills nothing. Picking during a crop draft stays unavailable because the crop mode owns the canvas."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "Editor app",
+          "target": "crates/lightwell-app/src/editor_app.rs",
+          "relevance": "PointPicked, fit_pick and percent_pick."
+        },
+        {
+          "kind": "file",
+          "label": "Design",
+          "target": "docs/design/content-space-edits.md",
+          "relevance": "The GUI pick and the API method share one implementation."
+        }
+      ],
+      "acceptance_criteria": [
+        "On a cropped, rotated photograph a pick at the top-left of the view fills the content coordinate that render.locate returns for the same view pixel, at Fit and at 100%.",
+        "Framework widgets hold no mapping logic beyond converting the widget point to the output pixel."
+      ],
+      "test_strategy": {
+        "approach": "mixed",
+        "steps": [
+          "App unit tests for the pick path with a stubbed mapping result.",
+          "A background smoke pick with correlated state, event log and capture."
+        ],
+        "commands": [
+          "cargo test --locked -p lightwell-app",
+          "cargo xtask smoke"
+        ],
+        "expected_results": [
+          "Pick, fields, event log and the committed layer agree on the content coordinate."
+        ]
+      }
+    },
+    {
+      "id": "TASK-005",
+      "description": "Update the specs, feature status and user guide to the content-stage contract.",
+      "status": "pending",
+      "dependencies": [
+        "TASK-002",
+        "TASK-003",
+        "TASK-004"
+      ],
+      "extra_context": [
+        "Architecture: a layer's coordinates are its input stage; pixel-stage layers are placed before the geometry tail, so their stage is the content stage. History spec: replace the sentence that a pixel edit after a transform uses the transformed dimensions. Crop spec: the conflict rule stays, and pixel edits are visible during a draft. Module contract: the host placement rule, the StageContext additions and render.locate. Feature status and user guide: the pixel tool and the pick describe content coordinates.",
+        "Basic proposal: note that a color-stage layer also belongs before the geometry tail; change no other part of that proposal.",
+        "Document current behavior only; no change log."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "History spec",
+          "target": "docs/specs/edit-history.md",
+          "relevance": "Pixel tool and transform ordering statements."
+        },
+        {
+          "kind": "file",
+          "label": "Crop spec",
+          "target": "docs/specs/single-image.md",
+          "relevance": "Geometry contract and conflict rule."
+        },
+        {
+          "kind": "file",
+          "label": "Architecture",
+          "target": "docs/design/architecture.md",
+          "relevance": "Layer coordinate statement."
+        },
+        {
+          "kind": "file",
+          "label": "Feature status",
+          "target": "docs/features.md",
+          "relevance": "Pixel tool row and new query."
+        },
+        {
+          "kind": "file",
+          "label": "User guide",
+          "target": "docs/user-guide.md",
+          "relevance": "Pick and pixel tool description."
+        }
+      ],
+      "acceptance_criteria": [
+        "Every document describes the implemented behavior and names render.locate only once it exists.",
+        "No document still says a pixel edit after a transform addresses transformed dimensions."
+      ],
+      "test_strategy": {
+        "approach": "inspection",
+        "steps": [
+          "Read each changed document against the code and tests."
+        ],
+        "commands": [
+          "cargo xtask check-repository"
+        ],
+        "expected_results": [
+          "Repository checks pass and the docs match the shipped contract."
+        ]
+      }
+    },
+    {
+      "id": "TASK-006",
+      "description": "Verify the complete change on the M4 Mac: acceptance run, background smoke and measurements.",
+      "status": "pending",
+      "dependencies": [
+        "TASK-005"
+      ],
+      "extra_context": [
+        "Extend the editor acceptance run with the pixel-then-crop journey: set a pixel, crop, move and shrink the crop, confirm the content pixel is unchanged by exact buffers and that the crop is never rejected.",
+        "Record commit and locate timings on photo-sized inputs and state their scope. Keep launches in the background."
+      ],
+      "context_links": [
+        {
+          "kind": "file",
+          "label": "Editor acceptance",
+          "target": "xtask/src/editor_acceptance.rs",
+          "relevance": "The headless journey to extend."
+        },
+        {
+          "kind": "file",
+          "label": "Development and evidence rules",
+          "target": "docs/engineering/development.md",
+          "relevance": "Smoke, evidence and background launch rules."
+        },
+        {
+          "kind": "file",
+          "label": "Performance rules",
+          "target": "docs/engineering/performance-rules.md",
+          "relevance": "Checklist every crates change answers."
+        }
+      ],
+      "acceptance_criteria": [
+        "cargo xtask check passes; the acceptance run and a background smoke pass with correlated state, logs and captures.",
+        "Measurements are recorded with their scope in the performance spec where a threshold applies.",
+        "The plan file is deleted and feature status records the outcome."
+      ],
+      "test_strategy": {
+        "approach": "end-to-end",
+        "steps": [
+          "Run the headless acceptance and the background smoke on the M4 Mac and keep the evidence."
+        ],
+        "commands": [
+          "cargo xtask check",
+          "cargo xtask editor-acceptance",
+          "cargo xtask smoke"
+        ],
+        "expected_results": [
+          "All checks pass and the evidence directory holds correlated state and logs for the pixel-then-crop journey."
+        ]
+      }
+    }
+  ],
+  "execution_waves": [
+    {
+      "wave": 1,
+      "task_ids": [
+        "TASK-001"
+      ]
+    },
+    {
+      "wave": 2,
+      "task_ids": [
+        "TASK-002",
+        "TASK-003"
+      ]
+    },
+    {
+      "wave": 3,
+      "task_ids": [
+        "TASK-004"
+      ]
+    },
+    {
+      "wave": 4,
+      "task_ids": [
+        "TASK-005"
+      ]
+    },
+    {
+      "wave": 5,
+      "task_ids": [
+        "TASK-006"
+      ]
+    }
+  ]
+}

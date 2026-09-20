@@ -16,6 +16,8 @@ Each milestone starts from the previous working result and ends with a native M4
 
 ## Editor follow-ups
 
+Accepted first: [content-space edits](design/content-space-edits.md) places pixel-stage edits before quarter-turns and the crop so changing the crop never moves them, with a content-coordinate pick and query ([task plan](../tasks/implementation-content-space-edits.json)), then the [orientation layer](design/orientation-layer.md) collapses repeated transforms ([task plan](../tasks/implementation-orientation-layer.json)).
+
 After M4: JPEG export (quality 90, no overwrites, optional metadata stripped by default with a Keep metadata option, verified color and geometry), manual Locate for moved originals, a standards-compliant MCP adapter over the existing service, and complete native packaging and performance verification. Native Windows/Linux desktop checks and manual license reviews stay deferred until the owner asks.
 
 ## Later phases
