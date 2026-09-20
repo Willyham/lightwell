@@ -1,10 +1,13 @@
 //! The provider index: descriptors validated once at registration, then hash lookups by effect
 //! and action identity. Registration touches no image or catalog resource.
 use super::{
-    ActionDescriptor, EffectDescriptor, ExactGeometry, ModuleDescriptor, PixelModule, Processing,
-    Stage, ToolModule, TransformModule,
+    ActionDescriptor, EffectDescriptor, ModuleDescriptor, PixelModule, Processing, Stage,
+    ToolModule, TransformModule,
 };
-use crate::{Error, ErrorKind, Layer, RECIPE_FORMAT, Recipe, render::Compiled};
+use crate::{
+    Error, ErrorKind, Layer, RECIPE_FORMAT, Recipe,
+    render::{Compiled, Segment},
+};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -165,8 +168,9 @@ impl ModuleRegistry {
         )
     }
 
-    /// Validate a recipe against the source dimensions and fold its exact geometry into one
-    /// mapping. Cost is linear in the layer count and allocates only the operation list.
+    /// Validate a recipe against the source dimensions and fold its exact geometry into one mapping
+    /// per rasterizing pass. A resample is a stage boundary, so it closes the current pass and opens
+    /// the next one. Cost is linear in the layer count and allocates only the operation lists.
     pub(crate) fn compile(
         &self,
         source_width: u32,
@@ -180,11 +184,7 @@ impl ModuleRegistry {
             ));
         }
         let mut layer_ids = HashSet::with_capacity(recipe.layers.len());
-        let mut operations = Vec::with_capacity(recipe.layers.len());
-        let mut geometry = ExactGeometry::identity(source_width, source_height);
-        let mut width = source_width;
-        let mut height = source_height;
-        let mut has_pixels = false;
+        let mut segments = vec![Segment::new(None, source_width, source_height)];
         for layer in &recipe.layers {
             if !layer_ids.insert(&layer.id) {
                 return Err(validation("duplicate layer identity"));
@@ -192,29 +192,51 @@ impl ModuleRegistry {
             let module = self
                 .provider(&layer.effect_id)
                 .ok_or_else(|| self.unavailable_in(recipe, &layer.effect_id))?;
+            let segment = segments.last_mut().expect("one segment always exists");
             let processing = module.compile(
                 &layer.effect_id,
                 layer.effect_format,
                 &layer.payload,
-                Stage { width, height },
+                Stage {
+                    width: segment.width,
+                    height: segment.height,
+                },
             )?;
             match processing {
                 Processing::ExactGeometry(step) => {
-                    geometry = geometry.then(step);
-                    width = step.output_width;
-                    height = step.output_height;
+                    if !step.reads_inside(segment.width, segment.height) {
+                        return Err(validation(format!(
+                            "an exact mapping to {}x{} reads outside its {}x{} input stage",
+                            step.output_width, step.output_height, segment.width, segment.height
+                        )));
+                    }
+                    segment.geometry = segment.geometry.then(step);
+                    segment.width = step.output_width;
+                    segment.height = step.output_height;
+                    segment.operations.push(processing);
                 }
-                Processing::PointReplace { .. } => has_pixels = true,
+                Processing::PointReplace { .. } => {
+                    segment.has_pixels = true;
+                    segment.operations.push(processing);
+                }
+                Processing::Resample(resample) => {
+                    if resample.output_width == 0 || resample.output_height == 0 {
+                        return Err(validation("a resample declares an empty output stage"));
+                    }
+                    if !resample.inverse.iter().all(|value| value.is_finite()) {
+                        return Err(validation(
+                            "a resample declares a mapping that is not finite",
+                        ));
+                    }
+                    segments.push(Segment::new(
+                        Some(resample),
+                        resample.output_width,
+                        resample.output_height,
+                    ));
+                }
             }
-            operations.push(processing);
         }
-        Ok(Compiled {
-            operations,
-            geometry,
-            width,
-            height,
-            has_pixels,
-        })
+        Ok(Compiled { segments })
     }
 }
 
