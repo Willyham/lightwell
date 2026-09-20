@@ -1,19 +1,24 @@
 //! Tool modules: each one owns its descriptor, input parsing, state validation, no-op detection
 //! and the compilation of its persisted payloads into host processing primitives. Modules never
 //! write the catalog, never keep an undo stack and never render.
+mod crop;
 mod descriptor;
 mod pixel;
 mod processing;
 mod registry;
 mod transform;
 
+pub use crop::geometry::{
+    BoxRect, COVERAGE_TOLERANCE, CropPayload, CropStage, Edge, MAX_ANGLE, MIN_ANGLE, OutputRect,
+    guide_angle, largest_with_ratio_inside,
+};
 pub use descriptor::{
     ActionDescriptor, Availability, CanvasInteraction, Control, EffectDescriptor, EffectStage,
     ModuleDescriptor, ParameterDescriptor, ParameterKind, check_parameters, valid_identity,
     valid_name,
 };
 pub use pixel::PixelModule;
-pub use processing::{ExactGeometry, Processing, Stage};
+pub use processing::{ExactGeometry, Processing, Resample, Stage};
 pub use registry::ModuleRegistry;
 pub use transform::TransformModule;
 
