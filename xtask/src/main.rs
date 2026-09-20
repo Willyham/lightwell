@@ -184,7 +184,7 @@ fn main_result() -> Result {
                 cmd.arg("--release");
             }
             ensure(
-                cmd.args(["--package", "lightwell-app", "--"])
+                cmd.args(["--package", "lightwell-app", "--bin", "lightwell", "--"])
                     .args(a.0)
                     .status()?
                     .success(),
