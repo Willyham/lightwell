@@ -277,9 +277,11 @@ pub fn measure(root: &Path, out: &Path, bin: &Path, samples: usize) -> Result {
                         )?;
                         pixel_checks.push(smoke::pixels(
                             &evidence.join(frame["file"].as_str().ok_or("Missing frame")?),
-                            1,
-                            Some(if name == "24mp" { 1.5 } else { 5.0 / 3.0 }),
-                            smoke::columns(frame)?,
+                            &smoke::Expect {
+                                aspect: Some(if name == "24mp" { 1.5 } else { 5.0 / 3.0 }),
+                                columns: smoke::columns(frame)?,
+                                ..smoke::Expect::fit(1)
+                            },
                         )?);
                     }
                 }
@@ -413,7 +415,7 @@ pub fn probe(root: &Path, out: &Path, candidate: &str) -> Result {
             "Probe failed",
         )?;
         ensure(before == hash(&fixture)?, "Source changed")?;
-        result["pixel_check"] = smoke::pixels(&capture, 6, None, None)?;
+        result["pixel_check"] = smoke::pixels(&capture, &smoke::Expect::fit(6))?;
         result["capture_provenance"] = json!("window-renderer-readback");
         Ok(())
     })();
