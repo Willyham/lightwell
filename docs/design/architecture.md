@@ -7,7 +7,7 @@ One application service, used by the desktop UI and by external clients alike, o
 Rust 1.94 workspace: Iced 0.14 on wgpu, `image` for JPEG and PNG, `moxcms` for conservative sRGB profile recognition, `rfd` for native and portal dialogs, bundled SQLite through `rusqlite`, Rayon for the parallel raster pass. Exact versions are pinned in `Cargo.lock`.
 
 - `crates/lightwell-core`: images, recipes, rendering, SQLite catalog and history, preview scheduling, JSON API.
-- `crates/lightwell-app`: Iced desktop adapter, native adapters, diagnostics; the desktop and headless `lightwell-json` binaries.
+- `crates/lightwell-app`: Iced desktop adapter, native adapters, diagnostics, the crop draft state machine and its canvas (`crop_draft.rs`, `crop_canvas.rs`); the desktop and headless `lightwell-json` binaries.
 - `xtask`: development, check, evidence, acceptance and packaging commands.
 - `probes/s0`: the isolated Iced/egui comparison workspace used to select Iced; not the maintained application.
 
@@ -36,7 +36,7 @@ Local SQLite holds current state, action entries with their snapshots, a monoton
 
 ## Rendering and limits
 
-Orient once to upright pixels and give every buffer explicit color meaning (8-bit sRGB for the supported JPEG subset). Exact buffers on synthetic fixtures prove correctness; JPEG re-encoding is not an oracle. Decode once through a signature-validated cache, share immutable pixels, compile a recipe into at most one raster pass and answer point queries from the compiled geometry. Preview work is one active plus one replaceable pending job, tagged with a generation.
+Orient once to upright pixels and give every buffer explicit color meaning (8-bit sRGB for the supported JPEG subset). Exact buffers on synthetic fixtures prove correctness; JPEG re-encoding is not an oracle. Decode once through a signature-validated cache, share immutable pixels, compile a recipe into at most one raster pass and answer point queries from the compiled geometry. A resample (the crop module's non-zero-angle case) is a stage boundary: it separates the compiled recipe into segments, each an exact raster pass, so at most two full frames — one segment's output feeding the next resample's input — exist at once, each within the 512 MiB frame limit. Point queries evaluate through a resample recursively and never allocate a frame. Preview work is one active plus one replaceable pending job, tagged with a generation.
 
 Limits: 128 MiB encoded source, 64 MP, 16384 px per side, 512 MiB per evaluated frame, preview uploads up to 4096 px per side, 100 history rows per page, 8 live clients, 256 buffered events, 1 MiB per request line. Decoder limits are not process or GPU memory limits. The rules and review checklist are in [performance rules](../engineering/performance-rules.md).
 
@@ -46,4 +46,4 @@ One typed service backs the desktop and external JSON sessions. While the GUI is
 
 ## Modules and extension path
 
-The pixel and transform tools are linked modules registered by `ModuleRegistry::builtin()`; their effect identities, payloads and history action identities are unchanged from M1 and M2. The host generates `edit.<action>` API methods and the desktop generates controls from the same descriptors, so a module capability cannot exist without an API. Unknown or unavailable effects stay in every snapshot and fail rendering explicitly. Linked built-ins with lazy resources are enough for M4. External loading comes later around a selected use case with measured costs; see [modules](modules-and-api.md).
+The pixel, transform and crop tools are linked modules registered by `ModuleRegistry::builtin()`; the pixel and transform effect identities, payloads and history action identities are unchanged from M1 and M2. The crop module adds a `number` parameter kind and the `crop-frame` canvas interaction to the same descriptor shape, and updates its one crop layer in place through `ActionPlan::Update` rather than always appending. The host generates `edit.<action>` API methods and the desktop generates controls from the same descriptors, so a module capability cannot exist without an API. Unknown or unavailable effects stay in every snapshot and fail rendering explicitly. Linked built-ins with lazy resources are enough for M4. External loading comes later around a selected use case with measured costs; see [modules](modules-and-api.md).

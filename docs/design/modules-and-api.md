@@ -1,6 +1,6 @@
 # Tool modules and the shared core
 
-Status: implemented (M3) and verified on the M4 Mac; the crop module (M4) is being implemented on the same host. The pixel, transform and crop tools are the built-in modules; the host owns everything a module does not declare here. The registry, descriptors and built-in modules live in `crates/lightwell-core/src/modules/`; the desktop renders them in `crates/lightwell-app/src/editor_app.rs`.
+Status: implemented (M3, M4). The pixel, transform and crop tools are the built-in modules; the host owns everything a module does not declare here. The registry, descriptors and built-in modules live in `crates/lightwell-core/src/modules/`; the desktop renders them in `crates/lightwell-app/src/editor_app.rs`, and the crop-frame editor's own draft and canvas live in `crates/lightwell-app/src/crop_draft.rs` and `crop_canvas.rs`.
 
 An operation is semantic and programmable: set one pixel, rotate, set crop parameters, restore history, select a preview or change view state. Scripts never simulate pointer movement. Exposure, masks, clone strokes and lifecycle actions inherit this rule when they arrive.
 
@@ -10,7 +10,7 @@ An operation is semantic and programmable: set one pixel, rotate, set crop param
 | --- | --- |
 | Host (`lightwell-core`) | Asset identity, shared invariants, atomic recipe and history commits, revisions, undo/redo/restore, request deduplication, the decoded-source cache, one-pass rendering of compiled processing, preview jobs, notifications, API discovery and dispatch |
 | Module (`lightwell-core::modules::*`) | Its descriptor (identity, effects, actions, parameters, controls), input parsing, state validation and no-op detection, payload validation and compilation of its payloads into host processing primitives |
-| Desktop (`lightwell-app`) | Layout, styling, focus, text editing, gesture capture; renders controls from descriptors and calls the declared actions through the same API every client uses; holds no authoritative state |
+| Desktop (`lightwell-app`) | Layout, styling, focus, text editing, gesture capture; renders controls, including the `crop-frame` canvas editor, from descriptors and calls the declared actions through the same API every client uses; holds no authoritative state |
 
 Module code never writes catalog tables, never keeps an undo stack and never renders. Preview, undo and restore never ask a module to reverse pixels: a snapshot is evaluated from original pixels and its ordered payloads.
 

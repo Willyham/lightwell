@@ -1,6 +1,6 @@
 # Lightwell user guide
 
-What works today: opening a JPEG, pixel-proof edits, exact transforms delivered as tool modules with generated controls, persistent history and the JSON API, verified on macOS. Crop, export, Locate and MCP are planned; see [feature status](features.md).
+What works today: opening a JPEG, pixel-proof edits, exact transforms and a Lightroom-style crop and straighten tool, all delivered as tool modules with generated controls, persistent history and the JSON API, verified on macOS. Export, Locate and MCP are planned; see [feature status](features.md).
 
 ## Start the editor
 
@@ -64,11 +64,25 @@ printf '%s\n' \
   | target/release/lightwell-json --catalog /path/to/catalog.sqlite
 ```
 
-A request has `id`, `method` and `params`. A success carries the matching `id`, an event `sequence` and `result`; a failure carries a structured `error`. Start with `schema.list` for the authoritative method list and `catalog.list` for the referenced assets. Edit actions are generated from the registered tool modules: `module.list` returns every module with its effects, actions, parameter descriptors (kind, range, unit, default) and semantic controls, and each action `<id>` is callable as `edit.<id>` with its parameters as top-level fields beside `asset_id` and `mutation`. Today that is `edit.set-pixel` (`x`, `y`, `rgb`) and `edit.transform` (`transform`). Parameters are checked against the descriptors before the module sees them, so every client gets the same structured validation error. `version.create`, `version.list`, `version.delete` and `history.lineage` cover named states and the undo-parent chain. Mutations require `asset_id` and a `mutation` object:
+A request has `id`, `method` and `params`. A success carries the matching `id`, an event `sequence` and `result`; a failure carries a structured `error`. Start with `schema.list` for the authoritative method list and `catalog.list` for the referenced assets. Edit actions are generated from the registered tool modules: `module.list` returns every module with its effects, actions, parameter descriptors (kind, range, unit, default) and semantic controls, and each action `<id>` is callable as `edit.<id>` with its parameters as top-level fields beside `asset_id` and `mutation`. Today that is `edit.set-pixel` (`x`, `y`, `rgb`), `edit.transform` (`transform`) and the crop module's three actions. Parameters are checked against the descriptors before the module sees them, so every client gets the same structured validation error. `version.create`, `version.list`, `version.delete` and `history.lineage` cover named states and the undo-parent chain. Mutations require `asset_id` and a `mutation` object:
 
 ```json
 {"id":"rotate","method":"edit.transform","params":{"asset_id":"asset-…","mutation":{"expected_revision":0,"request_id":"rotate-1","actor":"my-client"},"transform":"rotate-right"}}
 ```
+
+`edit.crop-fit` (`aspect`, optional `aspect-width`/`aspect-height` with `aspect: "custom"`, `angle`, optional `center-x`/`center-y`) fits the largest rectangle of a ratio about a center without computing the box geometry by hand:
+
+```json
+{"id":"crop-169","method":"edit.crop-fit","params":{"asset_id":"asset-…","mutation":{"expected_revision":3,"request_id":"crop-1","actor":"my-client"},"aspect":"16:9"}}
+```
+
+`edit.crop` (`angle`, `x`, `y`, `width`, `height`) sets the straightening angle and rectangle exactly as persisted, normalized to the rotated box:
+
+```json
+{"id":"crop-exact","method":"edit.crop","params":{"asset_id":"asset-…","mutation":{"expected_revision":4,"request_id":"crop-2","actor":"my-client"},"angle":0,"x":0.1,"y":0.1,"width":0.8,"height":0.6}}
+```
+
+Both actions reject a rectangle that would need an empty corner with a structured `validation` error naming the offending corner, its mapped input coordinates and how far outside the input stage it lands. Every crop request updates the stack's one crop layer in place, keeping its layer ID, or appends one when the stack has none; a request equal to the saved payload is a no-op. `edit.crop-reset` takes no parameters, returns an existing crop layer to the neutral payload (`angle 0, x 0, y 0, width 1, height 1`) and is a no-op without one.
 
 While the desktop owns a catalog it creates `CATALOG.live-session.json` beside it, recording a `127.0.0.1` address and a token. That session accepts the same newline-delimited requests with the token as the request's top-level `token`. The file is owner-readable on Unix and removed on orderly shutdown. Up to eight clients are accepted; requests are limited to 1 MiB and retained events to 256. Use `events.since`, and refresh with `asset.state` if it reports a gap.
 

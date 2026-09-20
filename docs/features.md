@@ -20,8 +20,10 @@
 | Declarative tool-module interface | Implemented (M3) | Descriptor-validated registry, generated `edit.<action>` methods and `module.list`; [modules](design/modules-and-api.md) |
 | Pixel and transform tools as modules | Implemented (M3) | Effect and action identities unchanged; pre-module golden journey reopens identically |
 | Generic module controls and canvas pick in the desktop | Implemented (M3) | Controls rendered from descriptors; pointer pick fills coordinates without committing |
-| Lightroom-style crop and straighten module | Planned (M4) | [crop contract](specs/single-image.md) |
-| Draft conflicts with live agent commits | Planned (M4) | Explicit Discard or Reapply |
+| Lightroom-style crop and straighten module | Implemented (M4) | Normalized rotated-box payload, exact at 0°, linear-light bilinear resample otherwise, in-place layer updates; `edit.crop`, `edit.crop-fit`, `edit.crop-reset`; [crop contract](specs/single-image.md) |
+| Draft conflicts with live agent commits | Implemented (M4) | Explicit Discard or Reapply; a stale draft keeps its composition and re-validates against the current stack |
+| Resample stage boundary in the host pipeline | Implemented (M4) | Exact layers before and after compose as one raster pass each; at most two full frames exist at once, each within the 512 MiB frame limit |
+| Number parameters and crop-frame canvas in descriptors | Implemented (M4) | `number` parameter kind and the `crop-frame` canvas interaction, generated into desktop controls and the JSON API alongside `point-pick` |
 | JPEG export with color and metadata verification | Editor follow-up | Quality 90, no overwrite, Keep metadata option |
 | Manual Locate | Editor follow-up | [source recovery](specs/source-recovery.md) |
 | MCP adapter | Editor follow-up | Same operation registry; the JSON API is not MCP |

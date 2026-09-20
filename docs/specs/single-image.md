@@ -1,6 +1,6 @@
 # Crop, export and conflicts
 
-Status: the M4 crop module is planned; export, Locate and MCP are editor follow-ups. History behavior comes from [layers and history](edit-history.md).
+Status: the M4 crop module is implemented; export, Locate and MCP remain editor follow-ups. History behavior comes from [layers and history](edit-history.md).
 
 ## Viewport and coordinates
 
