@@ -8,6 +8,7 @@ mod processing;
 mod registry;
 mod transform;
 
+pub use crop::CropModule;
 pub use crop::geometry::{
     BoxRect, COVERAGE_TOLERANCE, CropPayload, CropStage, Edge, MAX_ANGLE, MIN_ANGLE, OutputRect,
     guide_angle, largest_with_ratio_inside,
@@ -54,6 +55,12 @@ pub struct StageContext<'a> {
     pub layers: &'a [Layer],
     #[allow(clippy::type_complexity)]
     pub sampler: &'a dyn Fn(u32, u32) -> Result<Option<[u8; 4]>, Error>,
+    /// The stage the layer at index `i` receives, which is the output stage of the layers before
+    /// it; `layers.len()` is [`StageContext::stage`]. A module updating a layer in place plans
+    /// against that layer's own input stage, not the final one. The host answers by compiling the
+    /// recipe prefix, so this costs `O(layers)` and rasterizes nothing.
+    #[allow(clippy::type_complexity)]
+    pub stage_before: &'a dyn Fn(usize) -> Result<Stage, Error>,
 }
 
 pub trait ToolModule: Send + Sync {

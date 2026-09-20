@@ -1,4 +1,4 @@
-use crate::{Error, ErrorKind};
+use crate::{Error, ErrorKind, modules::CropPayload};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use serde_json::{Value, json};
 use std::collections::HashSet;
@@ -6,6 +6,7 @@ use std::collections::HashSet;
 pub const RECIPE_FORMAT: u32 = 1;
 pub const PIXEL_EFFECT: &str = "lightwell.pixel.replace";
 pub const TRANSFORM_EFFECT: &str = "lightwell.geometry.transform";
+pub const CROP_EFFECT: &str = "lightwell.geometry.crop";
 pub const EFFECT_FORMAT: u32 = 1;
 
 fn valid_id(value: &str, prefix: &str) -> bool {
@@ -95,6 +96,15 @@ impl Layer {
             effect_id: TRANSFORM_EFFECT.into(),
             effect_format: EFFECT_FORMAT,
             payload: serde_json::to_value(transform).expect("transform is serializable"),
+        }
+    }
+    /// The one crop layer of a stack: straightening and a rectangle over its own input stage.
+    pub fn crop(payload: CropPayload) -> Self {
+        Self {
+            id: LayerId::new(),
+            effect_id: CROP_EFFECT.into(),
+            effect_format: EFFECT_FORMAT,
+            payload: serde_json::to_value(payload).expect("crop payload is serializable"),
         }
     }
     /// Structural only: effect availability and payload shape belong to the providing module,

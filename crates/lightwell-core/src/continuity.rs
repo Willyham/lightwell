@@ -489,3 +489,221 @@ fn wrappers_actions_and_the_api_produce_identical_entries_pixels_and_errors() {
     assert_eq!(std::fs::read(&source).unwrap(), bytes, "source unchanged");
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+/// The crop journey used for parity: one rectangle, a ratio fit at an angle, a reset and an angled
+/// rectangle, as (expected revision, request id, action, parameters).
+const CROP_JOURNEY: [(u64, &str, &str, &str); 4] = [
+    (
+        0,
+        "crop-a",
+        "crop",
+        r#"{"x":0.25,"y":0.25,"width":0.5,"height":0.5}"#,
+    ),
+    (
+        1,
+        "crop-fit-b",
+        "crop-fit",
+        r#"{"aspect":"16:9","angle":4}"#,
+    ),
+    (2, "crop-reset-c", "crop-reset", r#"{}"#),
+    (
+        3,
+        "crop-d",
+        "crop",
+        r#"{"angle":3.0,"x":0.1,"y":0.1,"width":0.6,"height":0.6}"#,
+    ),
+];
+
+/// A rectangle whose corners leave the rotated source: the coverage error both paths must report.
+const UNCOVERED: &str = r#"{"angle":45.0,"x":0.0,"y":0.0,"width":1.0,"height":1.0}"#;
+
+fn parameters(raw: &str) -> Value {
+    serde_json::from_str(raw).unwrap()
+}
+
+#[test]
+fn crop_actions_are_discoverable_and_identical_through_actions_and_the_api() {
+    let dir = temp("crop-parity");
+    let source = dir.join("orientation-1.jpg");
+    std::fs::copy(fixture("orientation-1.jpg"), &source).unwrap();
+    let bytes = std::fs::read(&source).unwrap();
+
+    // Through the core's one action path.
+    let mut service = EditorService::open(&dir.join("actions.sqlite")).unwrap();
+    let asset = service.import(&source).unwrap().asset.id;
+    for (revision, request, action, raw) in CROP_JOURNEY {
+        let result = service
+            .apply_action(
+                &asset,
+                mutation(revision, request, "crop-parity"),
+                action,
+                parameters(raw),
+            )
+            .unwrap_or_else(|error| panic!("{action}: {error}"));
+        assert_eq!(result.outcome, MutationOutcome::Applied, "{action}");
+    }
+    let direct_entries: Vec<Value> =
+        serde_json::to_value(service.history(&asset, None, 50).unwrap()).unwrap()["entries"]
+            .as_array()
+            .unwrap()
+            .clone();
+    let direct_stacks = stacks(&direct_entries);
+    let direct_layers = service
+        .state(&asset)
+        .unwrap()
+        .current_entry
+        .snapshot
+        .recipe
+        .layers;
+    assert_eq!(direct_layers.len(), 1, "the stack holds one crop layer");
+    let direct_error = service
+        .apply_action(
+            &asset,
+            mutation(4, "crop-uncovered", "crop-parity"),
+            "crop",
+            parameters(UNCOVERED),
+        )
+        .expect_err("the box corners are empty at 45 degrees");
+    assert_eq!(direct_error.kind, ErrorKind::Validation);
+    drop(service);
+
+    // Through the JSON API, including discovery.
+    let (owner, join) = OwnerHandle::start(&dir.join("api.sqlite")).unwrap();
+    let client = owner.register();
+    let call = |method: &str, params: Value| -> Value {
+        let response = owner
+            .call(
+                client,
+                ApiRequest {
+                    id: method.into(),
+                    method: method.into(),
+                    params,
+                    token: None,
+                },
+            )
+            .unwrap();
+        assert!(response.error.is_none(), "{method}: {:?}", response.error);
+        response.result.unwrap()
+    };
+    let schema = call("schema.list", json!({}));
+    let methods = schema["methods"].as_object().unwrap();
+    for method in ["edit.crop", "edit.crop-fit", "edit.crop-reset"] {
+        assert!(methods.contains_key(method), "{method} is not listed");
+        assert!(methods[method]["mutates"].as_bool().unwrap(), "{method}");
+    }
+    assert_eq!(
+        methods["edit.crop"]["required"],
+        json!(["asset_id", "mutation", "x", "y", "width", "height"]),
+        "the angle carries a declared default, so it is optional"
+    );
+    let described: Vec<Value> = methods["edit.crop"]["parameters"]
+        .as_array()
+        .unwrap()
+        .clone();
+    assert_eq!(described.len(), 5);
+    for parameter in &described {
+        assert_eq!(parameter["kind"], json!("number"), "{parameter}");
+        assert!(
+            parameter["min"].is_number() && parameter["max"].is_number(),
+            "{parameter}"
+        );
+    }
+    assert_eq!(
+        methods["edit.crop-fit"]["parameters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|parameter| parameter["name"] == json!("aspect"))
+            .expect("the aspect parameter")["options"],
+        json!(["free", "original", "1:1", "3:2", "4:3", "16:9", "custom"])
+    );
+    assert!(
+        methods["edit.crop-reset"]["parameters"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    let modules = call("module.list", json!({}));
+    let crop = modules["modules"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|module| module["id"] == json!("lightwell.crop"))
+        .expect("the crop module descriptor")
+        .clone();
+    assert_eq!(crop["title"], json!("Crop and straighten"));
+    assert_eq!(crop["effects"][0]["id"], json!("lightwell.geometry.crop"));
+    assert_eq!(crop["effects"][0]["stage"], json!("geometry"));
+    assert_eq!(
+        crop["canvas"],
+        json!({
+            "kind": "crop-frame",
+            "action": "crop",
+            "angle": "angle",
+            "x": "x",
+            "y": "y",
+            "width": "width",
+            "height": "height",
+            "fit_action": "crop-fit",
+            "aspect": "aspect",
+        })
+    );
+
+    let asset = call("catalog.import", json!({"path": source}))["asset"]["id"].clone();
+    for (revision, request, action, raw) in CROP_JOURNEY {
+        let mut params = parameters(raw);
+        let object = params.as_object_mut().unwrap();
+        object.insert("asset_id".into(), asset.clone());
+        object.insert(
+            "mutation".into(),
+            json!({"expected_revision":revision,"request_id":request,"actor":"crop-parity"}),
+        );
+        call(&format!("edit.{action}"), params);
+    }
+    let api_entries = call("history.list", json!({"asset_id":asset,"limit":50}))["entries"]
+        .as_array()
+        .unwrap()
+        .clone();
+    let mut uncovered = parameters(UNCOVERED);
+    let object = uncovered.as_object_mut().unwrap();
+    object.insert("asset_id".into(), asset.clone());
+    object.insert(
+        "mutation".into(),
+        json!({"expected_revision":4,"request_id":"crop-uncovered","actor":"crop-parity"}),
+    );
+    let refused = owner
+        .call(
+            client,
+            ApiRequest {
+                id: "crop-uncovered".into(),
+                method: "edit.crop".into(),
+                params: uncovered,
+                token: None,
+            },
+        )
+        .unwrap()
+        .error
+        .expect("an uncovered rectangle is refused");
+    owner.stop();
+    join.join().unwrap();
+
+    assert_eq!(
+        stacks(&api_entries),
+        direct_stacks,
+        "the API and the action path build the same stacks and history parameters"
+    );
+    assert_eq!(
+        json!({"code": refused.code, "message": refused.message}),
+        json!({"code": direct_error.kind.code(), "message": direct_error.detail}),
+        "the coverage rejection is the same error everywhere"
+    );
+    assert_eq!(refused.code, "validation");
+    assert!(
+        refused.message.contains("corner maps to")
+            && refused.message.contains("outside the 480x320 input stage"),
+        "{}",
+        refused.message
+    );
+    assert_eq!(std::fs::read(&source).unwrap(), bytes, "source unchanged");
+    std::fs::remove_dir_all(dir).unwrap();
+}
