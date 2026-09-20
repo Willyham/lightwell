@@ -22,4 +22,6 @@ Each landscape fixture has red, green, blue and gold quadrants (top-left, top-ri
 | `invalid.jpg`, `truncated.jpg` | Invalid header and incomplete entropy stream; report failure and keep the last successful image |
 | `oversized.jpg` | Header declares 65535×65535; rejected before raster allocation |
 
+`history/m2-journey.json` is a catalog journey recorded with the pre-module editor against `s0/orientation-6.jpg`: full history entries, navigation state, versions, request hashes and sampled pixels per entry. The core continuity test rebuilds that catalog around a local copy of the fixture and requires the module-based editor to reproduce it exactly. Regenerate it only from a pre-module build; it is evidence, not a template.
+
 Private originals for local diagnostics go in ignored `fixtures/jpg/` or `private/` and are never committed. Later work needs geometry goldens for crop and straightening, export profile and metadata fixtures, moved and changed originals for Locate, Adobe RGB and Display P3 inputs before any wide-gamut claim, and owner-supplied Nikon Z6 and Fujifilm X100VI samples stored outside tracked source.

@@ -1,17 +1,21 @@
 use crate::{Config, diagnostics::Diagnostics, paths::Paths};
 use iced::{
-    Element, Length, Subscription, Task,
-    widget::{button, column, container, image, row, scrollable, text, text_input},
+    ContentFit, Element, Length, Point, Rectangle, Size, Subscription, Task,
+    widget::{
+        button, column, container, image, mouse_area, operation, responsive, row, scrollable, text,
+        text_input,
+    },
 };
 use iced_runtime::image as image_memory;
 use lightwell_core::{
-    ApiRequest, AssetId, ClientId, ClientSession, EditorState, EntryId, ErrorKind, EventsResult,
-    HistoryEntry, HistoryPage, HistorySelection, Lineage, LocalServer, Mutation, OwnerHandle,
-    PreviewJob, PreviewQueue, Transform, Version, Zoom,
+    ActionDescriptor, ApiRequest, AssetId, Availability, CanvasInteraction, ClientId,
+    ClientSession, Control, EditorState, EntryId, ErrorKind, EventsResult, HistoryEntry,
+    HistoryPage, HistorySelection, Lineage, LocalServer, ModuleDescriptor, Mutation, OwnerHandle,
+    ParameterDescriptor, ParameterKind, PreviewJob, PreviewQueue, Version, Zoom,
 };
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::{BTreeMap, HashSet, VecDeque},
     path::PathBuf,
     sync::{
         Mutex,
@@ -112,16 +116,34 @@ enum Message {
         Upload,
         Result<image_memory::Allocation, image_memory::Error>,
     ),
-    X(String),
-    Y(String),
-    R(String),
-    G(String),
-    B(String),
+    /// Every tool control is generated from these; the desktop knows no tool by name.
+    ModulesLoaded(Result<Vec<ModuleDescriptor>, String>),
+    /// A generated field changed: the text the user typed for one declared parameter.
+    ControlChanged {
+        action: String,
+        parameter: String,
+        text: String,
+    },
+    /// Enter in a generated field runs that field's action when it is runnable.
+    ControlSubmitted {
+        action: String,
+    },
+    RunAction {
+        action: String,
+        preset: Map<String, Value>,
+    },
+    /// The last pointer position over the photo, already mapped to image pixels.
+    PointerMoved(Option<(u32, u32)>),
+    /// A canvas pick fills the declared coordinate fields; it never commits.
+    PointPicked {
+        x: u32,
+        y: u32,
+    },
+    FocusNext,
+    FocusPrevious,
     Zoom(String),
     VersionName(String),
     Panned(f32, f32),
-    ApplyPixel,
-    Transform(Transform),
     Undo,
     Redo,
     Preview(EntryId),
@@ -236,11 +258,14 @@ struct Editor {
     status: String,
     api_sequence: u64,
     scale_factor: f32,
-    x: String,
-    y: String,
-    r: String,
-    g: String,
-    b: String,
+    /// Descriptors fetched once through `module.list`; the only source of tool controls.
+    modules: Vec<ModuleDescriptor>,
+    /// Set once discovery answered, successfully or not, so evidence never captures an empty panel.
+    modules_ready: bool,
+    /// The text typed into each generated field, by (action id, parameter name).
+    fields: Fields,
+    /// The last pointer position over the photo in image pixels; a pick commits nothing.
+    pointer: Option<(u32, u32)>,
     zoom: String,
     version_name: String,
 }
@@ -308,11 +333,10 @@ impl Editor {
             status: "Open a JPEG to begin".into(),
             api_sequence: 0,
             scale_factor: 1.0,
-            x: "0".into(),
-            y: "0".into(),
-            r: "255".into(),
-            g: "0".into(),
-            b: "0".into(),
+            modules: Vec::new(),
+            modules_ready: false,
+            fields: Fields::default(),
+            pointer: None,
             zoom: "100".into(),
             version_name: String::new(),
         };
@@ -327,6 +351,8 @@ impl Editor {
             .and_then(iced::window::scale_factor)
             .map(Message::ScaleFactor);
         let backend = iced::system::information().map(Message::Info);
+        // Tool controls are discovered once, through the same API every other client uses.
+        let modules = modules_task(editor.owner.clone(), editor.client);
         let first = match &mut editor.evidence {
             Some(evidence) => match evidence.queue.pop_front() {
                 Some(path) => editor.open(path),
@@ -339,7 +365,7 @@ impl Editor {
                 .map(|path| editor.open(path))
                 .unwrap_or_else(Task::none),
         };
-        (editor, Task::batch([scale, backend, first]))
+        (editor, Task::batch([scale, backend, modules, first]))
     }
 
     fn event(&self, name: &str, detail: Value) {
@@ -353,7 +379,7 @@ impl Editor {
 
     /// The state correlated with every event and captured frame; never includes source paths.
     fn snapshot(&self) -> Value {
-        json!({"run_id":self.run_id,"mode":if self.evidence.is_some() {"evidence"} else {"editor"},"orientation":self.activity.orientation,"phase":self.activity.phase,"requested_generation":self.activity.requested,"displayed_generation":self.activity.displayed,"source_dimensions":self.activity.source_dimensions,"preview_dimensions":self.activity.preview_dimensions,"backend":self.activity.backend,"status":self.status,"error_code":self.activity.error_code})
+        json!({"run_id":self.run_id,"mode":if self.evidence.is_some() {"evidence"} else {"editor"},"orientation":self.activity.orientation,"phase":self.activity.phase,"requested_generation":self.activity.requested,"displayed_generation":self.activity.displayed,"source_dimensions":self.activity.source_dimensions,"preview_dimensions":self.activity.preview_dimensions,"backend":self.activity.backend,"status":self.status,"error_code":self.activity.error_code,"modules":module_summary(&self.modules),"controls":self.fields.summary()})
     }
 
     /// Import a file through the same API call the Open button uses, tracked as one open request.
@@ -506,7 +532,12 @@ impl Editor {
                 let Some(evidence) = &mut self.evidence else {
                     return Task::none();
                 };
-                if !evidence.capture_pending || evidence.saving || self.activity.backend.is_none() {
+                // Wait for the backend and for tool discovery so a frame always shows real controls.
+                if !evidence.capture_pending
+                    || evidence.saving
+                    || self.activity.backend.is_none()
+                    || !self.modules_ready
+                {
                     return Task::none();
                 }
                 evidence.capture_pending = false;
@@ -749,44 +780,74 @@ impl Editor {
                     }
                 }
             }
-            Message::X(value) => self.x = value,
-            Message::Y(value) => self.y = value,
-            Message::R(value) => self.r = value,
-            Message::G(value) => self.g = value,
-            Message::B(value) => self.b = value,
+            Message::ModulesLoaded(result) => {
+                self.modules_ready = true;
+                match result {
+                    Ok(modules) => {
+                        self.fields = Fields::seeded(&modules);
+                        self.event("modules_loaded", module_summary(&modules));
+                        self.modules = modules;
+                    }
+                    Err(error) => {
+                        self.status = format!("Tool discovery failed: {error}");
+                        self.event("modules_failed", json!({ "message": self.status }));
+                    }
+                }
+            }
+            Message::ControlChanged {
+                action,
+                parameter,
+                text,
+            } => self.fields.set(&action, &parameter, text),
+            Message::ControlSubmitted { action } => {
+                let Some(preset) =
+                    submit_preset(&self.modules, &action).filter(|_| self.editable())
+                else {
+                    return Task::none();
+                };
+                return self.update(Message::RunAction { action, preset });
+            }
+            Message::RunAction { action, preset } => {
+                let Some(state) = &self.state else {
+                    return Task::none();
+                };
+                let Some(declared) = declared_action(&self.modules, &action) else {
+                    self.status = format!("No module declares the action {action}");
+                    return Task::none();
+                };
+                let params = match action_params(declared, &preset, &self.fields) {
+                    Ok(params) => params,
+                    Err(message) => {
+                        self.status = message;
+                        return Task::none();
+                    }
+                };
+                let mut request =
+                    json!({"asset_id":state.asset.id,"mutation":mutation(state.revision)});
+                let object = request.as_object_mut().expect("the envelope is an object");
+                object.extend(params);
+                return self.command(format!("edit.{action}"), request);
+            }
+            Message::PointerMoved(point) => self.pointer = point,
+            Message::PointPicked { x, y } => {
+                let Some((action, x_parameter, y_parameter)) = point_pick(&self.modules) else {
+                    return Task::none();
+                };
+                let (action, x_parameter, y_parameter) = (
+                    action.to_owned(),
+                    x_parameter.to_owned(),
+                    y_parameter.to_owned(),
+                );
+                self.fields.set(&action, &x_parameter, x.to_string());
+                self.fields.set(&action, &y_parameter, y.to_string());
+                self.event("canvas_pick", json!({"action":action,"x":x,"y":y}));
+                self.status = format!("Picked ({x}, {y}) into {action}");
+            }
+            Message::FocusNext => return operation::focus_next(),
+            Message::FocusPrevious => return operation::focus_previous(),
             Message::Zoom(value) => self.zoom = value,
             Message::VersionName(value) => self.version_name = value,
             Message::Panned(x, y) => return self.pan(x, y),
-            Message::ApplyPixel => {
-                let Some(state) = &self.state else {
-                    return Task::none();
-                };
-                let parsed = || {
-                    Some((
-                        self.x.parse::<u32>().ok()?,
-                        self.y.parse::<u32>().ok()?,
-                        [
-                            self.r.parse::<u8>().ok()?,
-                            self.g.parse::<u8>().ok()?,
-                            self.b.parse::<u8>().ok()?,
-                        ],
-                    ))
-                };
-                let Some((x, y, rgb)) = parsed() else {
-                    self.status =
-                        "Pixel fields require integer x/y and RGB values from 0 to 255".into();
-                    return Task::none();
-                };
-                let params = json!({"asset_id":state.asset.id,"mutation":mutation(state.revision),"x":x,"y":y,"rgb":rgb});
-                return self.command("edit.set-pixel", params);
-            }
-            Message::Transform(transform) => {
-                let Some(state) = &self.state else {
-                    return Task::none();
-                };
-                let params = json!({"asset_id":state.asset.id,"mutation":mutation(state.revision),"transform":transform});
-                return self.command("edit.transform", params);
-            }
             Message::Undo | Message::Redo => {
                 let Some(state) = &self.state else {
                     return Task::none();
@@ -969,13 +1030,16 @@ impl Editor {
         pan_task(self.owner.clone(), self.client, x, y)
     }
 
-    fn command(&mut self, method: &'static str, params: Value) -> Task<Message> {
+    /// Every mutation, generated or not, takes the narrowest completion path: the command, one
+    /// `asset.state` refresh and one preview job.
+    fn command(&mut self, method: impl Into<String>, params: Value) -> Task<Message> {
         let Some(state) = &self.state else {
             return Task::none();
         };
         if self.busy {
             return Task::none();
         }
+        let method = method.into();
         self.busy = true;
         self.status = format!("Running {method}…");
         state_task(
@@ -1014,28 +1078,197 @@ impl Editor {
         )
     }
 
+    /// An edit is possible when an asset is open, the session shows the current state and no
+    /// request is in flight.
+    fn editable(&self) -> bool {
+        self.state.is_some() && self.session.preview.can_edit() && !self.busy
+    }
+
+    /// Every tool control on screen, generated from the fetched descriptors. The desktop lays them
+    /// out and edits text; the modules declare what exists and what it is worth.
+    fn tool_panel(&self, editable: bool) -> Element<'_, Message> {
+        if self.modules.is_empty() {
+            let message = if self.modules_ready {
+                "No tool modules are available"
+            } else {
+                "Loading tool modules…"
+            };
+            return text(message).size(14).into();
+        }
+        let mut panel = column![].spacing(18);
+        for module in &self.modules {
+            let enabled = match &module.availability {
+                Availability::Available => editable,
+                Availability::Unavailable { reason } => {
+                    panel = panel
+                        .push(text(format!("{} · unavailable: {reason}", module.title)).size(14));
+                    false
+                }
+            };
+            for control in &module.controls {
+                panel = panel.push(self.control_element(module, control, enabled));
+            }
+        }
+        panel.into()
+    }
+
+    /// One declared control. An unrenderable kind is named on screen, never dropped.
+    fn control_element<'a>(
+        &'a self,
+        module: &'a ModuleDescriptor,
+        control: &'a Control,
+        enabled: bool,
+    ) -> Element<'a, Message> {
+        match classify(control) {
+            Rendered::Group { label, controls } => {
+                let mut group = column![text(label).size(18)].spacing(8);
+                for child in controls {
+                    group = group.push(self.control_element(module, child, enabled));
+                }
+                group.into()
+            }
+            Rendered::Number {
+                action,
+                parameter,
+                label,
+            } => {
+                let Some(declared) = declared_parameter(module, action, parameter) else {
+                    return text(undeclared_label(action, parameter)).size(12).into();
+                };
+                let value = self.fields.get(action, parameter).unwrap_or_default();
+                let (input_action, input_parameter) = (action.to_owned(), parameter.to_owned());
+                let input = text_input(label, value)
+                    .id(field_id(action, parameter, None))
+                    .on_input(move |text| Message::ControlChanged {
+                        action: input_action.clone(),
+                        parameter: input_parameter.clone(),
+                        text,
+                    })
+                    .on_submit(Message::ControlSubmitted {
+                        action: action.to_owned(),
+                    })
+                    .width(90);
+                let mut field = column![
+                    row![text(labelled(label, declared)).size(12).width(110), input]
+                        .spacing(6)
+                        .align_y(iced::Alignment::Center)
+                ]
+                .spacing(4);
+                if let Err(message) = parse_field(declared, value) {
+                    field = field.push(text(message).size(11));
+                }
+                field.into()
+            }
+            Rendered::Color {
+                action,
+                parameter,
+                label,
+            } => {
+                let Some(declared) = declared_parameter(module, action, parameter) else {
+                    return text(undeclared_label(action, parameter)).size(12).into();
+                };
+                let value = self.fields.get(action, parameter).unwrap_or_default();
+                let mut channels = row![text(labelled(label, declared)).size(12).width(110)]
+                    .spacing(6)
+                    .align_y(iced::Alignment::Center);
+                for (index, name) in CHANNELS.iter().enumerate() {
+                    let (input_action, input_parameter, current) =
+                        (action.to_owned(), parameter.to_owned(), value.to_owned());
+                    channels = channels.push(
+                        text_input(name, channel_text(value, index))
+                            .id(field_id(action, parameter, Some(name)))
+                            .on_input(move |text| Message::ControlChanged {
+                                action: input_action.clone(),
+                                parameter: input_parameter.clone(),
+                                text: replace_channel(&current, index, &text),
+                            })
+                            .on_submit(Message::ControlSubmitted {
+                                action: action.to_owned(),
+                            })
+                            .width(55),
+                    );
+                }
+                let mut field = column![channels].spacing(4);
+                if let Err(message) = parse_field(declared, value) {
+                    field = field.push(text(message).size(11));
+                }
+                field.into()
+            }
+            Rendered::Action {
+                action,
+                label,
+                preset,
+            } => {
+                let runnable = enabled
+                    && declared_action(&self.modules, action).is_some_and(|declared| {
+                        action_params(declared, preset, &self.fields).is_ok()
+                    });
+                button(text(label))
+                    .on_press_maybe(runnable.then(|| Message::RunAction {
+                        action: action.to_owned(),
+                        preset: preset.clone(),
+                    }))
+                    .into()
+            }
+            Rendered::Unsupported(kind) => text(unsupported_label(&kind)).size(12).into(),
+        }
+    }
+
     fn view(&self) -> Element<'_, Message> {
         let current = self.state.as_ref();
-        let editable = current.is_some() && self.session.preview.can_edit() && !self.busy;
+        let editable = self.editable();
         let open = button("Open image")
             .on_press_maybe((!self.busy && self.evidence.is_none()).then_some(Message::Open));
         let header = row![text("Lightwell").size(22), open]
             .spacing(16)
             .align_y(iced::Alignment::Center);
 
+        // A pick is only meaningful while the current state can be edited, and only when a module
+        // declares one; the adapter maps a click to image pixels and fills that module's fields.
+        let picking = editable && point_pick(&self.modules).is_some();
+        let pointer = self.pointer;
         let surface: Element<'_, Message> = match (&self.photo, self.dimensions) {
             (Some(allocation), Some((width, height))) => match self.session.preview.view.zoom {
-                Zoom::Fit => image(allocation.handle().clone())
-                    .width(Length::Fill)
-                    .height(Length::Fill)
-                    .content_fit(iced::ContentFit::Contain)
-                    .into(),
+                Zoom::Fit => {
+                    let handle = allocation.handle().clone();
+                    // Fit needs the available size to know where iced draws the contained image.
+                    responsive(move |available| {
+                        let photo = image(handle.clone())
+                            .width(Length::Fill)
+                            .height(Length::Fill)
+                            .content_fit(ContentFit::Contain);
+                        if !picking {
+                            return photo.into();
+                        }
+                        let mut area = mouse_area(photo).on_move(move |point| {
+                            Message::PointerMoved(fit_pick((width, height), available, point))
+                        });
+                        if let Some((x, y)) = pointer {
+                            area = area.on_press(Message::PointPicked { x, y });
+                        }
+                        area.into()
+                    })
+                    .into()
+                }
                 Zoom::Percent { value } => {
                     let scale = value / 100.0 / self.scale_factor;
-                    let image = image(allocation.handle().clone())
+                    let photo = image(allocation.handle().clone())
                         .width(Length::Fixed(width as f32 * scale))
                         .height(Length::Fixed(height as f32 * scale));
-                    scrollable(container(image).center(Length::Shrink))
+                    // Inside the scrollable the reported point is already content-space: the
+                    // scrollable translates the cursor by its offset before its content sees it.
+                    let photo: Element<'_, Message> = if picking {
+                        let mut area = mouse_area(photo).on_move(move |point| {
+                            Message::PointerMoved(percent_pick((width, height), scale, point))
+                        });
+                        if let Some((x, y)) = pointer {
+                            area = area.on_press(Message::PointPicked { x, y });
+                        }
+                        area.into()
+                    } else {
+                        photo.into()
+                    };
+                    scrollable(container(photo).center(Length::Shrink))
                         .direction(iced::widget::scrollable::Direction::Both {
                             vertical: iced::widget::scrollable::Scrollbar::default(),
                             horizontal: iced::widget::scrollable::Scrollbar::default(),
@@ -1052,40 +1285,7 @@ impl Editor {
                 .into(),
         };
 
-        let pixel = column![
-            text("Pixel proof").size(18),
-            row![
-                text_input("x", &self.x).on_input(Message::X).width(55),
-                text_input("y", &self.y).on_input(Message::Y).width(55),
-                text_input("R", &self.r).on_input(Message::R).width(55),
-                text_input("G", &self.g).on_input(Message::G).width(55),
-                text_input("B", &self.b).on_input(Message::B).width(55),
-            ]
-            .spacing(6),
-            button("Apply pixel").on_press_maybe(editable.then_some(Message::ApplyPixel)),
-        ]
-        .spacing(8);
-
-        let transforms = column![
-            text("Exact transforms").size(18),
-            row![
-                button("Rotate left")
-                    .on_press_maybe(editable.then_some(Message::Transform(Transform::RotateLeft))),
-                button("Rotate right")
-                    .on_press_maybe(editable.then_some(Message::Transform(Transform::RotateRight))),
-            ]
-            .spacing(6),
-            row![
-                button("Mirror horizontal").on_press_maybe(
-                    editable.then_some(Message::Transform(Transform::MirrorHorizontal))
-                ),
-                button("Flip vertical").on_press_maybe(
-                    editable.then_some(Message::Transform(Transform::FlipVertical))
-                ),
-            ]
-            .spacing(6),
-        ]
-        .spacing(8);
+        let tools = self.tool_panel(editable);
 
         let zoom = column![
             text("View").size(18),
@@ -1224,8 +1424,7 @@ impl Editor {
             .unwrap_or_else(|| "No layer selected".into());
         let sidebar = scrollable(
             column![
-                pixel,
-                transforms,
+                tools,
                 zoom,
                 history_rows,
                 version_rows,
@@ -1262,18 +1461,34 @@ impl Editor {
             if let iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
                 key, modifiers, ..
             }) = event
-                && modifiers.command()
             {
-                if matches!(key,iced::keyboard::Key::Character(ref value) if value.eq_ignore_ascii_case("o"))
-                {
-                    return Some(Message::Open);
+                if modifiers.command() {
+                    if matches!(key,iced::keyboard::Key::Character(ref value) if value.eq_ignore_ascii_case("o"))
+                    {
+                        return Some(Message::Open);
+                    }
+                    if matches!(key,iced::keyboard::Key::Character(ref value) if value.eq_ignore_ascii_case("z"))
+                    {
+                        return Some(if modifiers.shift() {
+                            Message::Redo
+                        } else {
+                            Message::Undo
+                        });
+                    }
+                    return None;
                 }
-                if matches!(key,iced::keyboard::Key::Character(ref value) if value.eq_ignore_ascii_case("z"))
+                // Tab walks the generated fields; shift is the only modifier it tolerates.
+                if matches!(
+                    key,
+                    iced::keyboard::Key::Named(iced::keyboard::key::Named::Tab)
+                ) && !modifiers.alt()
+                    && !modifiers.control()
+                    && !modifiers.logo()
                 {
                     return Some(if modifiers.shift() {
-                        Message::Redo
+                        Message::FocusPrevious
                     } else {
-                        Message::Undo
+                        Message::FocusNext
                     });
                 }
             }
@@ -1300,6 +1515,374 @@ impl Editor {
 
 fn short(value: &str) -> &str {
     value.get(..value.len().min(12)).unwrap_or(value)
+}
+
+/// The channels of a color parameter, in declared order.
+const CHANNELS: [&str; 3] = ["R", "G", "B"];
+
+/// The text typed into each generated field, by (action id, parameter name). The raw text is kept:
+/// validation always runs against the declared parameter, never against a parsed copy.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct Fields(BTreeMap<(String, String), String>);
+
+impl Fields {
+    /// Seed every declared field from its parameter's default, else from the limit it accepts.
+    fn seeded(modules: &[ModuleDescriptor]) -> Self {
+        let mut fields = Self::default();
+        for module in modules {
+            seed_controls(module, &module.controls, &mut fields);
+        }
+        fields
+    }
+
+    fn get(&self, action: &str, parameter: &str) -> Option<&str> {
+        self.0
+            .iter()
+            .find(|((declared, name), _)| declared == action && name == parameter)
+            .map(|(_, text)| text.as_str())
+    }
+
+    fn set(&mut self, action: &str, parameter: &str, text: String) {
+        self.0
+            .insert((action.to_owned(), parameter.to_owned()), text);
+    }
+
+    /// Correlated evidence: what every generated control held when a frame was captured.
+    fn summary(&self) -> Value {
+        Value::Object(
+            self.0
+                .iter()
+                .map(|((action, parameter), text)| {
+                    (format!("{action}.{parameter}"), Value::from(text.clone()))
+                })
+                .collect(),
+        )
+    }
+}
+
+fn seed_controls(module: &ModuleDescriptor, controls: &[Control], fields: &mut Fields) {
+    for control in controls {
+        match classify(control) {
+            Rendered::Group { controls, .. } => seed_controls(module, controls, fields),
+            Rendered::Number {
+                action, parameter, ..
+            }
+            | Rendered::Color {
+                action, parameter, ..
+            } => {
+                if let Some(declared) = declared_parameter(module, action, parameter) {
+                    fields.set(action, parameter, seed_text(declared));
+                }
+            }
+            Rendered::Action { .. } | Rendered::Unsupported(_) => {}
+        }
+    }
+}
+
+/// A field starts at the declared default; without one it starts at the lowest accepted value.
+fn seed_text(parameter: &ParameterDescriptor) -> String {
+    match &parameter.kind {
+        ParameterKind::Integer { min, .. } => parameter
+            .default
+            .as_ref()
+            .and_then(Value::as_i64)
+            .unwrap_or(*min)
+            .to_string(),
+        ParameterKind::Color => parameter
+            .default
+            .as_ref()
+            .and_then(Value::as_array)
+            .filter(|channels| channels.len() == CHANNELS.len())
+            .map(|channels| {
+                channels
+                    .iter()
+                    .map(|channel| channel.as_u64().unwrap_or_default().to_string())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            })
+            .unwrap_or_else(|| "0,0,0".into()),
+        ParameterKind::Enum { options } => parameter
+            .default
+            .as_ref()
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .or_else(|| options.first().cloned())
+            .unwrap_or_default(),
+    }
+}
+
+fn range_message(name: &str, min: i64, max: i64) -> String {
+    format!("{name} must be an integer within {min}..={max}")
+}
+
+/// One field's text read as the value its parameter declares, or the message naming what it needs.
+fn parse_field(parameter: &ParameterDescriptor, text: &str) -> Result<Value, String> {
+    let name = &parameter.name;
+    match &parameter.kind {
+        ParameterKind::Integer { min, max } => text
+            .trim()
+            .parse::<i64>()
+            .ok()
+            .filter(|value| (min..=max).contains(&value))
+            .map(Value::from)
+            .ok_or_else(|| range_message(name, *min, *max)),
+        ParameterKind::Color => parse_color(text)
+            .map(|rgb| Value::from(rgb.to_vec()))
+            .ok_or_else(|| format!("{name} must be three channels 0..=255")),
+        ParameterKind::Enum { options } => options
+            .iter()
+            .find(|option| *option == text.trim())
+            .map(|option| Value::from(option.clone()))
+            .ok_or_else(|| format!("{name} must be one of {}", options.join(", "))),
+    }
+}
+
+fn parse_color(text: &str) -> Option<[u8; 3]> {
+    let mut channels = text.split(',');
+    let mut rgb = [0u8; 3];
+    for slot in rgb.iter_mut() {
+        *slot = channels.next()?.trim().parse().ok()?;
+    }
+    channels.next().is_none().then_some(rgb)
+}
+
+fn channel_text(value: &str, index: usize) -> &str {
+    value.split(',').nth(index).unwrap_or_default().trim()
+}
+
+/// One channel of a color field replaced, keeping the other two as typed.
+fn replace_channel(current: &str, index: usize, text: &str) -> String {
+    let mut channels: Vec<&str> = (0..CHANNELS.len())
+        .map(|channel| channel_text(current, channel))
+        .collect();
+    let trimmed = text.trim();
+    if let Some(slot) = channels.get_mut(index) {
+        *slot = trimmed;
+    }
+    channels.join(",")
+}
+
+/// A control label carries the parameter's declared unit, e.g. `X (px)`.
+fn labelled(label: &str, parameter: &ParameterDescriptor) -> String {
+    match &parameter.unit {
+        Some(unit) => format!("{label} ({unit})"),
+        None => label.to_owned(),
+    }
+}
+
+/// A stable widget identity per generated field, so focus survives a redraw.
+fn field_id(action: &str, parameter: &str, channel: Option<&str>) -> String {
+    match channel {
+        Some(channel) => format!("lightwell.field.{action}.{parameter}.{channel}"),
+        None => format!("lightwell.field.{action}.{parameter}"),
+    }
+}
+
+fn undeclared_label(action: &str, parameter: &str) -> String {
+    format!("Unsupported control: {action} declares no parameter {parameter}")
+}
+
+fn unsupported_label(kind: &str) -> String {
+    format!("Unsupported control: {kind}")
+}
+
+/// What the desktop makes of one declared control. A kind this build cannot draw keeps its name on
+/// screen rather than disappearing from the panel.
+enum Rendered<'a> {
+    Group {
+        label: &'a str,
+        controls: &'a [Control],
+    },
+    Number {
+        action: &'a str,
+        parameter: &'a str,
+        label: &'a str,
+    },
+    Color {
+        action: &'a str,
+        parameter: &'a str,
+        label: &'a str,
+    },
+    Action {
+        action: &'a str,
+        label: &'a str,
+        preset: &'a Map<String, Value>,
+    },
+    Unsupported(String),
+}
+
+fn classify(control: &Control) -> Rendered<'_> {
+    match control {
+        Control::Group { label, controls } => Rendered::Group { label, controls },
+        Control::Number {
+            action,
+            parameter,
+            label,
+        } => Rendered::Number {
+            action,
+            parameter,
+            label,
+        },
+        Control::Color {
+            action,
+            parameter,
+            label,
+        } => Rendered::Color {
+            action,
+            parameter,
+            label,
+        },
+        Control::Action {
+            action,
+            label,
+            preset,
+        } => Rendered::Action {
+            action,
+            label,
+            preset,
+        },
+        // A kind added to the descriptor later is reported, never dropped.
+        #[allow(unreachable_patterns)]
+        other => Rendered::Unsupported(control_kind(other)),
+    }
+}
+
+/// The descriptor's own kind tag, so an unrenderable control can still be named.
+fn control_kind(control: &Control) -> String {
+    serde_json::to_value(control)
+        .ok()
+        .and_then(|value| value.get("kind").and_then(Value::as_str).map(str::to_owned))
+        .unwrap_or_else(|| "unknown".into())
+}
+
+fn declared_action<'a>(
+    modules: &'a [ModuleDescriptor],
+    action: &str,
+) -> Option<&'a ActionDescriptor> {
+    modules.iter().find_map(|module| module.action(action))
+}
+
+fn declared_parameter<'a>(
+    module: &'a ModuleDescriptor,
+    action: &str,
+    parameter: &str,
+) -> Option<&'a ParameterDescriptor> {
+    module.action(action)?.parameter(parameter)
+}
+
+/// The request fields for one action: preset values merged over the parsed field text, preset
+/// wins. A parameter with a declared default is left out so the host applies that default.
+fn action_params(
+    action: &ActionDescriptor,
+    preset: &Map<String, Value>,
+    fields: &Fields,
+) -> Result<Map<String, Value>, String> {
+    let mut params = Map::new();
+    for parameter in &action.parameters {
+        if let Some(value) = preset.get(&parameter.name) {
+            params.insert(parameter.name.clone(), value.clone());
+        } else if let Some(text) = fields.get(&action.id, &parameter.name) {
+            params.insert(parameter.name.clone(), parse_field(parameter, text)?);
+        } else if parameter.default.is_none() && parameter.required {
+            return Err(format!("{} requires {}", action.title, parameter.name));
+        }
+    }
+    Ok(params)
+}
+
+/// Enter in a field runs the first control that invokes that action, with its preset.
+fn submit_preset(modules: &[ModuleDescriptor], action: &str) -> Option<Map<String, Value>> {
+    declared_action(modules, action)?;
+    Some(
+        modules
+            .iter()
+            .find_map(|module| control_preset(&module.controls, action))
+            .cloned()
+            .unwrap_or_default(),
+    )
+}
+
+fn control_preset<'a>(controls: &'a [Control], action: &str) -> Option<&'a Map<String, Value>> {
+    controls.iter().find_map(|control| match classify(control) {
+        Rendered::Group { controls, .. } => control_preset(controls, action),
+        Rendered::Action {
+            action: declared,
+            preset,
+            ..
+        } if declared == action => Some(preset),
+        _ => None,
+    })
+}
+
+/// The first available module that declares a canvas pick: its action and coordinate parameters.
+fn point_pick(modules: &[ModuleDescriptor]) -> Option<(&str, &str, &str)> {
+    modules.iter().find_map(|module| match &module.canvas {
+        Some(CanvasInteraction::PointPick { action, x, y }) if module.is_available() => {
+            Some((action.as_str(), x.as_str(), y.as_str()))
+        }
+        _ => None,
+    })
+}
+
+/// Where iced draws a contained image inside `available`, matching the image widget's own bounds:
+/// `ContentFit::Contain` sized and centered.
+fn fit_rect(image: (u32, u32), available: Size) -> Option<Rectangle> {
+    let content = Size::new(image.0 as f32, image.1 as f32);
+    if content.width <= 0.0
+        || content.height <= 0.0
+        || !(available.width > 0.0 && available.height > 0.0)
+    {
+        return None;
+    }
+    let size = ContentFit::Contain.fit(content, available);
+    (size.width > 0.0 && size.height > 0.0).then(|| {
+        Rectangle::new(
+            Point::new(
+                (available.width - size.width) / 2.0,
+                (available.height - size.height) / 2.0,
+            ),
+            size,
+        )
+    })
+}
+
+/// Fit: the reported point spans the whole surface, so the centered rectangle is removed first.
+fn fit_pick(image: (u32, u32), available: Size, point: Point) -> Option<(u32, u32)> {
+    let rect = fit_rect(image, available)?;
+    image_pixel(
+        (point.x - rect.x) * image.0 as f32 / rect.width,
+        (point.y - rect.y) * image.1 as f32 / rect.height,
+        image,
+    )
+}
+
+/// Percent: the reported point is local to the displayed raster, which is the image scaled
+/// uniformly. The scrollable translates the cursor by its scroll offset before its content sees
+/// it, so the pan position never enters this mapping.
+fn percent_pick(image: (u32, u32), scale: f32, point: Point) -> Option<(u32, u32)> {
+    if !scale.is_finite() || scale <= 0.0 {
+        return None;
+    }
+    image_pixel(point.x / scale, point.y / scale, image)
+}
+
+fn image_pixel(x: f32, y: f32, (width, height): (u32, u32)) -> Option<(u32, u32)> {
+    let inside = |value: f32, limit: u32| {
+        (value.is_finite() && value >= 0.0 && value < limit as f32).then(|| value.floor() as u32)
+    };
+    Some((inside(x, width)?, inside(y, height)?))
+}
+
+/// Module identity for correlated evidence; descriptors carry no source paths.
+fn module_summary(modules: &[ModuleDescriptor]) -> Value {
+    Value::Array(
+        modules
+            .iter()
+            .map(|module| {
+                json!({"id":module.id,"available":module.is_available(),"actions":module.actions.iter().map(|action| action.id.clone()).collect::<Vec<_>>()})
+            })
+            .collect(),
+    )
 }
 
 fn merge_current_entry(history: &mut HistoryPage, entry: HistoryEntry) {
@@ -1398,6 +1981,17 @@ fn refresh(
     })
 }
 
+/// Discovery runs once: the controls on screen are whatever the registered modules declare.
+fn modules_task(owner: OwnerHandle, client: ClientId) -> Task<Message> {
+    Task::perform(
+        async move {
+            let (mut listed, _) = call(&owner, client, "module.list", json!({}))?;
+            parse::<Vec<ModuleDescriptor>>(listed["modules"].take())
+        },
+        Message::ModulesLoaded,
+    )
+}
+
 fn import_task(owner: OwnerHandle, client: ClientId, path: PathBuf) -> Task<Message> {
     Task::perform(
         async move {
@@ -1414,12 +2008,12 @@ fn state_task(
     owner: OwnerHandle,
     client: ClientId,
     asset_id: AssetId,
-    method: &'static str,
+    method: String,
     params: Value,
 ) -> Task<Message> {
     Task::perform(
         async move {
-            let (_, sequence) = call(&owner, client, method, params)?;
+            let (_, sequence) = call(&owner, client, &method, params)?;
             refresh(&owner, client, asset_id, false, sequence)
         },
         |result| Message::Refreshed(result.map(Box::new)),
@@ -1621,6 +2215,7 @@ mod tests {
                 next_entry_id: truncated.then(EntryId::new),
             },
             job: PreviewJob {
+                registry: std::sync::Arc::new(lightwell_core::ModuleRegistry::builtin()),
                 source: SourceImage {
                     width: 1,
                     height: 1,
@@ -1635,10 +2230,343 @@ mod tests {
         }
     }
 
+    /// The descriptors the desktop would fetch through `module.list`.
+    fn descriptors() -> Vec<ModuleDescriptor> {
+        lightwell_core::ModuleRegistry::builtin()
+            .descriptors()
+            .into_iter()
+            .cloned()
+            .collect()
+    }
+
+    fn parameter_of<'a>(
+        modules: &'a [ModuleDescriptor],
+        action: &str,
+        name: &str,
+    ) -> &'a ParameterDescriptor {
+        declared_action(modules, action)
+            .and_then(|declared| declared.parameter(name))
+            .expect("the declared parameter")
+    }
+
     #[test]
-    fn pixel_fields_reject_non_integral_values() {
-        assert!("1.5".parse::<u32>().is_err());
-        assert!("256".parse::<u8>().is_err());
+    fn fields_are_seeded_from_declared_defaults_and_limits() {
+        let modules = descriptors();
+        let fields = Fields::seeded(&modules);
+        let (action, x, y) = point_pick(&modules).expect("the pixel module declares a canvas pick");
+        assert_eq!(
+            fields.get(action, x),
+            Some("0"),
+            "integers seed at their min"
+        );
+        assert_eq!(fields.get(action, y), Some("0"));
+        let color = declared_action(&modules, action)
+            .expect("the declared action")
+            .parameters
+            .iter()
+            .find(|parameter| matches!(parameter.kind, ParameterKind::Color))
+            .expect("the pixel action declares a color");
+        assert_eq!(fields.get(action, &color.name), Some("0,0,0"));
+        // Only declared fields exist: an action driven by presets alone has none.
+        assert!(
+            fields.summary().as_object().expect("an object").len() == 3,
+            "{}",
+            fields.summary()
+        );
+        assert_eq!(
+            seed_text(&ParameterDescriptor {
+                default: Some(json!(7)),
+                ..parameter_of(&modules, action, x).clone()
+            }),
+            "7",
+            "a declared default wins over the minimum"
+        );
+    }
+
+    #[test]
+    fn field_text_is_validated_against_the_declared_parameter() {
+        let modules = descriptors();
+        let (action, x, _) = point_pick(&modules).expect("a canvas pick");
+        let coordinate = parameter_of(&modules, action, x);
+        assert_eq!(parse_field(coordinate, " 12 ").unwrap(), json!(12));
+        for text in ["", "1.5", "-1", "16384", "twelve"] {
+            let message = parse_field(coordinate, text).expect_err(text);
+            assert!(message.contains("0..=16383"), "{text}: {message}");
+        }
+        let color = declared_action(&modules, action)
+            .expect("the declared action")
+            .parameters
+            .iter()
+            .find(|parameter| matches!(parameter.kind, ParameterKind::Color))
+            .expect("a color parameter");
+        assert_eq!(parse_field(color, "255,0,0").unwrap(), json!([255, 0, 0]));
+        for text in ["255,0", "256,0,0", "255,0,0,0", "a,b,c", ""] {
+            let message = parse_field(color, text).expect_err(text);
+            assert!(message.contains("0..=255"), "{text}: {message}");
+        }
+        let choice = modules
+            .iter()
+            .flat_map(|module| module.actions.iter())
+            .flat_map(|action| action.parameters.iter())
+            .find(|parameter| matches!(parameter.kind, ParameterKind::Enum { .. }))
+            .expect("the transform module declares an enum");
+        let ParameterKind::Enum { options } = &choice.kind else {
+            unreachable!("filtered above")
+        };
+        assert_eq!(
+            parse_field(choice, &options[0]).unwrap(),
+            json!(options[0].clone())
+        );
+        let message = parse_field(choice, "sideways").expect_err("an undeclared option");
+        assert!(message.contains(&options[0]), "{message}");
+    }
+
+    #[test]
+    fn colour_channels_are_edited_one_at_a_time() {
+        assert_eq!(channel_text("1,2,3", 1), "2");
+        assert_eq!(channel_text("1,2", 2), "");
+        assert_eq!(replace_channel("1,2,3", 1, " 200 "), "1,200,3");
+        assert_eq!(replace_channel("", 0, "5"), "5,,");
+    }
+
+    #[test]
+    fn action_parameters_merge_presets_over_field_values() {
+        let modules = descriptors();
+        let (action, x, y) = point_pick(&modules).expect("a canvas pick");
+        let declared = declared_action(&modules, action).expect("the declared action");
+        let mut fields = Fields::seeded(&modules);
+        fields.set(action, x, "4".into());
+        fields.set(action, y, "5".into());
+        let params = action_params(declared, &Map::new(), &fields).unwrap();
+        assert_eq!(params[x], json!(4));
+        assert_eq!(params[y], json!(5));
+        let preset = json!({ x: 9 }).as_object().expect("an object").clone();
+        let params = action_params(declared, &preset, &fields).unwrap();
+        assert_eq!(params[x], json!(9), "the preset wins over the field");
+        assert_eq!(params[y], json!(5));
+        fields.set(action, x, "nine".into());
+        let message = action_params(declared, &Map::new(), &fields)
+            .expect_err("an unparsable field stops the request");
+        assert!(message.contains("0..=16383"), "{message}");
+        assert!(
+            action_params(declared, &preset, &fields).is_ok(),
+            "a preset supplies the parameter the field cannot"
+        );
+    }
+
+    #[test]
+    fn an_action_runs_only_when_every_required_parameter_is_supplied() {
+        let modules = descriptors();
+        let fields = Fields::seeded(&modules);
+        let runnable = |action: &str, preset: &Map<String, Value>| {
+            action_params(
+                declared_action(&modules, action).expect("the declared action"),
+                preset,
+                &fields,
+            )
+            .is_ok()
+        };
+        for module in &modules {
+            for control in &module.controls {
+                let Rendered::Group { controls, .. } = classify(control) else {
+                    continue;
+                };
+                for child in controls {
+                    if let Rendered::Action { action, preset, .. } = classify(child) {
+                        assert!(
+                            runnable(action, preset),
+                            "{action} is not runnable from its declared control"
+                        );
+                        assert!(
+                            preset.is_empty() || !runnable(action, &Map::new()),
+                            "{action} needs its preset to run"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn enter_in_a_field_runs_the_first_control_that_invokes_the_action() {
+        let modules = descriptors();
+        let (action, _, _) = point_pick(&modules).expect("a canvas pick");
+        assert_eq!(
+            submit_preset(&modules, action),
+            Some(Map::new()),
+            "the pixel action is driven by its fields alone"
+        );
+        let choice = modules
+            .iter()
+            .find(|module| module.canvas.is_none())
+            .expect("the transform module");
+        let Some(Rendered::Action { action, preset, .. }) =
+            choice.controls.first().map(classify).map(|control| {
+                let Rendered::Group { controls, .. } = control else {
+                    unreachable!("transform controls are grouped")
+                };
+                classify(&controls[0])
+            })
+        else {
+            unreachable!("the first transform control invokes an action")
+        };
+        assert_eq!(submit_preset(&modules, action).as_ref(), Some(preset));
+        assert_eq!(submit_preset(&modules, "no-such-action"), None);
+    }
+
+    #[test]
+    fn fit_picks_map_through_the_centered_contained_rectangle() {
+        let image = (200, 100);
+        let available = Size::new(400.0, 400.0);
+        let rect = fit_rect(image, available).expect("a drawn rectangle");
+        assert_eq!((rect.x, rect.y), (0.0, 100.0));
+        assert_eq!((rect.width, rect.height), (400.0, 200.0));
+        assert_eq!(
+            fit_pick(image, available, Point::new(0.0, 100.0)),
+            Some((0, 0))
+        );
+        assert_eq!(
+            fit_pick(image, available, Point::new(399.0, 299.0)),
+            Some((199, 99))
+        );
+        assert_eq!(
+            fit_pick(image, available, Point::new(200.0, 200.0)),
+            Some((100, 50)),
+            "the centre of the surface is the centre of the photograph"
+        );
+        for outside in [
+            Point::new(0.0, 99.0),
+            Point::new(0.0, 300.0),
+            Point::new(-1.0, 150.0),
+            Point::new(f32::NAN, 150.0),
+        ] {
+            assert_eq!(fit_pick(image, available, outside), None, "{outside:?}");
+        }
+        assert_eq!(fit_rect(image, Size::new(0.0, 400.0)), None);
+        assert_eq!(fit_rect((0, 0), available), None);
+    }
+
+    #[test]
+    fn percent_picks_ignore_pan_because_the_scrollable_translates_the_cursor() {
+        let image = (200, 200);
+        let scale = 2.0;
+        // The scrollable hands its content a cursor already moved by the scroll offset, so the
+        // point mouse_area reports is the viewport position plus the pan.
+        for pan in [(0.0, 0.0), (100.0, 50.0), (317.0, 9.0)] {
+            let viewport = Point::new(10.0, 20.0);
+            let reported = Point::new(viewport.x + pan.0, viewport.y + pan.1);
+            let expected = (
+                ((viewport.x + pan.0) / scale) as u32,
+                ((viewport.y + pan.1) / scale) as u32,
+            );
+            assert_eq!(percent_pick(image, scale, reported), Some(expected));
+        }
+        assert_eq!(
+            percent_pick(image, scale, Point::new(1.9, 0.0)),
+            Some((0, 0))
+        );
+        assert_eq!(percent_pick(image, scale, Point::new(400.0, 0.0)), None);
+        assert_eq!(percent_pick(image, scale, Point::new(-0.5, 0.0)), None);
+        assert_eq!(percent_pick(image, 0.0, Point::new(1.0, 1.0)), None);
+    }
+
+    #[test]
+    fn an_unrenderable_control_kind_is_named_not_dropped() {
+        assert_eq!(
+            unsupported_label("gradient"),
+            "Unsupported control: gradient"
+        );
+        let controls = [
+            Control::Group {
+                label: "Group".into(),
+                controls: Vec::new(),
+            },
+            Control::Number {
+                action: "act".into(),
+                parameter: "x".into(),
+                label: "X".into(),
+            },
+            Control::Color {
+                action: "act".into(),
+                parameter: "rgb".into(),
+                label: "RGB".into(),
+            },
+            Control::Action {
+                action: "act".into(),
+                label: "Apply".into(),
+                preset: Map::new(),
+            },
+        ];
+        for (control, kind) in controls.iter().zip(["group", "number", "color", "action"]) {
+            assert_eq!(control_kind(control), kind);
+            assert!(
+                !matches!(classify(control), Rendered::Unsupported(_)),
+                "{kind} is rendered"
+            );
+        }
+        // Every control the registered modules declare has a real rendering.
+        for module in descriptors() {
+            let mut queue: Vec<&Control> = module.controls.iter().collect();
+            while let Some(control) = queue.pop() {
+                match classify(control) {
+                    Rendered::Group { controls, .. } => queue.extend(controls),
+                    Rendered::Unsupported(kind) => panic!("{} declares {kind}", module.id),
+                    _ => {}
+                }
+            }
+        }
+        assert_eq!(
+            undeclared_label("act", "z"),
+            "Unsupported control: act declares no parameter z"
+        );
+    }
+
+    #[test]
+    fn a_canvas_pick_fills_the_declared_coordinate_fields_without_committing() {
+        let (mut editor, catalog) = boot();
+        let _ = editor.update(Message::ModulesLoaded(Ok(descriptors())));
+        assert!(editor.modules_ready);
+        let (action, x, y) = point_pick(&editor.modules).expect("a canvas pick");
+        let (action, x, y) = (action.to_owned(), x.to_owned(), y.to_owned());
+        let _ = editor.update(Message::PointerMoved(Some((7, 9))));
+        assert_eq!(editor.pointer, Some((7, 9)));
+        let _ = editor.update(Message::PointPicked { x: 7, y: 9 });
+        assert_eq!(editor.fields.get(&action, &x), Some("7"));
+        assert_eq!(editor.fields.get(&action, &y), Some("9"));
+        assert!(
+            editor.state.is_none(),
+            "a pick opens no asset and commits nothing"
+        );
+        assert_eq!(editor.api_sequence, 0);
+        let _ = editor.update(Message::ControlChanged {
+            action: action.clone(),
+            parameter: x.clone(),
+            text: "11".into(),
+        });
+        assert_eq!(editor.fields.get(&action, &x), Some("11"));
+        // The correlated state carries the module identities and what the controls hold.
+        let snapshot = editor.snapshot();
+        assert_eq!(snapshot["controls"][format!("{action}.{x}")], json!("11"));
+        assert_eq!(
+            snapshot["modules"].as_array().map(Vec::len),
+            Some(editor.modules.len())
+        );
+        assert!(!editor.editable(), "nothing is open");
+        finish(editor, catalog);
+    }
+
+    #[test]
+    fn failed_discovery_is_reported_and_never_blocks_evidence() {
+        let (mut editor, catalog) = boot();
+        let _ = editor.update(Message::ModulesLoaded(Err("protocol: gone".into())));
+        assert!(editor.modules_ready);
+        assert!(editor.modules.is_empty());
+        assert!(
+            editor.status.contains("Tool discovery failed"),
+            "{}",
+            editor.status
+        );
+        finish(editor, catalog);
     }
 
     #[test]

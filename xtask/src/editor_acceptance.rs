@@ -1,5 +1,5 @@
 use crate::*;
-use lightwell_core::{EditorService, Mutation, MutationOutcome, Transform};
+use lightwell_core::{EditorService, ModuleRegistry, Mutation, MutationOutcome, Transform};
 use std::time::Instant;
 
 fn mutation(revision: u64, request: impl Into<String>) -> Mutation {
@@ -18,7 +18,7 @@ pub fn run(root: &Path, out: &Path) -> Result {
     let catalog = out.join("catalog.sqlite");
     let mut result = json!({
         "status":"failed",
-        "scope":["M1 history foundation","M2 basic transforms"],
+        "scope":["M1 history foundation","M2 basic transforms","M3 tool modules"],
         "profile": if cfg!(debug_assertions) { "debug" } else { "release" },
         "platform":host(root)?,
         "fixture":"fixtures/s0/orientation-1.jpg",
@@ -27,13 +27,37 @@ pub fn run(root: &Path, out: &Path) -> Result {
     });
     let checked = (|| -> Result {
         let total = Instant::now();
+        // Registration builds descriptor lookups only; first use is measured separately below.
+        let registration_started = Instant::now();
+        let registry = ModuleRegistry::builtin();
+        let module_registration_ms = registration_started.elapsed().as_secs_f64() * 1000.0;
+        let modules: Vec<String> = registry
+            .descriptors()
+            .iter()
+            .map(|descriptor| descriptor.id.clone())
+            .collect();
+        let actions: Vec<String> = registry
+            .descriptors()
+            .iter()
+            .flat_map(|descriptor| descriptor.actions.iter())
+            .map(|action| action.id.clone())
+            .collect();
+        ensure(
+            modules == ["lightwell.pixel", "lightwell.transform"]
+                && actions == ["set-pixel", "transform"],
+            "Built-in module discovery changed",
+        )?;
+        drop(registry);
         let started = Instant::now();
         let mut service = EditorService::open(&catalog)?;
         let state = service.import(&fixture)?;
         let import_ms = started.elapsed().as_secs_f64() * 1000.0;
         let asset = state.asset.id.clone();
         let original = state.current_entry.id.clone();
-        let source_pixel = service.render_current(&asset)?.pixel(0, 0).unwrap();
+        let first_use_started = Instant::now();
+        let first_render = service.render_current(&asset)?;
+        let module_first_use_ms = first_use_started.elapsed().as_secs_f64() * 1000.0;
+        let source_pixel = first_render.pixel(0, 0).unwrap();
 
         let a = service.apply_pixel(&asset, mutation(0, "pixel-a"), 0, 0, [1, 2, 3])?;
         ensure(
@@ -136,7 +160,11 @@ pub fn run(root: &Path, out: &Path) -> Result {
         result["history_entries"] = json!(listed);
         result["current_dimensions"] = json!([current.width, current.height]);
         result["source_pixel_before_edits"] = json!(source_pixel);
+        result["modules"] = json!(modules);
+        result["actions"] = json!(actions);
         result["timings_ms"] = json!({
+            "module_registration":module_registration_ms,
+            "module_first_use":module_first_use_ms,
             "import":import_ms,
             "historical_preview":preview_ms,
             "long_log_200_commits":long_log_commit_ms,
@@ -153,6 +181,7 @@ pub fn run(root: &Path, out: &Path) -> Result {
             "Exact rotate-right, mirror-horizontal and flip-vertical",
             "Two hundred additional exact layers with bounded history paging",
             "Catalog reopen retains revision, identities, snapshots and dimensions",
+            "Module registry and descriptor discovery",
             "Source SHA-256 unchanged"
         ]);
         Ok(())
@@ -163,9 +192,9 @@ pub fn run(root: &Path, out: &Path) -> Result {
     write_json(&out.join("result.json"), &result)?;
     fs::write(
         out.join("README.md"),
-        "# M1/M2 automated acceptance\n\nRun from the repository root with:\n\n```sh\ncargo xtask editor-acceptance --output NEW_DIRECTORY\n```\n\n`result.json` records exact state, hashes, timings and the tested platform. Native UI capture and platform classification are recorded in the engineering results document.\n",
+        "# M1/M2/M3 automated acceptance\n\nRun from the repository root with:\n\n```sh\ncargo xtask editor-acceptance --output NEW_DIRECTORY\n```\n\n`result.json` records exact state, hashes, timings and the tested platform. Native UI capture and platform classification are recorded in the engineering results document.\n",
     )?;
     checked?;
-    println!("PASS M1/M2 editor acceptance: {}", out.display());
+    println!("PASS M1/M2/M3 editor acceptance: {}", out.display());
     Ok(())
 }

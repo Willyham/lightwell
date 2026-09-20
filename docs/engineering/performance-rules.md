@@ -45,7 +45,7 @@ Accepted or pending decisions. Do not "fix" them without the referenced scope.
 | Cost | Status | Constraint on a fix |
 | --- | --- | --- |
 | Full-resolution GPU upload for every preview, including Fit | Open; the largest per-interaction cost at 60 MP | A bounded Fit preview must keep 100% inspection exact and source-detail-ready; design it against the [crop and viewport contract](../specs/single-image.md) first |
-| One decode on the owner thread per catalog reopen | Accepted | Moving it needs the cache shared with the preview worker; not worth it before M3 |
+| One decode on the owner thread per catalog reopen | Accepted | Moving it needs the cache shared with the preview worker; not worth it before crop |
 | 500 ms event poll while an asset is open | Accepted until push notifications exist | Do not shorten the interval |
 
 ## Anti-patterns already removed

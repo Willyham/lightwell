@@ -1,6 +1,9 @@
-use crate::{EntryId, Error, HistoryEntry, Raster, SourceImage, render};
+use crate::{EntryId, Error, HistoryEntry, ModuleRegistry, Raster, SourceImage, render};
 use serde::{Deserialize, Serialize};
-use std::sync::mpsc::{Receiver, TryRecvError, sync_channel};
+use std::sync::{
+    Arc,
+    mpsc::{Receiver, TryRecvError, sync_channel},
+};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -99,6 +102,8 @@ impl PreviewSession {
 pub struct PreviewJob {
     pub source: SourceImage,
     pub entry: HistoryEntry,
+    /// The providers the worker evaluates this stack with; shared, never rebuilt per job.
+    pub registry: Arc<ModuleRegistry>,
 }
 
 #[derive(Debug)]
@@ -143,6 +148,7 @@ impl PreviewQueue {
         std::thread::spawn(move || {
             let entry_id = job.entry.id.clone();
             let result = render(
+                &job.registry,
                 &job.source,
                 job.entry.snapshot.id,
                 &job.entry.snapshot.recipe,
@@ -204,6 +210,7 @@ mod tests {
                 fingerprint: "test".into(),
                 orientation: 1,
             },
+            registry: Arc::new(ModuleRegistry::builtin()),
             entry: HistoryEntry {
                 id: EntryId::new(),
                 asset_id: asset,

@@ -97,34 +97,14 @@ impl Layer {
             payload: serde_json::to_value(transform).expect("transform is serializable"),
         }
     }
+    /// Structural only: effect availability and payload shape belong to the providing module,
+    /// reached through [`crate::ModuleRegistry`].
     pub fn validate(&self) -> Result<(), Error> {
-        if self.effect_format != EFFECT_FORMAT {
+        if self.effect_id.is_empty() {
             return Err(Error::new(
-                ErrorKind::Incompatible,
-                format!("unsupported effect format {}", self.effect_format),
+                ErrorKind::Validation,
+                "layer has no effect identity",
             ));
-        }
-        match self.effect_id.as_str() {
-            PIXEL_EFFECT => {
-                let _: PixelReplace =
-                    serde_json::from_value(self.payload.clone()).map_err(|e| {
-                        Error::new(ErrorKind::Validation, format!("invalid pixel payload: {e}"))
-                    })?;
-            }
-            TRANSFORM_EFFECT => {
-                let _: Transform = serde_json::from_value(self.payload.clone()).map_err(|e| {
-                    Error::new(
-                        ErrorKind::Validation,
-                        format!("invalid transform payload: {e}"),
-                    )
-                })?;
-            }
-            other => {
-                return Err(Error::new(
-                    ErrorKind::Incompatible,
-                    format!("unavailable effect {other}"),
-                ));
-            }
         }
         Ok(())
     }
@@ -289,25 +269,36 @@ mod tests {
     }
 
     #[test]
-    fn invalid_identity_payload_format_and_duplicates_are_rejected() {
+    fn invalid_identity_structure_and_duplicates_are_rejected() {
         assert!(serde_json::from_str::<AssetId>("\"bad\"").is_err());
         let mut recipe = Recipe::default();
         let layer = Layer::pixel(0, 0, [1, 2, 3]);
         recipe.layers.extend([layer.clone(), layer]);
         assert!(recipe.validate().is_err());
-        let invalid = Layer {
+        let unsupported = Recipe {
+            format: 99,
+            layers: Vec::new(),
+        };
+        assert_eq!(
+            unsupported.validate().unwrap_err().kind,
+            ErrorKind::Incompatible
+        );
+        let nameless = Layer {
             id: LayerId::new(),
-            effect_id: PIXEL_EFFECT.into(),
-            effect_format: 99,
+            effect_id: String::new(),
+            effect_format: EFFECT_FORMAT,
             payload: json!({}),
         };
-        assert!(invalid.validate().is_err());
-        let invalid = Layer {
-            id: LayerId::new(),
-            effect_id: PIXEL_EFFECT.into(),
-            effect_format: 1,
-            payload: json!({"x": 1}),
-        };
-        assert!(invalid.validate().is_err());
+        assert_eq!(nameless.validate().unwrap_err().kind, ErrorKind::Validation);
+        // Payload shape and effect format are the providing module's business, not the model's.
+        assert!(
+            Layer {
+                effect_format: 99,
+                payload: json!({"x": 1}),
+                ..Layer::pixel(0, 0, [1, 2, 3])
+            }
+            .validate()
+            .is_ok()
+        );
     }
 }

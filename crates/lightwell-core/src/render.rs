@@ -1,6 +1,6 @@
 use crate::{
-    EFFECT_FORMAT, Error, ErrorKind, PIXEL_EFFECT, PixelReplace, RECIPE_FORMAT, Recipe, SnapshotId,
-    SourceImage, TRANSFORM_EFFECT, Transform,
+    Error, ErrorKind, Recipe, SnapshotId, SourceImage,
+    modules::{ExactGeometry, ModuleRegistry, Processing, Stage},
 };
 use rayon::prelude::*;
 use std::{collections::HashSet, sync::Arc};
@@ -47,104 +47,32 @@ impl Raster {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Geometry {
-    input_width: u32,
-    input_height: u32,
-    output_width: u32,
-    output_height: u32,
-    a: i64,
-    b: i64,
-    c: i64,
-    d: i64,
-    tx: i64,
-    ty: i64,
-}
-
-impl Geometry {
-    fn identity(width: u32, height: u32) -> Self {
+/// Composition and mapping of exact geometry belong to the host; modules only declare one step.
+impl ExactGeometry {
+    pub(crate) fn identity(width: u32, height: u32) -> Self {
         Self {
-            input_width: width,
-            input_height: height,
-            output_width: width,
-            output_height: height,
             a: 1,
             b: 0,
             c: 0,
             d: 1,
             tx: 0,
             ty: 0,
-        }
-    }
-
-    fn transform(transform: Transform, width: u32, height: u32) -> Self {
-        match transform {
-            Transform::RotateRight => Self {
-                input_width: width,
-                input_height: height,
-                output_width: height,
-                output_height: width,
-                a: 0,
-                b: -1,
-                c: 1,
-                d: 0,
-                tx: i64::from(height) - 1,
-                ty: 0,
-            },
-            Transform::RotateLeft => Self {
-                input_width: width,
-                input_height: height,
-                output_width: height,
-                output_height: width,
-                a: 0,
-                b: 1,
-                c: -1,
-                d: 0,
-                tx: 0,
-                ty: i64::from(width) - 1,
-            },
-            Transform::MirrorHorizontal => Self {
-                input_width: width,
-                input_height: height,
-                output_width: width,
-                output_height: height,
-                a: -1,
-                b: 0,
-                c: 0,
-                d: 1,
-                tx: i64::from(width) - 1,
-                ty: 0,
-            },
-            Transform::FlipVertical => Self {
-                input_width: width,
-                input_height: height,
-                output_width: width,
-                output_height: height,
-                a: 1,
-                b: 0,
-                c: 0,
-                d: -1,
-                tx: 0,
-                ty: i64::from(height) - 1,
-            },
+            output_width: width,
+            output_height: height,
         }
     }
 
     /// Compose `self` followed by `next`.
-    fn then(self, next: Self) -> Self {
-        debug_assert_eq!(self.output_width, next.input_width);
-        debug_assert_eq!(self.output_height, next.input_height);
+    pub(crate) fn then(self, next: Self) -> Self {
         Self {
-            input_width: self.input_width,
-            input_height: self.input_height,
-            output_width: next.output_width,
-            output_height: next.output_height,
             a: next.a * self.a + next.b * self.c,
             b: next.a * self.b + next.b * self.d,
             c: next.c * self.a + next.d * self.c,
             d: next.c * self.b + next.d * self.d,
             tx: next.a * self.tx + next.b * self.ty + next.tx,
             ty: next.c * self.tx + next.d * self.ty + next.ty,
+            output_width: next.output_width,
+            output_height: next.output_height,
         }
     }
 
@@ -161,29 +89,18 @@ impl Geometry {
         let translated_y = i64::from(y) - self.ty;
         let input_x = self.a * translated_x + self.c * translated_y;
         let input_y = self.b * translated_x + self.d * translated_y;
-        debug_assert!(input_x >= 0 && input_x < i64::from(self.input_width));
-        debug_assert!(input_y >= 0 && input_y < i64::from(self.input_height));
+        debug_assert!(input_x >= 0 && input_y >= 0);
         (input_x as u32, input_y as u32)
     }
 
-    fn is_identity(self) -> bool {
-        self.input_width == self.output_width
-            && self.input_height == self.output_height
+    fn is_identity(self, input_width: u32, input_height: u32) -> bool {
+        self.output_width == input_width
+            && self.output_height == input_height
             && (self.a, self.b, self.c, self.d, self.tx, self.ty) == (1, 0, 0, 1, 0, 0)
     }
 }
 
-#[derive(Clone, Debug)]
-enum Operation {
-    Pixel(PixelReplace),
-    Transform {
-        transform: Transform,
-        input_width: u32,
-        input_height: u32,
-    },
-}
-
-fn copy_transformed(source: &SourceImage, geometry: Geometry) -> Result<Vec<u8>, Error> {
+fn copy_transformed(source: &SourceImage, geometry: ExactGeometry) -> Result<Vec<u8>, Error> {
     let width = geometry.output_width;
     let height = geometry.output_height;
     let mut output = vec![0; Raster::expected_len(width, height)?];
@@ -212,12 +129,14 @@ fn copy_transformed(source: &SourceImage, geometry: Geometry) -> Result<Vec<u8>,
     Ok(output)
 }
 
-struct Compiled {
-    operations: Vec<Operation>,
-    geometry: Geometry,
-    width: u32,
-    height: u32,
-    has_pixels: bool,
+/// One recipe compiled by the registry: the ordered processing primitives and the composed
+/// geometry that produces the output stage.
+pub(crate) struct Compiled {
+    pub(crate) operations: Vec<Processing>,
+    pub(crate) geometry: ExactGeometry,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) has_pixels: bool,
 }
 
 /// Where one final-stage pixel comes from: the source pixel it copies and the replacement that wins there.
@@ -233,25 +152,22 @@ impl Compiled {
             return None;
         }
         let (source_x, source_y) = self.geometry.unmap(x, y);
-        let mut suffix = Geometry::identity(self.width, self.height);
+        let mut suffix = ExactGeometry::identity(self.width, self.height);
         for operation in self.operations.iter().rev() {
             match operation {
-                Operation::Transform {
-                    transform,
-                    input_width,
-                    input_height,
-                } => {
-                    suffix =
-                        Geometry::transform(*transform, *input_width, *input_height).then(suffix);
-                }
-                Operation::Pixel(pixel) if suffix.map(pixel.x, pixel.y) == (x, y) => {
+                Processing::ExactGeometry(step) => suffix = step.then(suffix),
+                Processing::PointReplace {
+                    x: pixel_x,
+                    y: pixel_y,
+                    rgb,
+                } if suffix.map(*pixel_x, *pixel_y) == (x, y) => {
                     return Some(Resolved {
-                        rgb: Some(pixel.rgb),
+                        rgb: Some(*rgb),
                         source_x,
                         source_y,
                     });
                 }
-                Operation::Pixel(_) => {}
+                Processing::PointReplace { .. } => {}
             }
         }
         Some(Resolved {
@@ -278,88 +194,6 @@ fn source_pixel(source: &SourceImage, x: u32, y: u32) -> [u8; 4] {
     [pixel[0], pixel[1], pixel[2], pixel[3]]
 }
 
-/// Validate a recipe against the source dimensions and fold its exact transforms into one mapping.
-fn compile(source_width: u32, source_height: u32, recipe: &Recipe) -> Result<Compiled, Error> {
-    if recipe.format != RECIPE_FORMAT {
-        return Err(Error::new(
-            ErrorKind::Incompatible,
-            format!("unsupported recipe format {}", recipe.format),
-        ));
-    }
-
-    let mut layer_ids = HashSet::with_capacity(recipe.layers.len());
-    let mut operations = Vec::with_capacity(recipe.layers.len());
-    let mut geometry = Geometry::identity(source_width, source_height);
-    let mut width = source_width;
-    let mut height = source_height;
-    for layer in &recipe.layers {
-        if !layer_ids.insert(&layer.id) {
-            return Err(Error::new(
-                ErrorKind::Validation,
-                "duplicate layer identity",
-            ));
-        }
-        if layer.effect_format != EFFECT_FORMAT {
-            return Err(Error::new(
-                ErrorKind::Incompatible,
-                "unsupported layer format",
-            ));
-        }
-        match layer.effect_id.as_str() {
-            PIXEL_EFFECT => {
-                let pixel: PixelReplace =
-                    serde_json::from_value(layer.payload.clone()).map_err(|e| {
-                        Error::new(ErrorKind::Validation, format!("invalid pixel payload: {e}"))
-                    })?;
-                if pixel.x >= width || pixel.y >= height {
-                    return Err(Error::new(
-                        ErrorKind::Validation,
-                        format!(
-                            "pixel ({}, {}) is outside {}x{} input stage",
-                            pixel.x, pixel.y, width, height
-                        ),
-                    ));
-                }
-                operations.push(Operation::Pixel(pixel));
-            }
-            TRANSFORM_EFFECT => {
-                let transform: Transform =
-                    serde_json::from_value(layer.payload.clone()).map_err(|e| {
-                        Error::new(
-                            ErrorKind::Validation,
-                            format!("invalid transform payload: {e}"),
-                        )
-                    })?;
-                let step = Geometry::transform(transform, width, height);
-                operations.push(Operation::Transform {
-                    transform,
-                    input_width: width,
-                    input_height: height,
-                });
-                geometry = geometry.then(step);
-                width = step.output_width;
-                height = step.output_height;
-            }
-            other => {
-                return Err(Error::new(
-                    ErrorKind::Incompatible,
-                    format!("unavailable effect {other}"),
-                ));
-            }
-        }
-    }
-    let has_pixels = operations
-        .iter()
-        .any(|operation| matches!(operation, Operation::Pixel(_)));
-    Ok(Compiled {
-        operations,
-        geometry,
-        width,
-        height,
-        has_pixels,
-    })
-}
-
 /// One evaluated pixel of a recipe's output stage, with that stage's dimensions.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Sample {
@@ -369,25 +203,64 @@ pub struct Sample {
     pub rgba: Option<[u8; 4]>,
 }
 
-/// Evaluate one output pixel without rasterizing; cost is linear in the layer count.
-pub fn sample(source: &SourceImage, recipe: &Recipe, x: u32, y: u32) -> Result<Sample, Error> {
-    check_source(source)?;
-    let compiled = compile(source.width, source.height, recipe)?;
-    let rgba = compiled.resolve(x, y).map(|resolved| {
-        let mut rgba = source_pixel(source, resolved.source_x, resolved.source_y);
-        if let Some(rgb) = resolved.rgb {
-            rgba[..3].copy_from_slice(&rgb);
+/// One compiled recipe bound to its source: the stage it produces and O(layers) point queries
+/// that never allocate a frame. Compiling once serves any number of sampled pixels.
+pub(crate) struct Evaluation<'a> {
+    source: &'a SourceImage,
+    compiled: Compiled,
+}
+
+impl<'a> Evaluation<'a> {
+    pub(crate) fn new(
+        registry: &ModuleRegistry,
+        source: &'a SourceImage,
+        recipe: &Recipe,
+    ) -> Result<Self, Error> {
+        check_source(source)?;
+        Ok(Self {
+            source,
+            compiled: registry.compile(source.width, source.height, recipe)?,
+        })
+    }
+
+    pub(crate) fn stage(&self) -> Stage {
+        Stage {
+            width: self.compiled.width,
+            height: self.compiled.height,
         }
-        rgba
-    });
+    }
+
+    /// `None` when the coordinate lies outside the output stage.
+    pub(crate) fn pixel(&self, x: u32, y: u32) -> Option<[u8; 4]> {
+        self.compiled.resolve(x, y).map(|resolved| {
+            let mut rgba = source_pixel(self.source, resolved.source_x, resolved.source_y);
+            if let Some(rgb) = resolved.rgb {
+                rgba[..3].copy_from_slice(&rgb);
+            }
+            rgba
+        })
+    }
+}
+
+/// Evaluate one output pixel without rasterizing; cost is linear in the layer count.
+pub fn sample(
+    registry: &ModuleRegistry,
+    source: &SourceImage,
+    recipe: &Recipe,
+    x: u32,
+    y: u32,
+) -> Result<Sample, Error> {
+    let evaluation = Evaluation::new(registry, source, recipe)?;
+    let stage = evaluation.stage();
     Ok(Sample {
-        width: compiled.width,
-        height: compiled.height,
-        rgba,
+        width: stage.width,
+        height: stage.height,
+        rgba: evaluation.pixel(x, y),
     })
 }
 
 pub fn render(
+    registry: &ModuleRegistry,
     source: &SourceImage,
     snapshot_id: SnapshotId,
     recipe: &Recipe,
@@ -399,10 +272,11 @@ pub fn render(
         width,
         height,
         has_pixels,
-    } = compile(source.width, source.height, recipe)?;
-    let mut output = if geometry.is_identity() && !has_pixels {
+    } = registry.compile(source.width, source.height, recipe)?;
+    let identity = geometry.is_identity(source.width, source.height);
+    let mut output = if identity && !has_pixels {
         None
-    } else if geometry.is_identity() {
+    } else if identity {
         Some(source.rgba.as_ref().to_vec())
     } else {
         Some(copy_transformed(source, geometry)?)
@@ -410,24 +284,21 @@ pub fn render(
 
     if has_pixels {
         let pixels = output.as_mut().expect("pixel recipes have writable output");
-        let mut suffix = Geometry::identity(width, height);
+        let mut suffix = ExactGeometry::identity(width, height);
         let mut replaced = HashSet::new();
         for operation in operations.iter().rev() {
             match operation {
-                Operation::Transform {
-                    transform,
-                    input_width,
-                    input_height,
+                Processing::ExactGeometry(step) => suffix = step.then(suffix),
+                Processing::PointReplace {
+                    x: pixel_x,
+                    y: pixel_y,
+                    rgb,
                 } => {
-                    suffix =
-                        Geometry::transform(*transform, *input_width, *input_height).then(suffix);
-                }
-                Operation::Pixel(pixel) => {
-                    let (x, y) = suffix.map(pixel.x, pixel.y);
+                    let (x, y) = suffix.map(*pixel_x, *pixel_y);
                     if replaced.insert((x, y)) {
                         let offset =
                             ((u64::from(y) * u64::from(width) + u64::from(x)) * 4) as usize;
-                        pixels[offset..offset + 3].copy_from_slice(&pixel.rgb);
+                        pixels[offset..offset + 3].copy_from_slice(rgb);
                     }
                 }
             }
@@ -446,8 +317,13 @@ pub fn render(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{AssetId, Layer, Recipe, Snapshot};
+    use crate::{
+        AssetId, Layer, PIXEL_EFFECT, PixelReplace, Recipe, Snapshot, TRANSFORM_EFFECT, Transform,
+    };
 
+    fn registry() -> ModuleRegistry {
+        ModuleRegistry::builtin()
+    }
     fn source(width: u32, height: u32) -> SourceImage {
         let mut rgba = Vec::new();
         for i in 0..width * height {
@@ -465,7 +341,13 @@ mod tests {
         raster.rgba.chunks_exact(4).map(|p| p[0]).collect()
     }
     fn rendered(source: &SourceImage, layers: Vec<Layer>) -> Raster {
-        render(source, SnapshotId::new(), &Recipe { format: 1, layers }).unwrap()
+        render(
+            &registry(),
+            source,
+            SnapshotId::new(),
+            &Recipe { format: 1, layers },
+        )
+        .unwrap()
     }
 
     fn reference(source: &SourceImage, layers: &[Layer]) -> (u32, u32, Vec<u8>) {
@@ -621,6 +503,7 @@ mod tests {
 
     #[test]
     fn samples_match_rendered_pixels_and_keep_source_alpha() {
+        let registry = registry();
         let mut source = source(5, 3);
         let rgba: Vec<u8> = source
             .rgba
@@ -640,10 +523,10 @@ mod tests {
                 Layer::pixel(0, 0, [205, 10, 11]),
             ],
         };
-        let raster = render(&source, SnapshotId::new(), &recipe).unwrap();
+        let raster = render(&registry, &source, SnapshotId::new(), &recipe).unwrap();
         for y in 0..raster.height {
             for x in 0..raster.width {
-                let sampled = sample(&source, &recipe, x, y).unwrap();
+                let sampled = sample(&registry, &source, &recipe, x, y).unwrap();
                 assert_eq!(
                     (sampled.width, sampled.height),
                     (raster.width, raster.height)
@@ -652,26 +535,32 @@ mod tests {
             }
         }
         assert_eq!(
-            sample(&source, &recipe, raster.width, 0).unwrap().rgba,
+            sample(&registry, &source, &recipe, raster.width, 0)
+                .unwrap()
+                .rgba,
             None
         );
         assert_eq!(
-            sample(&source, &recipe, 0, raster.height).unwrap().rgba,
+            sample(&registry, &source, &recipe, 0, raster.height)
+                .unwrap()
+                .rgba,
             None
         );
         let invalid = Recipe {
             format: 1,
             layers: vec![Layer::pixel(9, 9, [0, 0, 0])],
         };
-        assert!(sample(&source, &invalid, 0, 0).is_err());
+        assert!(sample(&registry, &source, &invalid, 0, 0).is_err());
     }
 
     #[test]
     fn invalid_coordinates_and_buffers_fail_without_panicking() {
+        let registry = registry();
         let source = source(3, 2);
         let snapshot = Snapshot::original(AssetId::new());
         assert!(
             render(
+                &registry,
                 &source,
                 snapshot.id.clone(),
                 &Recipe {
@@ -685,6 +574,6 @@ mod tests {
             rgba: vec![0].into(),
             ..source
         };
-        assert!(render(&malformed, snapshot.id, &Recipe::default()).is_err());
+        assert!(render(&registry, &malformed, snapshot.id, &Recipe::default()).is_err());
     }
 }

@@ -125,15 +125,17 @@ fn owner_loop(mut service: EditorService, receiver: Receiver<OwnerMessage>) {
             }
             OwnerMessage::Call(call) => {
                 let session = sessions.entry(call.client).or_default();
-                let response = match methods::find(&call.request.method) {
-                    Some(spec) if spec.handler.is_none() => {
+                // Discovery and dispatch resolve through the same registry-aware lookup.
+                let method = methods::find(&service, &call.request.method);
+                let response = match method {
+                    Some(method) if method.owner_answered() => {
                         event_response(&call.request, sequence, &events)
                     }
-                    Some(spec) => {
+                    Some(method) => {
                         let response =
                             methods::dispatch(&mut service, session, &call.request, sequence);
                         if response.error.is_none()
-                            && methods::mutates(spec, response.result.as_ref())
+                            && methods::mutates(&method, response.result.as_ref())
                         {
                             sequence = sequence.saturating_add(1);
                             if events.len() == EVENT_CAPACITY {

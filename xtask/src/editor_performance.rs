@@ -63,6 +63,7 @@ pub fn run(root: &Path, source: &Path, out: &Path, samples: usize) -> Result {
     let cached_preview_job_ms = milliseconds(started);
     let started = Instant::now();
     let original_raster = render(
+        service.registry(),
         &original_job.source,
         original_job.entry.snapshot.id,
         &original_job.entry.snapshot.recipe,
@@ -96,6 +97,7 @@ pub fn run(root: &Path, source: &Path, out: &Path, samples: usize) -> Result {
     let cold_source_and_job_ms = milliseconds(started);
     let started = Instant::now();
     let cold_raster = render(
+        service.registry(),
         &cold_job.source,
         cold_job.entry.snapshot.id,
         &cold_job.entry.snapshot.recipe,

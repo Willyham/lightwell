@@ -17,8 +17,9 @@
 | Rotate left/right, mirror horizontal, flip vertical | Implemented (M2) | Exact integer mappings |
 | Named versions and lineage view | Implemented | A version names a retained entry; lineage query and branch markers; catalog format 2 ([design](design/versions-and-lineage.md)) |
 | Cached source and compiled one-pass rendering | Implemented | Point queries never rasterize; [performance rules](engineering/performance-rules.md) |
-| Declarative tool-module interface | Planned (M3) | [modules](design/modules-and-api.md) |
-| Pixel and transform tools as modules | Planned (M3) | Saved recipes and history unchanged |
+| Declarative tool-module interface | Implemented (M3) | Descriptor-validated registry, generated `edit.<action>` methods and `module.list`; [modules](design/modules-and-api.md) |
+| Pixel and transform tools as modules | Implemented (M3) | Effect and action identities unchanged; pre-module golden journey reopens identically |
+| Generic module controls and canvas pick in the desktop | Implemented (M3) | Controls rendered from descriptors; pointer pick fills coordinates without committing |
 | Lightroom-style crop and straighten module | Planned (M4) | [crop contract](specs/single-image.md) |
 | Draft conflicts with live agent commits | Planned (M4) | Explicit Discard or Reapply |
 | JPEG export with color and metadata verification | Editor follow-up | Quality 90, no overwrite, Keep metadata option |

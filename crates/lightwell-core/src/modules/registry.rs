@@ -1,0 +1,478 @@
+//! The provider index: descriptors validated once at registration, then hash lookups by effect
+//! and action identity. Registration touches no image or catalog resource.
+use super::{
+    ActionDescriptor, EffectDescriptor, ExactGeometry, ModuleDescriptor, PixelModule, Processing,
+    Stage, ToolModule, TransformModule,
+};
+use crate::{Error, ErrorKind, Layer, RECIPE_FORMAT, Recipe, render::Compiled};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
+
+fn validation(detail: impl Into<String>) -> Error {
+    Error::new(ErrorKind::Validation, detail)
+}
+
+fn unavailable(effect_id: &str, layers: Vec<&str>) -> Error {
+    Error::new(
+        ErrorKind::Incompatible,
+        format!(
+            "unavailable effect {effect_id} (layers {})",
+            layers.join(", ")
+        ),
+    )
+}
+
+#[derive(Default)]
+pub struct ModuleRegistry {
+    modules: Vec<Arc<dyn ToolModule>>,
+    module_ids: HashSet<String>,
+    /// Effect identity to (module, effect) position.
+    effects: HashMap<String, (usize, usize)>,
+    /// Action identity to (module, action) position.
+    actions: HashMap<String, (usize, usize)>,
+}
+
+impl std::fmt::Debug for ModuleRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ModuleRegistry")
+            .field(
+                "modules",
+                &self
+                    .modules
+                    .iter()
+                    .map(|module| module.descriptor().id.as_str())
+                    .collect::<Vec<_>>(),
+            )
+            .finish()
+    }
+}
+
+impl ModuleRegistry {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// The linked built-in providers. External loading is a later, separately measured step.
+    pub fn builtin() -> Self {
+        let mut registry = Self::new();
+        for module in [
+            Arc::new(PixelModule::new()) as Arc<dyn ToolModule>,
+            Arc::new(TransformModule::new()),
+        ] {
+            registry
+                .register(module)
+                .expect("built-in module descriptors are valid");
+        }
+        registry
+    }
+
+    /// Validate a descriptor and index its effects and actions. Identities are unique across the
+    /// whole registry, so discovery and dispatch can never resolve to two providers.
+    pub fn register(&mut self, module: Arc<dyn ToolModule>) -> Result<(), Error> {
+        let descriptor = module.descriptor();
+        descriptor.validate()?;
+        if self.module_ids.contains(&descriptor.id) {
+            return Err(validation(format!("duplicate module {}", descriptor.id)));
+        }
+        for effect in &descriptor.effects {
+            if let Some((existing, _)) = self.effects.get(&effect.id) {
+                return Err(validation(format!(
+                    "effect {} is already provided by {}",
+                    effect.id,
+                    self.modules[*existing].descriptor().id
+                )));
+            }
+        }
+        for action in &descriptor.actions {
+            if let Some((existing, _)) = self.actions.get(&action.id) {
+                return Err(validation(format!(
+                    "action {} is already provided by {}",
+                    action.id,
+                    self.modules[*existing].descriptor().id
+                )));
+            }
+        }
+        let index = self.modules.len();
+        self.module_ids.insert(descriptor.id.clone());
+        for (position, effect) in descriptor.effects.iter().enumerate() {
+            self.effects.insert(effect.id.clone(), (index, position));
+        }
+        for (position, action) in descriptor.actions.iter().enumerate() {
+            self.actions.insert(action.id.clone(), (index, position));
+        }
+        self.modules.push(module);
+        Ok(())
+    }
+
+    pub fn descriptors(&self) -> Vec<&ModuleDescriptor> {
+        self.modules
+            .iter()
+            .map(|module| module.descriptor())
+            .collect()
+    }
+
+    pub fn action(&self, id: &str) -> Option<(&dyn ToolModule, &ActionDescriptor)> {
+        let (module, position) = self.actions.get(id)?;
+        let module = self.modules[*module].as_ref();
+        Some((module, &module.descriptor().actions[*position]))
+    }
+
+    pub fn effect(&self, id: &str) -> Option<(&dyn ToolModule, &EffectDescriptor)> {
+        let (module, position) = self.effects.get(id)?;
+        let module = self.modules[*module].as_ref();
+        Some((module, &module.descriptor().effects[*position]))
+    }
+
+    /// The provider that can evaluate this effect, or `None` when none is registered or the
+    /// registered one reports itself unavailable.
+    fn provider(&self, effect_id: &str) -> Option<&dyn ToolModule> {
+        let (module, _) = self.effect(effect_id)?;
+        module.descriptor().is_available().then_some(module)
+    }
+
+    /// Structural validation stays in the model; effect availability and payload validation are
+    /// the registry's.
+    pub fn validate_layer(&self, layer: &Layer) -> Result<(), Error> {
+        layer.validate()?;
+        let module = self
+            .provider(&layer.effect_id)
+            .ok_or_else(|| unavailable(&layer.effect_id, vec![layer.id.as_str()]))?;
+        module.validate_payload(&layer.effect_id, layer.effect_format, &layer.payload)
+    }
+
+    pub fn validate_recipe(&self, recipe: &Recipe) -> Result<(), Error> {
+        recipe.validate()?;
+        for layer in &recipe.layers {
+            let module = self
+                .provider(&layer.effect_id)
+                .ok_or_else(|| self.unavailable_in(recipe, &layer.effect_id))?;
+            module.validate_payload(&layer.effect_id, layer.effect_format, &layer.payload)?;
+        }
+        Ok(())
+    }
+
+    fn unavailable_in(&self, recipe: &Recipe, effect_id: &str) -> Error {
+        unavailable(
+            effect_id,
+            recipe
+                .layers
+                .iter()
+                .filter(|layer| layer.effect_id == effect_id)
+                .map(|layer| layer.id.as_str())
+                .collect(),
+        )
+    }
+
+    /// Validate a recipe against the source dimensions and fold its exact geometry into one
+    /// mapping. Cost is linear in the layer count and allocates only the operation list.
+    pub(crate) fn compile(
+        &self,
+        source_width: u32,
+        source_height: u32,
+        recipe: &Recipe,
+    ) -> Result<Compiled, Error> {
+        if recipe.format != RECIPE_FORMAT {
+            return Err(Error::new(
+                ErrorKind::Incompatible,
+                format!("unsupported recipe format {}", recipe.format),
+            ));
+        }
+        let mut layer_ids = HashSet::with_capacity(recipe.layers.len());
+        let mut operations = Vec::with_capacity(recipe.layers.len());
+        let mut geometry = ExactGeometry::identity(source_width, source_height);
+        let mut width = source_width;
+        let mut height = source_height;
+        let mut has_pixels = false;
+        for layer in &recipe.layers {
+            if !layer_ids.insert(&layer.id) {
+                return Err(validation("duplicate layer identity"));
+            }
+            let module = self
+                .provider(&layer.effect_id)
+                .ok_or_else(|| self.unavailable_in(recipe, &layer.effect_id))?;
+            let processing = module.compile(
+                &layer.effect_id,
+                layer.effect_format,
+                &layer.payload,
+                Stage { width, height },
+            )?;
+            match processing {
+                Processing::ExactGeometry(step) => {
+                    geometry = geometry.then(step);
+                    width = step.output_width;
+                    height = step.output_height;
+                }
+                Processing::PointReplace { .. } => has_pixels = true,
+            }
+            operations.push(processing);
+        }
+        Ok(Compiled {
+            operations,
+            geometry,
+            width,
+            height,
+            has_pixels,
+        })
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+    use crate::{
+        AssetId, EFFECT_FORMAT, LayerId, PIXEL_EFFECT, SnapshotId, SourceImage, TRANSFORM_EFFECT,
+        Transform,
+        modules::{
+            ActionInput, ActionPlan, Availability, EffectStage, ModuleDescriptor, StageContext,
+        },
+        render, sample,
+    };
+    use serde_json::{Map, Value, json};
+
+    /// A minimal module used to prove registration rules and missing-provider behavior.
+    pub(crate) struct TestModule(ModuleDescriptor);
+
+    impl TestModule {
+        pub(crate) fn new(
+            id: &str,
+            effect: &str,
+            action: &str,
+            availability: Availability,
+        ) -> Self {
+            Self(ModuleDescriptor {
+                id: id.into(),
+                title: "Test".into(),
+                effects: vec![EffectDescriptor {
+                    id: effect.into(),
+                    format: EFFECT_FORMAT,
+                    stage: EffectStage::Pixel,
+                }],
+                actions: vec![ActionDescriptor {
+                    id: action.into(),
+                    title: "Test action".into(),
+                    notes: "test".into(),
+                    parameters: Vec::new(),
+                }],
+                controls: Vec::new(),
+                canvas: None,
+                availability,
+            })
+        }
+        pub(crate) fn shared(
+            id: &str,
+            effect: &str,
+            action: &str,
+            availability: Availability,
+        ) -> Arc<dyn ToolModule> {
+            Arc::new(Self::new(id, effect, action, availability))
+        }
+    }
+
+    impl ToolModule for TestModule {
+        fn descriptor(&self) -> &ModuleDescriptor {
+            &self.0
+        }
+        fn parse(&self, action_id: &str, _: &Map<String, Value>) -> Result<ActionInput, Error> {
+            Ok(ActionInput {
+                action_id: action_id.into(),
+                parameters: Map::new(),
+            })
+        }
+        fn plan(&self, _: &ActionInput, _: &StageContext<'_>) -> Result<ActionPlan, Error> {
+            Ok(ActionPlan::NoOp)
+        }
+        fn validate_payload(&self, _: &str, _: u32, _: &Value) -> Result<(), Error> {
+            Ok(())
+        }
+        fn compile(&self, _: &str, _: u32, _: &Value, _: Stage) -> Result<Processing, Error> {
+            Err(Error::new(ErrorKind::Internal, "test module never renders"))
+        }
+    }
+
+    pub(crate) fn test_layer(effect: &str) -> Layer {
+        Layer {
+            id: LayerId::new(),
+            effect_id: effect.into(),
+            effect_format: EFFECT_FORMAT,
+            payload: json!({}),
+        }
+    }
+
+    fn source() -> SourceImage {
+        SourceImage {
+            width: 2,
+            height: 1,
+            rgba: vec![1, 2, 3, 255, 4, 5, 6, 255].into(),
+            fingerprint: "sha256:test".into(),
+            orientation: 1,
+        }
+    }
+
+    #[test]
+    fn registration_rejects_duplicate_and_invalid_identities_across_modules() {
+        let mut registry = ModuleRegistry::builtin();
+        assert!(registry.action("set-pixel").is_some());
+        assert!(registry.action("transform").is_some());
+        assert!(registry.effect(PIXEL_EFFECT).is_some());
+        assert!(registry.effect(TRANSFORM_EFFECT).is_some());
+        assert_eq!(registry.descriptors().len(), 2);
+        assert!(registry.action("edit.set-pixel").is_none());
+
+        for (case, module) in [
+            (
+                "duplicate module",
+                TestModule::shared(
+                    "lightwell.pixel",
+                    "test.other",
+                    "test-other",
+                    Availability::Available,
+                ),
+            ),
+            (
+                "duplicate effect",
+                TestModule::shared(
+                    "test.module",
+                    PIXEL_EFFECT,
+                    "test-other",
+                    Availability::Available,
+                ),
+            ),
+            (
+                "duplicate action",
+                TestModule::shared(
+                    "test.module",
+                    "test.effect",
+                    "set-pixel",
+                    Availability::Available,
+                ),
+            ),
+            (
+                "invalid module identity",
+                TestModule::shared(
+                    "Test Module",
+                    "test.effect",
+                    "test-other",
+                    Availability::Available,
+                ),
+            ),
+        ] {
+            let error = registry.register(module).expect_err(case);
+            assert_eq!(error.kind, ErrorKind::Validation, "{case}");
+        }
+        assert_eq!(
+            registry.descriptors().len(),
+            2,
+            "nothing was half-registered"
+        );
+        assert!(
+            registry
+                .register(TestModule::shared(
+                    "test.module",
+                    "test.effect",
+                    "test-action",
+                    Availability::Available
+                ))
+                .is_ok()
+        );
+        assert_eq!(registry.descriptors().len(), 3);
+    }
+
+    #[test]
+    fn an_unavailable_provider_keeps_its_identity_and_fails_evaluation_with_its_layers() {
+        let mut registry = ModuleRegistry::builtin();
+        registry
+            .register(TestModule::shared(
+                "test.module",
+                "test.effect",
+                "test-action",
+                Availability::Unavailable {
+                    reason: "not built in this configuration".into(),
+                },
+            ))
+            .unwrap();
+        assert!(
+            registry.effect("test.effect").is_some(),
+            "an unavailable provider keeps its effect identity"
+        );
+        let first = test_layer("test.effect");
+        let second = test_layer("test.effect");
+        let recipe = Recipe {
+            format: RECIPE_FORMAT,
+            layers: vec![
+                first.clone(),
+                Layer::transform(Transform::RotateRight),
+                second.clone(),
+            ],
+        };
+        let expected = format!(
+            "unavailable effect test.effect (layers {}, {})",
+            first.id, second.id
+        );
+        for error in [
+            registry.validate_recipe(&recipe).unwrap_err(),
+            registry.validate_layer(&first).unwrap_err(),
+            render(&registry, &source(), SnapshotId::new(), &recipe).unwrap_err(),
+            sample(&registry, &source(), &recipe, 0, 0).unwrap_err(),
+        ] {
+            assert_eq!(error.kind, ErrorKind::Incompatible);
+        }
+        assert_eq!(
+            registry.validate_recipe(&recipe).unwrap_err().detail,
+            expected
+        );
+        assert_eq!(
+            render(&registry, &source(), SnapshotId::new(), &recipe)
+                .unwrap_err()
+                .detail,
+            expected
+        );
+        let missing = Recipe {
+            format: RECIPE_FORMAT,
+            layers: vec![test_layer("test.absent")],
+        };
+        assert_eq!(
+            registry.validate_recipe(&missing).unwrap_err().detail,
+            format!(
+                "unavailable effect test.absent (layers {})",
+                missing.layers[0].id
+            )
+        );
+        let _ = AssetId::new();
+    }
+
+    #[test]
+    fn payload_format_and_shape_are_validated_by_the_providing_module() {
+        let registry = ModuleRegistry::builtin();
+        let wrong_format = Layer {
+            effect_format: 99,
+            ..Layer::pixel(0, 0, [1, 2, 3])
+        };
+        assert_eq!(
+            registry.validate_layer(&wrong_format).unwrap_err().kind,
+            ErrorKind::Incompatible
+        );
+        let wrong_payload = Layer {
+            payload: json!({"x": 1}),
+            ..Layer::pixel(0, 0, [1, 2, 3])
+        };
+        assert_eq!(
+            registry.validate_layer(&wrong_payload).unwrap_err().kind,
+            ErrorKind::Validation
+        );
+        let wrong_transform = Layer {
+            payload: json!("rotate-sideways"),
+            ..Layer::transform(Transform::RotateLeft)
+        };
+        assert_eq!(
+            registry.validate_layer(&wrong_transform).unwrap_err().kind,
+            ErrorKind::Validation
+        );
+        assert!(
+            registry
+                .validate_layer(&Layer::pixel(0, 0, [1, 2, 3]))
+                .is_ok()
+        );
+    }
+}

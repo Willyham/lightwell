@@ -1,6 +1,6 @@
 # Lightwell user guide
 
-What works today: opening a JPEG, pixel-proof edits, exact transforms, persistent history and the JSON API, verified on macOS. Crop, export, Locate and MCP are planned; see [feature status](features.md).
+What works today: opening a JPEG, pixel-proof edits, exact transforms delivered as tool modules with generated controls, persistent history and the JSON API, verified on macOS. Crop, export, Locate and MCP are planned; see [feature status](features.md).
 
 ## Start the editor
 
@@ -16,7 +16,9 @@ Open references an existing supported sRGB or greyscale JPEG without copying or 
 
 ## Edit and inspect
 
-Pixel proof accepts integer x/y coordinates and RGB values from 0 to 255. Coordinates use the operation's input image with a top-left origin, x right and y down. Apply pixel creates one layer and one attributed history action when the resulting pixel changes. Invalid, out-of-bounds and same-value requests add nothing.
+The tool panel is generated from the registered tool modules: each module declares its fields and buttons, and the desktop only lays them out. A field shows its unit and, while its text is outside the declared range, the message naming that range; a button is enabled only when the current state is editable and every value it needs is valid. Tab and Shift+Tab move between fields, and Enter in a field runs its action. A control kind this build cannot draw is shown as an explicit unsupported-control message rather than hidden, and an unavailable module is listed with its reason.
+
+Pixel proof accepts integer x/y coordinates and RGB values from 0 to 255. Coordinates use the operation's input image with a top-left origin, x right and y down. Clicking the photo at Fit or any zoom fills X and Y with the pixel under the pointer without committing anything. Apply pixel creates one layer and one attributed history action when the resulting pixel changes. Invalid, out-of-bounds and same-value requests add nothing.
 
 Exact transforms are Rotate left, Rotate right, Mirror horizontal and Flip vertical. Quarter-turns swap dimensions. Order is preserved: a pixel edit before a rotation moves with the image, and one made afterwards addresses the rotated dimensions.
 
@@ -43,7 +45,7 @@ printf '%s\n' \
   | target/release/lightwell-json --catalog /path/to/catalog.sqlite
 ```
 
-A request has `id`, `method` and `params`. A success carries the matching `id`, an event `sequence` and `result`; a failure carries a structured `error`. Start with `schema.list` for the authoritative method list and `catalog.list` for the referenced assets. `version.create`, `version.list`, `version.delete` and `history.lineage` cover named states and the undo-parent chain. Mutations require `asset_id` and a `mutation` object:
+A request has `id`, `method` and `params`. A success carries the matching `id`, an event `sequence` and `result`; a failure carries a structured `error`. Start with `schema.list` for the authoritative method list and `catalog.list` for the referenced assets. Edit actions are generated from the registered tool modules: `module.list` returns every module with its effects, actions, parameter descriptors (kind, range, unit, default) and semantic controls, and each action `<id>` is callable as `edit.<id>` with its parameters as top-level fields beside `asset_id` and `mutation`. Today that is `edit.set-pixel` (`x`, `y`, `rgb`) and `edit.transform` (`transform`). Parameters are checked against the descriptors before the module sees them, so every client gets the same structured validation error. `version.create`, `version.list`, `version.delete` and `history.lineage` cover named states and the undo-parent chain. Mutations require `asset_id` and a `mutation` object:
 
 ```json
 {"id":"rotate","method":"edit.transform","params":{"asset_id":"asset-…","mutation":{"expected_revision":0,"request_id":"rotate-1","actor":"my-client"},"transform":"rotate-right"}}

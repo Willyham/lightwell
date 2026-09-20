@@ -1,6 +1,6 @@
 # Architecture
 
-One application service, used by the desktop UI and by external clients alike, owns asset state, recipe and history transactions and bounded work. Rendering consumes immutable snapshots. M1 and M2 use concrete typed handlers; M3 adds a module registry and declarative controls on top of them.
+One application service, used by the desktop UI and by external clients alike, owns asset state, recipe and history transactions and bounded work. Rendering consumes immutable snapshots. Every edit action is a tool module: the registry validates descriptors once, the host dispatches actions and resolves processing through it, and the desktop renders controls from the same descriptors.
 
 ## Workspace
 
@@ -21,7 +21,7 @@ Add boundaries when there is real code to own them. Crates and dynamically loade
 | Core service | Asset, layer and snapshot identity, shared invariants, atomic commits, revisions, request deduplication, history navigation |
 | Catalog | Read-only source references and verified fingerprints; durable layers, snapshots, history, current/redo state and request results |
 | Renderer and scheduler | Evaluate an immutable ordered stack from verified originals with bounded memory, cancellation and generation identity |
-| Tool modules (M3) | Action schemas, control descriptions, feature validation and processing through host services |
+| Tool modules | One descriptor each (effects, actions, parameters, controls, optional canvas pick), input parsing, state validation and no-op detection, compilation of payloads into host processing primitives; [modules](modules-and-api.md) |
 | JSON/IPC, later MCP | Transport to the same catalog owner plus operation discovery; no alternate persistence or edit logic |
 
 ## Sources, layers and snapshots
@@ -46,4 +46,4 @@ One typed service backs the desktop and external JSON sessions. While the GUI is
 
 ## Modules and extension path
 
-M3 makes actions discoverable as modules with semantic controls and processors while the pixel and transform effects keep their durable identity. The shell decides how to draw controls; modules never write catalog tables or keep private undo. Linked built-ins with lazy resources are enough for M1 to M4. External loading comes later around a selected use case with measured costs; see [modules](modules-and-api.md).
+The pixel and transform tools are linked modules registered by `ModuleRegistry::builtin()`; their effect identities, payloads and history action identities are unchanged from M1 and M2. The host generates `edit.<action>` API methods and the desktop generates controls from the same descriptors, so a module capability cannot exist without an API. Unknown or unavailable effects stay in every snapshot and fail rendering explicitly. Linked built-ins with lazy resources are enough for M4. External loading comes later around a selected use case with measured costs; see [modules](modules-and-api.md).

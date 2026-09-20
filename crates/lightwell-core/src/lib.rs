@@ -1,8 +1,11 @@
 //! UI-independent JPEG decoding, non-destructive editing state, rendering and the JSON owner API.
 mod api;
+#[cfg(test)]
+mod continuity;
 mod editor;
 mod error;
 mod model;
+mod modules;
 mod preview;
 mod profile;
 mod render;
@@ -11,6 +14,7 @@ pub use editor::*;
 pub use error::{Error, ErrorKind};
 use image::{ImageDecoder, ImageReader, Limits};
 pub use model::*;
+pub use modules::*;
 pub use preview::*;
 pub use render::{Raster, Sample, render, sample};
 use sha2::{Digest, Sha256};
@@ -278,7 +282,13 @@ mod tests {
             let snapshot = Snapshot::original(AssetId::new())
                 .append(Layer::pixel(source.width - 1, source.height - 1, [1, 2, 3]))
                 .unwrap();
-            let raster = render(&source, snapshot.id, &snapshot.recipe).unwrap();
+            let raster = render(
+                &ModuleRegistry::builtin(),
+                &source,
+                snapshot.id,
+                &snapshot.recipe,
+            )
+            .unwrap();
             assert_eq!(
                 raster.pixel(source.width - 1, source.height - 1),
                 Some([1, 2, 3, 255])

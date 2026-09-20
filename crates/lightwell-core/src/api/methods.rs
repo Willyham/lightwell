@@ -1,11 +1,13 @@
-//! The method table: one entry per operation carries its schema description, mutation flag and
-//! handler, so discovery, event emission and dispatch cannot drift apart.
+//! The method table: host methods carry their schema description, mutation flag and handler, and
+//! every module action resolves to a generated `edit.<action>` method from the same registry, so
+//! discovery, event emission and dispatch cannot drift apart.
 use super::{ApiRequest, ApiResponse, ClientSession, PROTOCOL};
 use crate::{
-    AssetId, EditorService, EntryId, Error, ErrorKind, HistorySelection, Mutation, Transform, Zoom,
+    ActionDescriptor, AssetId, EditorService, EntryId, Error, ErrorKind, HistorySelection,
+    ModuleRegistry, Mutation, Zoom,
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use std::path::PathBuf;
 
 pub(super) type Handler =
@@ -82,20 +84,12 @@ pub(super) const METHODS: &[MethodSpec] = &[
         handler: Some(history_lineage),
     },
     MethodSpec {
-        name: "edit.set-pixel",
-        mutates: true,
-        required: &["asset_id", "mutation", "x", "y", "rgb"],
+        name: "module.list",
+        mutates: false,
+        required: &[],
         optional: &[],
-        notes: "rgb is three u8 sRGB channels at integer coordinates in the current output stage",
-        handler: Some(edit_set_pixel),
-    },
-    MethodSpec {
-        name: "edit.transform",
-        mutates: true,
-        required: &["asset_id", "mutation", "transform"],
-        optional: &[],
-        notes: "transform is rotate-left, rotate-right, mirror-horizontal or flip-vertical",
-        handler: Some(edit_transform),
+        notes: "every registered module descriptor with its effects, actions, parameters and controls",
+        handler: Some(module_list),
     },
     MethodSpec {
         name: "history.undo",
@@ -199,13 +193,45 @@ pub(super) const METHODS: &[MethodSpec] = &[
     },
 ];
 
-pub(super) fn find(name: &str) -> Option<&'static MethodSpec> {
-    METHODS.iter().find(|spec| spec.name == name)
+/// A resolved method: a host method from the static table, or one generated from a registered
+/// module action. Both come from the same lookup discovery uses.
+pub(super) enum Method {
+    Host(&'static MethodSpec),
+    Action(String),
 }
 
-/// A method emits an event when the table marks it mutating and its result is not a no-op.
-pub(super) fn mutates(spec: &MethodSpec, result: Option<&Value>) -> bool {
-    spec.mutates
+impl Method {
+    pub(super) fn mutates(&self) -> bool {
+        match self {
+            Self::Host(spec) => spec.mutates,
+            Self::Action(_) => true,
+        }
+    }
+    /// `true` for the methods the owner loop answers from its own state.
+    pub(super) fn owner_answered(&self) -> bool {
+        matches!(self, Self::Host(spec) if spec.handler.is_none())
+    }
+}
+
+/// Action method names are generated: action `set-pixel` is `edit.set-pixel`.
+pub(super) fn action_method(action_id: &str) -> String {
+    format!("edit.{action_id}")
+}
+
+pub(super) fn find(service: &EditorService, name: &str) -> Option<Method> {
+    if let Some(spec) = METHODS.iter().find(|spec| spec.name == name) {
+        return Some(Method::Host(spec));
+    }
+    let action_id = name.strip_prefix("edit.")?;
+    service
+        .registry()
+        .action(action_id)
+        .map(|_| Method::Action(action_id.to_owned()))
+}
+
+/// A method emits an event when it is mutating and its result is not a no-op.
+pub(super) fn mutates(method: &Method, result: Option<&Value>) -> bool {
+    method.mutates()
         && result
             .and_then(|value| value.get("outcome"))
             .and_then(Value::as_str)
@@ -218,15 +244,18 @@ pub(super) fn dispatch(
     request: &ApiRequest,
     sequence: u64,
 ) -> ApiResponse {
-    let result = match find(&request.method) {
-        Some(MethodSpec {
+    let result = match find(service, &request.method) {
+        Some(Method::Host(MethodSpec {
             handler: Some(handler),
             ..
-        }) => handler(service, session, &request.params),
-        Some(_) => Err(Error::new(
+        })) => handler(service, session, &request.params),
+        Some(Method::Host(_)) => Err(Error::new(
             ErrorKind::Protocol,
             format!("{} is answered by the catalog owner", request.method),
         )),
+        Some(Method::Action(action_id)) => {
+            edit_action(service, session, &action_id, &request.params)
+        }
         None => Err(Error::new(
             ErrorKind::Protocol,
             format!("unknown method {}", request.method),
@@ -238,11 +267,32 @@ pub(super) fn dispatch(
     }
 }
 
-pub fn schemas() -> Value {
-    let methods: serde_json::Map<String, Value> = METHODS
+/// One generated method description: the envelope every action shares plus the action's own
+/// declared parameters, so a client needs no hand-maintained list.
+fn action_schema(action: &ActionDescriptor) -> Value {
+    let mut required = vec![json!("asset_id"), json!("mutation")];
+    let mut optional = Map::new();
+    for parameter in &action.parameters {
+        if parameter.required && parameter.default.is_none() {
+            required.push(json!(parameter.name));
+        } else {
+            optional.insert(parameter.name.clone(), json!(parameter.notes));
+        }
+    }
+    json!({
+        "mutates": true,
+        "required": required,
+        "optional": optional,
+        "notes": action.notes,
+        "parameters": action.parameters,
+    })
+}
+
+pub fn schemas(registry: &ModuleRegistry) -> Value {
+    let mut methods: Map<String, Value> = METHODS
         .iter()
         .map(|spec| {
-            let optional: serde_json::Map<String, Value> = spec
+            let optional: Map<String, Value> = spec
                 .optional
                 .iter()
                 .map(|(name, meaning)| ((*name).to_string(), json!(meaning)))
@@ -258,16 +308,35 @@ pub fn schemas() -> Value {
             )
         })
         .collect();
+    let descriptors = registry.descriptors();
+    for descriptor in &descriptors {
+        for action in &descriptor.actions {
+            methods.insert(action_method(&action.id), action_schema(action));
+        }
+    }
     json!({
         "protocol": PROTOCOL,
         "coordinate_space": "Each edit uses integer coordinates in its input image stage after EXIF orientation.",
         "methods": methods,
+        "modules": descriptors,
         "mutation": {"required": ["expected_revision", "request_id", "actor"]},
     })
 }
 
-fn schema_list(_: &mut EditorService, _: &mut ClientSession, _: &Value) -> Result<Value, Error> {
-    Ok(schemas())
+fn schema_list(
+    service: &mut EditorService,
+    _: &mut ClientSession,
+    _: &Value,
+) -> Result<Value, Error> {
+    Ok(schemas(service.registry()))
+}
+
+fn module_list(
+    service: &mut EditorService,
+    _: &mut ClientSession,
+    _: &Value,
+) -> Result<Value, Error> {
+    Ok(json!({"modules": service.registry().descriptors()}))
 }
 
 fn catalog_import(
@@ -341,40 +410,41 @@ fn history_lineage(
     value(service.lineage(&p.asset_id, p.entry_id.as_ref(), p.limit.unwrap_or(50))?)
 }
 
-fn edit_set_pixel(
+/// Every generated action method: `asset_id` and `mutation` are the envelope, the remaining
+/// top-level fields are the action's declared parameters.
+fn edit_action(
     service: &mut EditorService,
     session: &mut ClientSession,
+    action_id: &str,
     params: &Value,
 ) -> Result<Value, Error> {
     require_current(session)?;
-    #[derive(Deserialize)]
-    #[serde(deny_unknown_fields)]
-    struct P {
-        asset_id: AssetId,
-        mutation: Mutation,
-        x: u32,
-        y: u32,
-        rgb: [u8; 3],
-    }
-    let p = parse::<P>(params)?;
-    value(service.apply_pixel(&p.asset_id, p.mutation, p.x, p.y, p.rgb)?)
+    let mut parameters = match params {
+        Value::Object(object) => object.clone(),
+        Value::Null => Map::new(),
+        _ => {
+            return Err(Error::new(
+                ErrorKind::Validation,
+                "params must be a JSON object",
+            ));
+        }
+    };
+    let asset_id: AssetId = envelope(&mut parameters, "asset_id")?;
+    let mutation: Mutation = envelope(&mut parameters, "mutation")?;
+    value(service.apply_action(&asset_id, mutation, action_id, Value::Object(parameters))?)
 }
 
-fn edit_transform(
-    service: &mut EditorService,
-    session: &mut ClientSession,
-    params: &Value,
-) -> Result<Value, Error> {
-    require_current(session)?;
-    #[derive(Deserialize)]
-    #[serde(deny_unknown_fields)]
-    struct P {
-        asset_id: AssetId,
-        mutation: Mutation,
-        transform: Transform,
-    }
-    let p = parse::<P>(params)?;
-    value(service.apply_transform(&p.asset_id, p.mutation, p.transform)?)
+fn envelope<T: DeserializeOwned>(
+    parameters: &mut Map<String, Value>,
+    name: &str,
+) -> Result<T, Error> {
+    let field = parameters.remove(name).ok_or_else(|| {
+        Error::new(
+            ErrorKind::Validation,
+            format!("missing required field {name}"),
+        )
+    })?;
+    params(&field)
 }
 
 fn history_undo(
@@ -583,23 +653,49 @@ mod tests {
     use std::collections::HashSet;
 
     #[test]
-    fn method_table_is_unique_complete_and_matches_the_schema() {
+    fn host_and_generated_methods_are_unique_complete_and_match_the_schema() {
         let catalog =
             std::env::temp_dir().join(format!("lightwell-methods-{}.sqlite", std::process::id()));
         let mut service = EditorService::open(&catalog).unwrap();
         let mut session = ClientSession::default();
         let names: HashSet<&str> = METHODS.iter().map(|spec| spec.name).collect();
         assert_eq!(names.len(), METHODS.len(), "duplicate method names");
-        let schema = schemas();
+        let generated: Vec<String> = service
+            .registry()
+            .descriptors()
+            .iter()
+            .flat_map(|descriptor| descriptor.actions.iter())
+            .map(|action| action_method(&action.id))
+            .collect();
+        assert_eq!(generated, ["edit.set-pixel", "edit.transform"]);
+        let schema = schemas(service.registry());
         let listed = schema["methods"].as_object().unwrap();
-        assert_eq!(listed.len(), METHODS.len());
-        for spec in METHODS {
-            let description = &listed[spec.name];
-            assert_eq!(description["mutates"], json!(spec.mutates));
-            assert!(!spec.notes.is_empty(), "{} has no notes", spec.name);
+        assert_eq!(listed.len(), METHODS.len() + generated.len());
+        assert_eq!(
+            schema["modules"].as_array().unwrap().len(),
+            service.registry().descriptors().len()
+        );
+        assert_eq!(
+            listed["edit.set-pixel"]["required"],
+            json!(["asset_id", "mutation", "x", "y", "rgb"])
+        );
+        assert_eq!(
+            listed["edit.set-pixel"]["parameters"]
+                .as_array()
+                .unwrap()
+                .len(),
+            3
+        );
+        assert_eq!(listed["edit.transform"]["mutates"], json!(true));
+        for name in names
+            .iter()
+            .copied()
+            .chain(generated.iter().map(String::as_str))
+        {
+            let spec = find(&service, name).expect("listed methods resolve");
             let request = ApiRequest {
                 id: "schema".into(),
-                method: spec.name.into(),
+                method: name.into(),
                 params: json!({}),
                 token: None,
             };
@@ -607,24 +703,24 @@ mod tests {
             if let Some(error) = &response.error {
                 assert!(
                     !error.message.starts_with("unknown method"),
-                    "{} is listed but not dispatched",
-                    spec.name
+                    "{name} is listed but not dispatched"
                 );
-                if spec.handler.is_none() {
+                if spec.owner_answered() {
                     assert_eq!(error.code, "protocol");
                 }
             }
             assert!(
-                !mutates(spec, Some(&json!({"outcome": "no-op"}))),
-                "{} must not emit events for a no-op",
-                spec.name
+                !mutates(&spec, Some(&json!({"outcome": "no-op"}))),
+                "{name} must not emit events for a no-op"
             );
             assert_eq!(
-                mutates(spec, Some(&json!({"outcome": "applied"}))),
-                spec.mutates
+                mutates(&spec, Some(&json!({"outcome": "applied"}))),
+                spec.mutates()
             );
+            assert!(!listed[name]["notes"].as_str().unwrap().is_empty());
         }
-        assert!(find("edit.missing").is_none());
+        assert!(find(&service, "edit.missing").is_none());
+        assert!(find(&service, "set-pixel").is_none());
         drop(service);
         std::fs::remove_file(catalog).unwrap();
     }

@@ -49,6 +49,7 @@ Native M4 Pro, release builds, warm filesystem cache, synthetic fixtures. Diagno
 | Core import of a 24 / 60 MP JPEG | 58 / 126 ms |
 | Core one transform on 24 / 60 MP (p50) | 11.7 / 24.6 ms; 200 composed transforms 13.4 / 27.1 ms |
 | Pixel edit after a rotate on 24 MP | 0.2 ms (sampling path) |
+| Core one transform on 24 MP after the module registry (p50 / p95, 20 samples) | 12.2 / 13.5 ms; 200 composed transforms 11.4 / 11.9 ms; registration of the built-in modules 0.18 ms and first render after open 0.05 ms on the 480×320 fixture (release acceptance run) |
 | Editor RSS after M1/M2 journey with a small fixture | about 101 MiB, 0.2% CPU idle |
 
 Core figures exclude desktop scheduling, GPU upload and presentation. Reproduce with `editor-performance` and `measure` as described in [development](../engineering/development.md).

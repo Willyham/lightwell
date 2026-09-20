@@ -9,7 +9,7 @@ Lightwell is built history-first: prove non-destructive state, history and the p
 | S0 — viewer | Cross-platform skeleton that opens one JPEG at Fit | Accepted |
 | M1 — history foundation | Referenced JPEG in a SQLite catalog, ordered edit layers, a pixel-change proof, persistent history with undo/redo/restore/preview, catalog reopen, desktop UI and a live JSON/IPC API | Implemented, verified on M4 |
 | M2 — transforms | Exact rotate left/right, mirror horizontal and flip vertical through the same layers, history, UI and API | Implemented, verified on M4 |
-| M3 — tool modules | Declarative tool interface (actions, schemas, semantic controls, validation, processing); the pixel and transform tools migrate to it with saved history unchanged | Planned |
+| M3 — tool modules | Declarative tool interface (actions, schemas, semantic controls, validation, processing); the pixel and transform tools migrate to it with saved history unchanged | Implemented, verified on M4 |
 | M4 — crop module | Lightroom-style crop and straighten as a module: free handles, ratios, straightening, Apply/Cancel, UI/API parity | Planned |
 
 Each milestone starts from the previous working result and ends with a native M4 demonstration plus proportionate automated correctness and recovery checks. Contracts: [milestone design](design/history-first-roadmap.md), [history](specs/edit-history.md), [modules](design/modules-and-api.md), [crop](specs/single-image.md).

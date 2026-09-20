@@ -6,7 +6,7 @@ The history-first sequence proves non-destructive state and history before addin
 | --- | --- | --- |
 | M1 — history foundation (implemented) | Non-destructive edit layers, a test pixel edit, durable history, undo/redo, restore, historical previews, catalog save and reopen, UI and live API | Original → two pixel changes → preview → undo/redo → restore → new change → reopen passes through UI and API with original bytes unchanged |
 | M2 — transforms (implemented) | Rotate left/right, mirror horizontal and flip vertical through the existing layer and history system | Asymmetric fixture and pixel-edit compositions, undo/redo, preview and reopen pass through UI and API |
-| M3 — tool modules | A small tool interface declaring actions, schemas, controls and processing; the pixel and transform tools implemented through it | Generic UI and API discover and invoke the modules; saved M1/M2 catalogs and history render identically |
+| M3 — tool modules (implemented) | A small tool interface declaring actions, schemas, controls and processing; the pixel and transform tools implemented through it | Generic UI and API discover and invoke the modules; saved M1/M2 catalogs and history render identically |
 | M4 — crop module | Lightroom-style crop and straighten delivered as a tool module | Direct manipulation, numeric controls, API parity, history and reopen, composition-preserving geometry at several zoom and DPI settings |
 
 ## M1 and M2

@@ -1,6 +1,10 @@
 use crate::{
-    AssetId, EntryId, Error, ErrorKind, HistoryEntry, Layer, Mutation, PreviewJob, Raster,
-    Snapshot, SnapshotId, SourceImage, Transform, open_source, render, sample,
+    AssetId, EntryId, Error, ErrorKind, HistoryEntry, Layer, ModuleRegistry, Mutation, PreviewJob,
+    Raster, Snapshot, SnapshotId, SourceImage, Transform,
+    modules::{ActionPlan, StageContext, check_parameters},
+    open_source, render,
+    render::Evaluation,
+    sample,
 };
 use rusqlite::{
     Connection, ErrorCode, OptionalExtension, Transaction, TransactionBehavior, params,
@@ -12,6 +16,7 @@ use std::{
     cell::RefCell,
     fs::Metadata,
     path::{Path, PathBuf},
+    sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -174,10 +179,17 @@ struct CachedSource {
 pub struct EditorService {
     connection: Connection,
     source_cache: RefCell<Option<CachedSource>>,
+    registry: Arc<ModuleRegistry>,
 }
 
 impl EditorService {
     pub fn open(path: &Path) -> Result<Self, Error> {
+        Self::open_with(path, Arc::new(ModuleRegistry::builtin()))
+    }
+
+    /// Open a catalog served by a specific set of providers. Registration is cheap and happens
+    /// before any catalog or image work.
+    pub fn open_with(path: &Path, registry: Arc<ModuleRegistry>) -> Result<Self, Error> {
         if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
             std::fs::create_dir_all(parent).map_err(|e| {
                 Error::new(
@@ -216,7 +228,13 @@ impl EditorService {
         Ok(Self {
             connection,
             source_cache: RefCell::new(None),
+            registry,
         })
+    }
+
+    /// The providers this service validates, plans and renders with.
+    pub fn registry(&self) -> &Arc<ModuleRegistry> {
+        &self.registry
     }
 
     fn create_schema(connection: &Connection) -> Result<(), Error> {
@@ -400,7 +418,7 @@ impl EditorService {
             ],
         )
         .map_err(catalog_error)?;
-        insert_entry(&tx, &entry)?;
+        insert_entry(&self.registry, &tx, &entry)?;
         tx.execute(
             "INSERT INTO asset_state VALUES (?1,?2,0,'[]')",
             params![asset.id.as_str(), entry.id.as_str()],
@@ -499,6 +517,7 @@ impl EditorService {
         Ok(PreviewJob {
             source: self.verified_source(&state.asset)?,
             entry,
+            registry: self.registry.clone(),
         })
     }
 
@@ -506,7 +525,12 @@ impl EditorService {
         let state = self.state(asset_id)?;
         let entry = self.entry(asset_id, entry_id)?;
         let source = self.verified_source(&state.asset)?;
-        render(&source, entry.snapshot.id.clone(), &entry.snapshot.recipe)
+        render(
+            &self.registry,
+            &source,
+            entry.snapshot.id.clone(),
+            &entry.snapshot.recipe,
+        )
     }
 
     /// Evaluate one output pixel of a saved entry without rasterizing the image.
@@ -520,7 +544,7 @@ impl EditorService {
         let state = self.state(asset_id)?;
         let entry = self.entry(asset_id, entry_id)?;
         let source = self.verified_source(&state.asset)?;
-        let sampled = sample(&source, &entry.snapshot.recipe, x, y)?;
+        let sampled = sample(&self.registry, &source, &entry.snapshot.recipe, x, y)?;
         let rgba = sampled.rgba.ok_or_else(|| {
             Error::new(
                 ErrorKind::Validation,
@@ -542,6 +566,53 @@ impl EditorService {
         })
     }
 
+    /// One action request for every caller: the desktop, the JSON API and headless clients all
+    /// arrive here with an action identity and its declared parameters.
+    pub fn apply_action(
+        &mut self,
+        asset_id: &AssetId,
+        mutation: Mutation,
+        action_id: &str,
+        parameters: Value,
+    ) -> Result<MutationResult, Error> {
+        mutation.validate()?;
+        let registry = self.registry.clone();
+        let (module, action) = registry.action(action_id).ok_or_else(|| {
+            Error::new(ErrorKind::Validation, format!("unknown action {action_id}"))
+        })?;
+        let checked = check_parameters(action, &parameters)?;
+        let input = module.parse(action_id, &checked)?;
+        let request = request_input(&input, &mutation)?;
+        if let Some(result) = self.request_result(asset_id, &mutation.request_id, &request)? {
+            return Ok(result);
+        }
+        let state = self.state(asset_id)?;
+        ensure_revision(&state, mutation.expected_revision)?;
+        let source = self.verified_source(&state.asset)?;
+        // The stack is compiled once; planning answers point queries and never rasterizes.
+        let evaluation = Evaluation::new(&registry, &source, &state.current_entry.snapshot.recipe)?;
+        let sampler =
+            |x: u32, y: u32| -> Result<Option<[u8; 4]>, Error> { Ok(evaluation.pixel(x, y)) };
+        let context = StageContext {
+            stage: evaluation.stage(),
+            sampler: &sampler,
+        };
+        match module.plan(&input, &context)? {
+            ActionPlan::NoOp => self.persist_noop(asset_id, &mutation, &request, &state),
+            ActionPlan::Commit(layer) => {
+                let parameters = Value::Object(input.parameters);
+                self.commit_layer(
+                    asset_id,
+                    mutation,
+                    request,
+                    layer,
+                    &input.action_id,
+                    parameters,
+                )
+            }
+        }
+    }
+
     pub fn apply_pixel(
         &mut self,
         asset_id: &AssetId,
@@ -550,32 +621,9 @@ impl EditorService {
         y: u32,
         rgb: [u8; 3],
     ) -> Result<MutationResult, Error> {
-        mutation.validate()?;
-        let input = json!({"action":"set-pixel","mutation":mutation,"x":x,"y":y,"rgb":rgb});
-        if let Some(result) = self.request_result(asset_id, &mutation.request_id, &input)? {
-            return Ok(result);
-        }
-        let state = self.state(asset_id)?;
-        ensure_revision(&state, mutation.expected_revision)?;
-        let source = self.verified_source(&state.asset)?;
-        let current = sample(&source, &state.current_entry.snapshot.recipe, x, y)?;
-        let rgba = current.rgba.ok_or_else(|| {
-            Error::new(
-                ErrorKind::Validation,
-                format!(
-                    "pixel ({x}, {y}) is outside {}x{} input stage",
-                    current.width, current.height
-                ),
-            )
-        })?;
-        if rgba[..3] == rgb {
-            return self.persist_noop(asset_id, &mutation, &input, &state);
-        }
-        self.commit_layer(
+        self.apply_action(
             asset_id,
             mutation,
-            input,
-            Layer::pixel(x, y, rgb),
             "set-pixel",
             json!({"x":x,"y":y,"rgb":rgb}),
         )
@@ -638,17 +686,10 @@ impl EditorService {
         mutation: Mutation,
         transform: Transform,
     ) -> Result<MutationResult, Error> {
-        mutation.validate()?;
-        let input = json!({"action":transform.action_id(),"mutation":mutation});
-        if let Some(result) = self.request_result(asset_id, &mutation.request_id, &input)? {
-            return Ok(result);
-        }
-        self.commit_layer(
+        self.apply_action(
             asset_id,
             mutation,
-            input,
-            Layer::transform(transform),
-            transform.action_id(),
+            "transform",
             json!({"transform":transform}),
         )
     }
@@ -665,6 +706,7 @@ impl EditorService {
         let mut state = self.state(asset_id)?;
         ensure_revision(&state, mutation.expected_revision)?;
         let snapshot = state.current_entry.snapshot.append(layer)?;
+        self.registry.validate_recipe(&snapshot.recipe)?;
         let entry = HistoryEntry {
             id: EntryId::new(),
             asset_id: asset_id.clone(),
@@ -692,7 +734,7 @@ impl EditorService {
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(catalog_error)?;
         ensure_request_absent(&tx, asset_id, &mutation.request_id)?;
-        insert_entry(&tx, &entry)?;
+        insert_entry(&self.registry, &tx, &entry)?;
         tx.execute("UPDATE asset_state SET current_entry_id=?2,revision=?3,redo_json='[]' WHERE asset_id=?1", params![asset_id.as_str(), entry.id.as_str(), entry.result_revision as i64]).map_err(catalog_error)?;
         insert_request(&tx, asset_id, &mutation.request_id, &input, &result)?;
         tx.commit().map_err(catalog_error)?;
@@ -790,6 +832,9 @@ impl EditorService {
         let state = self.state(asset_id)?;
         ensure_revision(&state, mutation.expected_revision)?;
         let target = self.entry(asset_id, target_id)?;
+        // Restoring a stack the current providers cannot evaluate fails explicitly; browsing it
+        // with undo, redo and history stays available.
+        self.registry.validate_recipe(&target.snapshot.recipe)?;
         if target.snapshot.recipe == state.current_entry.snapshot.recipe {
             return self.persist_noop(asset_id, &mutation, &input, &state);
         }
@@ -824,7 +869,7 @@ impl EditorService {
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(catalog_error)?;
-        insert_entry(&tx, &entry)?;
+        insert_entry(&self.registry, &tx, &entry)?;
         tx.execute("UPDATE asset_state SET current_entry_id=?2,revision=?3,redo_json='[]' WHERE asset_id=?1", params![asset_id.as_str(), entry.id.as_str(), entry.result_revision as i64]).map_err(catalog_error)?;
         insert_request(&tx, asset_id, &mutation.request_id, &input, &result)?;
         tx.commit().map_err(catalog_error)?;
@@ -1088,6 +1133,21 @@ fn ensure_revision(state: &EditorState, expected: u64) -> Result<(), Error> {
     }
 }
 
+/// The deduplicated request identity: the durable action, the mutation envelope and the parsed
+/// parameters as top-level fields. Unchanged for actions that kept their M1/M2 parameter shape.
+fn request_input(input: &crate::modules::ActionInput, mutation: &Mutation) -> Result<Value, Error> {
+    let mut request = serde_json::Map::new();
+    request.insert("action".into(), Value::from(input.action_id.as_str()));
+    request.insert(
+        "mutation".into(),
+        serde_json::to_value(mutation).map_err(|e| json_error("cannot encode request", e))?,
+    );
+    for (name, value) in &input.parameters {
+        request.insert(name.clone(), value.clone());
+    }
+    Ok(Value::Object(request))
+}
+
 fn input_hash(input: &Value) -> Result<String, Error> {
     Ok(format!(
         "{:x}",
@@ -1153,8 +1213,12 @@ fn valid_version_name(name: &str) -> Result<String, Error> {
     Ok(name.to_string())
 }
 
-fn insert_entry(tx: &Transaction<'_>, entry: &HistoryEntry) -> Result<(), Error> {
-    entry.snapshot.recipe.validate()?;
+fn insert_entry(
+    registry: &ModuleRegistry,
+    tx: &Transaction<'_>,
+    entry: &HistoryEntry,
+) -> Result<(), Error> {
+    registry.validate_recipe(&entry.snapshot.recipe)?;
     tx.execute(
         "INSERT INTO entries VALUES (?1,?2,?3,?4,?5,?6)",
         params![
@@ -1465,6 +1529,7 @@ mod tests {
             &second.source.rgba
         ));
         let raster = render(
+            service.registry(),
             &first.source,
             first.entry.snapshot.id.clone(),
             &first.entry.snapshot.recipe,
@@ -1850,6 +1915,129 @@ mod tests {
                 .is_ok(),
             "a failed transaction must not retain a false request result"
         );
+        drop(service);
+        std::fs::remove_file(catalog).unwrap();
+    }
+
+    #[test]
+    fn rejected_actions_leave_state_history_and_the_request_table_untouched() {
+        let catalog = temp("actions.sqlite");
+        let mut service = EditorService::open(&catalog).unwrap();
+        let asset = service.import(&fixture()).unwrap().asset.id;
+        let before = service.state(&asset).unwrap();
+        for (case, action, parameters, fragment) in [
+            ("unknown action", "paint", json!({}), "unknown action paint"),
+            (
+                "missing required parameter",
+                "set-pixel",
+                json!({"x":0,"y":0}),
+                "missing required parameter rgb",
+            ),
+            (
+                "unknown parameter",
+                "set-pixel",
+                json!({"x":0,"y":0,"rgb":[1,2,3],"z":1}),
+                "unknown parameter z",
+            ),
+            (
+                "integer out of range",
+                "set-pixel",
+                json!({"x":-1,"y":0,"rgb":[1,2,3]}),
+                "parameter x must be an integer within 0..=16383",
+            ),
+            (
+                "malformed color",
+                "set-pixel",
+                json!({"x":0,"y":0,"rgb":[1,2]}),
+                "parameter rgb must be three sRGB channels 0..=255",
+            ),
+            (
+                "unknown enum option",
+                "transform",
+                json!({"transform":"rotate-sideways"}),
+                "parameter transform must be one of",
+            ),
+            (
+                "outside the input stage",
+                "set-pixel",
+                json!({"x":9000,"y":0,"rgb":[1,2,3]}),
+                "pixel (9000, 0) is outside 480x320 input stage",
+            ),
+        ] {
+            let error = service
+                .apply_action(&asset, mutation(0, case), action, parameters)
+                .expect_err(case);
+            assert_eq!(error.kind, ErrorKind::Validation, "{case}");
+            assert!(error.detail.contains(fragment), "{case}: {error}");
+        }
+        assert_eq!(service.state(&asset).unwrap(), before);
+        let count = |table: &str| -> i64 {
+            service
+                .connection
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                    row.get(0)
+                })
+                .unwrap()
+        };
+        assert_eq!(count("entries"), 1, "no history row was written");
+        assert_eq!(count("requests"), 0, "no request result was recorded");
+        assert_eq!(before.revision, 0);
+        drop(service);
+        std::fs::remove_file(catalog).unwrap();
+    }
+
+    #[test]
+    fn actions_wrappers_and_no_op_detection_agree() {
+        let catalog = temp("action-equivalence.sqlite");
+        let mut service = EditorService::open(&catalog).unwrap();
+        let asset = service.import(&fixture()).unwrap().asset.id;
+        let original = service.render_current(&asset).unwrap().pixel(0, 0).unwrap();
+        let repeated = service
+            .apply_action(
+                &asset,
+                mutation(0, "same-value"),
+                "set-pixel",
+                json!({"x":0,"y":0,"rgb":[original[0],original[1],original[2]]}),
+            )
+            .unwrap();
+        assert_eq!(repeated.outcome, MutationOutcome::NoOp);
+        let through_action = service
+            .apply_action(
+                &asset,
+                mutation(0, "action"),
+                "set-pixel",
+                json!({"x":0,"y":0,"rgb":[1,2,3]}),
+            )
+            .unwrap();
+        let entry = service
+            .entry(&asset, &through_action.current_entry_id)
+            .unwrap();
+        assert_eq!(entry.action_id, "set-pixel");
+        assert_eq!(entry.parameters, json!({"x":0,"y":0,"rgb":[1,2,3]}));
+        let rotated = service
+            .apply_action(
+                &asset,
+                mutation(1, "rotate"),
+                "transform",
+                json!({"transform":"rotate-right"}),
+            )
+            .unwrap();
+        let entry = service.entry(&asset, &rotated.current_entry_id).unwrap();
+        assert_eq!(
+            entry.action_id, "rotate-right",
+            "durable M2 action identity"
+        );
+        assert_eq!(entry.parameters, json!({"transform":"rotate-right"}));
+        assert_eq!(
+            entry.snapshot.recipe.layers[1].payload,
+            json!("rotate-right")
+        );
+        // The wrapper retries the same request and deduplicates through the same hash.
+        let retry = service
+            .apply_transform(&asset, mutation(1, "rotate"), Transform::RotateRight)
+            .unwrap();
+        assert!(retry.deduplicated);
+        assert_eq!(retry.current_entry_id, rotated.current_entry_id);
         drop(service);
         std::fs::remove_file(catalog).unwrap();
     }
