@@ -1,3 +1,4 @@
+mod crop_smoke;
 mod diagnostics;
 mod editor_acceptance;
 mod editor_performance;
@@ -320,7 +321,17 @@ fn main_result() -> Result {
                 })
                 .transpose()?;
             a.done()?;
-            println!("{}", smoke::pixels(&path, orientation, aspect, columns)?);
+            println!(
+                "{}",
+                smoke::pixels(
+                    &path,
+                    &smoke::Expect {
+                        aspect,
+                        columns,
+                        ..smoke::Expect::fit(orientation)
+                    }
+                )?
+            );
         }
         "hardening" | "measure" => {
             let out = absolute(&root, &a.path("--output")?);

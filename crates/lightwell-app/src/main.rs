@@ -4,12 +4,15 @@ mod diagnostics;
 mod editor_app;
 mod paths;
 use diagnostics::Diagnostics;
+use editor_app::Step;
 use std::{collections::VecDeque, path::PathBuf};
 
 #[derive(Clone, Default)]
 struct Config {
     files: VecDeque<PathBuf>,
     evidence: Option<PathBuf>,
+    /// Evidence steps run after the last `--open` outcome, one captured frame each.
+    script: VecDeque<Step>,
     size: Option<(f32, f32)>,
     data_root: Option<PathBuf>,
     catalog: Option<PathBuf>,
@@ -36,6 +39,17 @@ fn arguments() -> Result<Config, String> {
             Some("--evidence-dir") => {
                 config.evidence = Some(args.next().ok_or("--evidence-dir requires a path")?.into())
             }
+            Some("--evidence-script") => {
+                let path = PathBuf::from(
+                    args.next()
+                        .ok_or("--evidence-script requires a path")?
+                        .to_owned(),
+                );
+                let text = std::fs::read_to_string(&path).map_err(|error| {
+                    format!("cannot read the evidence script: {}", error.kind())
+                })?;
+                config.script = editor_app::parse_script(&text)?;
+            }
             Some("--data-root") => {
                 config.data_root = Some(args.next().ok_or("--data-root requires a path")?.into());
             }
@@ -53,7 +67,7 @@ fn arguments() -> Result<Config, String> {
             }
             Some("--help") => {
                 println!(
-                    "Lightwell: [--open JPEG]... [--catalog CATALOG] [--data-root DIRECTORY] [--evidence-dir NEW_DIRECTORY] [--window-size WIDTH HEIGHT]\nEvidence mode imports each --open in order into an isolated catalog, captures a frame after each and exits."
+                    "Lightwell: [--open JPEG]... [--catalog CATALOG] [--data-root DIRECTORY] [--evidence-dir NEW_DIRECTORY] [--evidence-script FILE] [--window-size WIDTH HEIGHT]\nEvidence mode imports each --open in order into an isolated catalog, captures a frame after each, runs any evidence script with a frame per step and exits."
                 );
                 std::process::exit(0)
             }
@@ -65,6 +79,10 @@ fn arguments() -> Result<Config, String> {
     }
     if config.files.len() > 1 && config.evidence.is_none() {
         return Err("Repeated --open requires --evidence-dir".into());
+    }
+    // A script exists to produce captured frames, so it is meaningless without an evidence run.
+    if !config.script.is_empty() && config.evidence.is_none() {
+        return Err("--evidence-script requires --evidence-dir".into());
     }
     if let Some(path) = &config.evidence {
         if path.exists() {

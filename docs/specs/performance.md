@@ -46,11 +46,41 @@ Native M4 Pro, release builds, warm filesystem cache, synthetic fixtures. Diagno
 | S0 request to captured frame (24 / 60 MP) | median 237 / 361 ms |
 | S0 sampled peak RSS (empty / 24 / 60 MP) | 111 / 506 / 772 MiB; 965 MiB after sixteen 60 MP loads |
 | S0 idle CPU after settling | 0.033% of one core over 30 s |
-| Core import of a 24 / 60 MP JPEG | 58 / 126 ms |
-| Core one transform on 24 / 60 MP (p50) | 11.7 / 24.6 ms; 200 composed transforms 13.4 / 27.1 ms |
+| Core import of a 24 / 60 MP JPEG | 55 / 118 ms |
 | Pixel edit after a rotate on 24 MP | 0.2 ms (sampling path) |
 | Core one transform on 24 MP after the module registry (p50 / p95, 20 samples) | 12.2 / 13.5 ms; 200 composed transforms 11.4 / 11.9 ms; registration of the built-in modules 0.18 ms and first render after open 0.05 ms on the 480×320 fixture (release acceptance run) |
 | Editor RSS after M1/M2 journey with a small fixture | about 101 MiB, 0.2% CPU idle |
+
+With the crop module, `editor-performance` on 24 and 60 MP, 30 samples each, warm cache. The crop
+rows render the whole stack: 200 composed exact transforms and then one straightened crop, whose
+resample is a stage boundary, so the difference between the two rows is the interpolating pass.
+
+| Measurement | 24 MP | 60 MP |
+| --- | --- | --- |
+| Core render of one exact transform (p50 / p95) | 10.7 / 11.2 ms | 22.7 / 26.0 ms |
+| Core render of 200 composed exact transforms (p50 / p95) | 10.7 / 11.1 ms | 22.5 / 24.2 ms |
+| The same stack with a 10° `crop-fit` on top (p50 / p95) | 33.2 / 37.7 ms | 70.5 / 77.0 ms |
+| Crop output stage that measures | 3695 × 2077 from a 4000 × 6000 input | 5542 × 3116 from a 6000 × 10000 input |
+| `crop-fit` commit: validation, fitting, compile and persistence, no render | 1.3 ms | 0.9 ms |
+| Identity render from the cached decode (shared buffer, no copy) | under 0.01 ms | under 0.01 ms |
+
+Editor process measurements from `measure`, five app-cold launches per workload plus one repeated
+60 MP run, on the same host. Launch to observed frame is an upper bound: it includes the harness's
+capture readback, not scanout.
+
+| Measurement | Result |
+| --- | --- |
+| Launch to observed frame (empty / 24 MP / 60 MP) | median 231 / 285 / 396 ms |
+| Open request to captured frame (24 / 60 MP) | median 196 / 303 ms, of which upload 27 / 67 ms |
+| Sampled peak RSS (empty / 24 / 60 MP) | 124 / 469 / 987 MiB; 1151 MiB after sixteen 60 MP loads |
+| Idle CPU with a 60 MP image open, 30 s after settling | 1.03% of one core, RSS flat at 967 MiB |
+
+That last figure sits just above the provisional idle budget. It is one 30-second sample with a
+60 MP image open, so the 500 ms event poll and the window's own redraws are included; it is a
+measurement to reproduce and attribute, not an accepted regression.
+
+Crop correctness evidence is rendered, not timed: the `crop` and `crop-draft` smoke scenarios record
+correlated state, events and pixel checks, and no latency is claimed from them.
 
 Core figures exclude desktop scheduling, GPU upload and presentation. Reproduce with `editor-performance` and `measure` as described in [development](../engineering/development.md).
 

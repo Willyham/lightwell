@@ -28,6 +28,7 @@ Doctor reports missing tools and the graphics environment without installing any
 | Core timing on a real-sized JPEG | `cargo run --release --locked --package xtask -- editor-performance --source JPEG --output NEW_DIR [--samples N]` |
 | Verify golden fixtures; generate 24 and 60 MP workloads | `cargo xtask fixtures`, `cargo xtask generate-fixtures [--output NEW_DIR]` |
 | Rendered smoke scenario, needs a native graphical session | `cargo xtask smoke --scenario NAME --output NEW_DIR [--binary PATH]` |
+| Rendered crop workflow and overlay | `cargo xtask smoke --scenario crop --output NEW_DIR`, `--scenario crop-draft` |
 | Inspect a capture | `cargo xtask check-capture --image PNG [--orientation N]` |
 | Process failure checks; macOS measurement | `cargo xtask hardening --binary PATH --output NEW_DIR`, `cargo xtask measure --binary PATH --output NEW_DIR [--samples N]` |
 | Package; dependency inventory | `cargo xtask package --output NEW_DIR`, `cargo xtask inventory --output NEW_DIR` |
@@ -38,7 +39,7 @@ Every evidence command refuses an existing output directory: use a fresh `artifa
 
 ## Running the application
 
-`cargo xtask develop` starts the editor. It owns the catalog (`--catalog FILE`, defaulting to the platform configuration directory), offers native Open with Cmd+O or Ctrl+O and starts an authenticated loopback JSON service. `--data-root DIR` isolates config, cache and log paths. The application also accepts `--window-size W H` (320 to 4096 logical) and `--evidence-dir NEW_DIR`. Evidence mode is the same editor driven by the harness: each `--open` goes through the ordinary import call into a catalog created inside the new evidence directory, a window frame is captured after each outcome, and the run exits after writing its results. Manual Open is disabled during collection, and `--open` may repeat only with `--evidence-dir`.
+`cargo xtask develop` starts the editor. It owns the catalog (`--catalog FILE`, defaulting to the platform configuration directory), offers native Open with Cmd+O or Ctrl+O and starts an authenticated loopback JSON service. `--data-root DIR` isolates config, cache and log paths. The application also accepts `--window-size W H` (320 to 4096 logical), `--evidence-dir NEW_DIR` and `--evidence-script FILE`. Evidence mode is the same editor driven by the harness: each `--open` goes through the ordinary import call into a catalog created inside the new evidence directory, a window frame is captured after each outcome, the script's steps then run with a frame each, and the run exits after writing its results. Manual Open is disabled during collection, and `--open` may repeat only with `--evidence-dir`.
 
 The headless owner reads one JSON request per line:
 
@@ -50,7 +51,52 @@ Start with `schema.list`. Request shapes and live-session behavior are in the [u
 
 ## Rendered evidence
 
-Smoke runs the built or packaged editor through a deterministic evidence sequence (repeated `--open`, evidence directory, fixed window size, bounded deadlines); there is no separate viewer, so the captured frame is the editor window with its sidebar. Scenarios: `empty`, `load`, `replacement`, `invalid`, `repeated`, `alternating`, `large24`, `large60`; generate the large fixtures first. Each run writes `result.json`, `app/events.jsonl`, `app/state.json`, `app/frame-*.png` (window-renderer readbacks, not OS screenshots), `subprocess.log` and `reproduce.md`. Each frame records `surface_columns`, the physical x range of the photo surface derived from the editor's layout constants, and the runner verifies fixture colors, Fit geometry and centering within that range, generation and state, backend, exit status and unchanged source hashes before writing `passed`; blank, stale or missing frames fail. The `render_ready` event marks the upload of the open request's preview raster, which is when a frame becomes capturable. A 25-second application deadline and a 35-second process deadline bound hangs.
+Smoke runs the built or packaged editor through a deterministic evidence sequence (repeated `--open`, evidence directory, fixed window size, bounded deadlines); there is no separate viewer, so the captured frame is the editor window with its sidebar. Scenarios: `empty`, `load`, `replacement`, `invalid`, `repeated`, `alternating`, `large24`, `large60`, `crop`, `crop-draft`; generate the large fixtures first. Each run writes `result.json`, `app/events.jsonl`, `app/state.json`, `app/frame-*.png` (window-renderer readbacks, not OS screenshots), `subprocess.log` and `reproduce.md`. Each frame records `surface_columns`, the physical x range of the photo surface derived from the editor's layout constants, and the runner verifies fixture colors, Fit geometry and centering within that range, generation and state, backend, exit status and unchanged source hashes before writing `passed`; blank, stale or missing frames fail. The `render_ready` event marks the upload of the open request's preview raster, which is when a frame becomes capturable. A 25-second application deadline and a 35-second process deadline bound hangs.
+
+### Evidence scripts
+
+`--evidence-script FILE` takes a JSON array of steps. They run in order after the last `--open`
+outcome, each ends in exactly one captured frame numbered after the open frames, and each frame gets
+its own `state-<n>.json` and a record in `result.json`'s `script`. Every step goes through the
+messages and owner calls the controls use, so a script exercises the real paths rather than a
+parallel implementation. Parsing happens before the window opens; at most 64 steps.
+
+```json
+[
+  {"api": {"method": "edit.crop-fit", "params": {"aspect": "16:9", "angle": 0}}},
+  {"draft": {"start": true}},
+  {"draft": {"rect": [40, 24, 300, 200]}},
+  {"draft": {"preset": "1:1"}},
+  {"view": {"zoom": "100"}},
+  {"draft": {"apply": true}}
+]
+```
+
+Each step is an object with exactly one key.
+
+- `api` sends one owner request. The desktop fills `asset_id` and the `mutation` envelope itself —
+  the current state's revision and a fresh request id — and rejects a script that sets either, so any
+  asset mutation works, `history.undo` included. Its frame is captured when the resulting preview
+  reaches the GPU: the same `render_ready` correlation an `--open` uses.
+- `draft` drives the crop draft: `start`, `reapply`, `angle`, `nudge`, `preset` (a declared aspect
+  option, by name), `rect` (`[x, y, width, height]` in box pixels, applied as two corner gestures,
+  top-left then bottom-right), `swap`, `lock`, `option`, `guide`, `apply`, `cancel`. `start` and
+  `reapply` wait for the crop layer's truncated input-stage preview, `apply` waits for its committed
+  pixels, and the rest are captured on the next rendered frame.
+- `view` sets the zoom through `view.set`: `{"zoom": "fit"}` or a percentage from 10 to 1600.
+
+A step that cannot be sent is recorded with `"status": "failed"` and its reason and still captures a
+frame, so a refused step is visible in the evidence instead of missing from it.
+
+The `crop` and `crop-draft` scenarios use this. `crop` commits a 16:9 `edit.crop-fit` and an
+off-centre 7° `edit.crop`, then drafts on that layer, straightens to 12°, cancels, drafts again,
+nudges and applies. `crop-draft` opens a neutral draft and exercises corner gestures, a declared ratio
+preset, 100% and Fit, then applies. The runner checks the committed stack in each frame's state (one
+crop layer keeping its identity, the payload that was sent, the revision each commit produced), that
+the displayed image has the ratio the committed payload declares, and, on draft frames, that the
+rectangle drawn at full opacity matches the captured draft rectangle, that all eight handles are
+present and that the stage outside the rectangle is dimmed toward the window background. Each run
+also writes `app/crop-checks.json` with the measured values and their tolerances.
 
 Rules for any UI or image check:
 

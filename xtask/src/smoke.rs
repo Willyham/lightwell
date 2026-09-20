@@ -1,4 +1,4 @@
-use crate::*;
+use crate::{crop_smoke as crop, *};
 use std::{
     process::{Child, Stdio},
     time::{Duration, Instant},
@@ -37,32 +37,65 @@ pub fn wait(child: &mut Guard, timeout: Duration) -> Result<std::process::ExitSt
         std::thread::sleep(Duration::from_millis(10));
     }
 }
-/// Check the captured frame shows the fixture at Fit. `columns` is the physical x range of the
-/// editor's photo surface; without it the whole capture width is the surface.
-pub fn pixels(
-    path: &Path,
-    orientation: u8,
-    aspect: Option<f64>,
-    columns: Option<[u32; 2]>,
-) -> Result<Value> {
-    ensure((1..=8).contains(&orientation), "Orientation must be 1..8")?;
+/// What a captured frame must show. Defaults describe the fixture at Fit; a crop changes the ratio
+/// the displayed image has and, when it is straightened, where its quadrants land.
+pub struct Expect {
+    /// Which EXIF orientation's quadrant order the fixture was saved with.
+    pub orientation: u8,
+    /// The displayed ratio, or the fixture's own when `None`.
+    pub aspect: Option<f64>,
+    /// The physical x range of the editor's photo surface; the whole width without it.
+    pub columns: Option<[u32; 2]>,
+    /// How far the measured ratio may differ from the expected one.
+    pub tolerance: f64,
+    /// The smallest fraction of the capture height the image may occupy. A wide crop fills less of
+    /// the surface than the fixture does.
+    pub min_height: f64,
+    /// Whether the image must be centred in the photo surface.
+    pub centred: bool,
+    /// Whether the four quarter points must show the four quadrant colours. A straightened crop
+    /// rotates the quadrant boundaries, so it only requires all four colours to be present.
+    pub quadrants: bool,
+}
+
+impl Expect {
+    pub fn fit(orientation: u8) -> Self {
+        Self {
+            orientation,
+            aspect: None,
+            columns: None,
+            tolerance: 0.015,
+            min_height: 0.5,
+            centred: true,
+            quadrants: true,
+        }
+    }
+}
+
+/// Check the captured frame shows the fixture, at Fit unless the expectation says otherwise.
+pub fn pixels(path: &Path, expect: &Expect) -> Result<Value> {
+    ensure(
+        (1..=8).contains(&expect.orientation),
+        "Orientation must be 1..8",
+    )?;
     let img = image::open(path)?.to_rgb8();
     let (w, h) = img.dimensions();
-    let [surface_left, surface_right] = columns.unwrap_or([0, w]);
+    let [surface_left, surface_right] = expect.columns.unwrap_or([0, w]);
     ensure(
         surface_left < surface_right && surface_right <= w,
         "Invalid surface columns",
     )?;
     let surface_width = surface_right - surface_left;
-    let colors =
-        crate::fixtures::ORDERS[(orientation - 1) as usize].map(|i| crate::fixtures::COLORS[i]);
+    let colors = crate::fixtures::ORDERS[(expect.orientation - 1) as usize]
+        .map(|i| crate::fixtures::COLORS[i]);
     let matches = |p: &[u8], c: [u8; 3]| p.iter().zip(c).all(|(a, b)| a.abs_diff(b) <= 8);
     let (mut left, mut top, mut right, mut bottom) = (w, h, 0, 0);
-    let mut found = false;
+    let mut counts = [0u32; 4];
     for y in (0..h).step_by(4) {
         for x in (0..w).step_by(4) {
-            if colors.iter().any(|c| matches(&img.get_pixel(x, y).0, *c)) {
-                found = true;
+            let pixel = &img.get_pixel(x, y).0;
+            if let Some(index) = colors.iter().position(|c| matches(pixel, *c)) {
+                counts[index] += 1;
                 left = left.min(x);
                 top = top.min(y);
                 right = right.max(x + 4);
@@ -70,7 +103,10 @@ pub fn pixels(
             }
         }
     }
-    ensure(found, "No fixture pixels: blank or wrong render")?;
+    ensure(
+        counts.iter().sum::<u32>() > 0,
+        "No fixture pixels: blank or wrong render",
+    )?;
     let width = right - left;
     let height = bottom - top;
     ensure(
@@ -78,37 +114,50 @@ pub fn pixels(
         "Image outside the photo surface",
     )?;
     ensure(
-        width as f64 > surface_width as f64 * 0.2 && height as f64 > h as f64 * 0.5,
+        width as f64 > surface_width as f64 * 0.2
+            && height as f64 > h as f64 * expect.min_height.max(0.0),
         "Fixture too small",
     )?;
-    let aspect = aspect.unwrap_or(if orientation >= 5 {
+    let aspect = expect.aspect.unwrap_or(if expect.orientation >= 5 {
         2.0 / 3.0
     } else {
         3.0 / 2.0
     });
     ensure(aspect.is_finite() && aspect > 0.0, "Invalid aspect")?;
+    let measured = width as f64 / height as f64;
     ensure(
-        (width as f64 / height as f64 - aspect).abs() < 0.015,
-        "Incorrect Fit aspect ratio",
+        (measured - aspect).abs() < expect.tolerance,
+        format!("Incorrect displayed aspect ratio {measured:.4}, expected {aspect:.4}"),
     )?;
     ensure(
-        ((left + right) as f64 / 2.0 - (surface_left + surface_right) as f64 / 2.0).abs() <= 5.0,
+        !expect.centred
+            || ((left + right) as f64 / 2.0 - (surface_left + surface_right) as f64 / 2.0).abs()
+                <= 5.0,
         "Image not centered",
     )?;
     let mut actual = Vec::new();
-    for ((fx, fy), color) in [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)]
-        .into_iter()
-        .zip(colors)
-    {
-        let x = (left as f64 + fx * width as f64).round() as u32;
-        let y = (top as f64 + fy * height as f64).round() as u32;
-        ensure(x < w && y < h, "Pixel bounds")?;
-        let p = img.get_pixel(x, y).0;
-        ensure(matches(&p, color), "Wrong orientation/color")?;
-        actual.push(p);
+    if expect.quadrants {
+        for ((fx, fy), color) in [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)]
+            .into_iter()
+            .zip(colors)
+        {
+            let x = (left as f64 + fx * width as f64).round() as u32;
+            let y = (top as f64 + fy * height as f64).round() as u32;
+            ensure(x < w && y < h, "Pixel bounds")?;
+            let p = img.get_pixel(x, y).0;
+            ensure(matches(&p, color), "Wrong orientation/color")?;
+            actual.push(p);
+        }
+    } else {
+        // A straightened crop moves the quadrant boundaries, so prove real content instead: every
+        // quadrant colour is still present in quantity.
+        ensure(
+            counts.iter().all(|count| *count >= 32),
+            format!("A quadrant colour is missing from the crop: sampled counts {counts:?}"),
+        )?;
     }
     Ok(
-        json!({"status":"passed","physical_size":[w,h],"surface_columns":[surface_left,surface_right],"image_bounds":[left,top,right,bottom],"corner_rgb":actual,"tolerance_per_channel":8,"scope":"Fit geometry and sRGB interiors; not monitor calibration or native picker"}),
+        json!({"status":"passed","physical_size":[w,h],"surface_columns":[surface_left,surface_right],"image_bounds":[left,top,right,bottom],"measured_aspect":measured,"expected_aspect":aspect,"aspect_tolerance":expect.tolerance,"quadrant_sample_counts":counts,"corner_rgb":actual,"tolerance_per_channel":8,"scope":"Displayed geometry and sRGB interiors; not monitor calibration or native picker"}),
     )
 }
 pub fn columns(frame: &Value) -> Result<Option<[u32; 2]>> {
@@ -126,7 +175,9 @@ pub fn events(path: &Path) -> Result<Vec<Value>> {
         .map(|l| Ok(serde_json::from_str(l)?))
         .collect()
 }
-pub fn verify(evidence: &Path, scenario: &str, count: usize) -> Result<Value> {
+/// The run's own result and log, with the lifecycle, run identity and frame count checked. `frames`
+/// is how many captures the scenario must have produced.
+pub fn preamble(evidence: &Path, frames: usize) -> Result<(Value, Vec<Value>)> {
     let app = read_json(&evidence.join("result.json"))?;
     let events = events(&evidence.join("events.jsonl"))?;
     ensure(
@@ -140,8 +191,56 @@ pub fn verify(evidence: &Path, scenario: &str, count: usize) -> Result<Value> {
             && events.iter().all(|e| e["run_id"] == app["run_id"]),
         "Wrong log run identity",
     )?;
+    ensure(
+        app["frames"]
+            .as_array()
+            .is_some_and(|captured| captured.len() == frames),
+        "Missing/stale frames",
+    )?;
+    Ok((app, events))
+}
+
+/// A frame's provenance: whose run it belongs to, that it names a backend, that it came from a
+/// renderer readback, and that the state file written beside it says the same thing.
+pub fn frame_identity(evidence: &Path, app: &Value, frame: &Value) -> Result<PathBuf> {
+    let state = &frame["state"];
+    ensure(state["run_id"] == app["run_id"], "Wrong frame run identity")?;
+    ensure(
+        ["backend", "adapter"]
+            .iter()
+            .all(|k| state["backend"][k].as_str().is_some_and(|s| !s.is_empty())),
+        "Missing backend",
+    )?;
+    ensure(
+        frame["capture_provenance"] == "window-renderer-readback",
+        "Wrong capture provenance",
+    )?;
+    let name = Path::new(frame["file"].as_str().ok_or("Missing capture filename")?);
+    ensure(
+        name.components()
+            .all(|c| matches!(c, std::path::Component::Normal(_))),
+        "Unsafe capture path",
+    )?;
+    let number = name
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .and_then(|stem| stem.strip_prefix("frame-"))
+        .ok_or("Unexpected capture filename")?;
+    ensure(
+        &read_json(&evidence.join(format!("state-{number}.json")))? == frame,
+        "The state file beside the frame disagrees with the run result",
+    )?;
+    Ok(evidence.join(name))
+}
+
+pub fn verify(evidence: &Path, scenario: &str, count: usize) -> Result<Value> {
+    if let Some(frames) = crop::frames(scenario) {
+        let (app, events) = preamble(evidence, frames)?;
+        crop::verify(evidence, scenario, &app, &events)?;
+        return Ok(app);
+    }
+    let (app, events) = preamble(evidence, count.max(1))?;
     let frames = app["frames"].as_array().ok_or("Missing frames")?;
-    ensure(frames.len() == count.max(1), "Missing/stale frames")?;
     for (index, frame) in frames.iter().enumerate() {
         let state = &frame["state"];
         let generation = if count == 0 { 0 } else { index + 1 };
@@ -156,23 +255,7 @@ pub fn verify(evidence: &Path, scenario: &str, count: usize) -> Result<Value> {
             state["requested_generation"] == generation,
             "Wrong requested generation",
         )?;
-        ensure(
-            ["backend", "adapter"]
-                .iter()
-                .all(|k| state["backend"][k].as_str().is_some_and(|s| !s.is_empty())),
-            "Missing backend",
-        )?;
-        ensure(
-            frame["capture_provenance"] == "window-renderer-readback",
-            "Wrong capture provenance",
-        )?;
-        let name = Path::new(frame["file"].as_str().ok_or("Missing capture filename")?);
-        ensure(
-            name.components()
-                .all(|c| matches!(c, std::path::Component::Normal(_))),
-            "Unsafe capture path",
-        )?;
-        let path = evidence.join(name);
+        let path = frame_identity(evidence, &app, frame)?;
         if matches!(scenario, "empty" | "invalid") {
             ensure(
                 state["phase"]
@@ -229,13 +312,15 @@ pub fn verify(evidence: &Path, scenario: &str, count: usize) -> Result<Value> {
             }
             pixels(
                 &path,
-                orientation,
-                match scenario {
-                    "large24" => Some(1.5),
-                    "large60" => Some(5.0 / 3.0),
-                    _ => None,
+                &Expect {
+                    aspect: match scenario {
+                        "large24" => Some(1.5),
+                        "large60" => Some(5.0 / 3.0),
+                        _ => None,
+                    },
+                    columns: columns(frame)?,
+                    ..Expect::fit(orientation)
                 },
-                columns(frame)?,
             )?;
             ensure(
                 events.iter().any(|e| {
@@ -261,6 +346,8 @@ pub fn run(root: &Path, out: &Path, scenario: &str, bin: &Path, timeout: Duratio
             .collect(),
         "large24" => vec![root.join("fixtures/generated/24mp.jpg")],
         "large60" => vec![root.join("fixtures/generated/60mp.jpg")],
+        // The crop scenarios drive the editor's crop workflow through an evidence script.
+        "crop" | "crop-draft" => vec![root.join("fixtures/s0/orientation-1.jpg")],
         _ => return Err("Unknown smoke scenario".into()),
     };
     fs::create_dir_all(out)?;
@@ -268,6 +355,18 @@ pub fn run(root: &Path, out: &Path, scenario: &str, bin: &Path, timeout: Duratio
     let mut args = vec!["--evidence-dir".into(), evidence.clone().into_os_string()];
     for p in &sources {
         args.extend(["--open".into(), p.as_os_str().into()]);
+    }
+    if let Some(script) = crop::script(scenario)? {
+        // The crop frames need room for the overlay at Fit and at 100%.
+        let file = out.join("script.json");
+        write_json(&file, &script)?;
+        args.extend([
+            "--evidence-script".into(),
+            file.into_os_string(),
+            "--window-size".into(),
+            "1280".into(),
+            "800".into(),
+        ]);
     }
     let command = std::iter::once(bin.as_os_str())
         .chain(args.iter().map(OsString::as_os_str))
@@ -370,16 +469,22 @@ mod tests {
         let p = tmp.path().join("blank.png");
         image::RgbImage::new(960, 640).save(&p).unwrap();
         assert!(
-            pixels(&p, 6, None, None)
+            pixels(&p, &Expect::fit(6))
                 .unwrap_err()
                 .to_string()
                 .contains("blank")
         );
         assert!(
-            pixels(&p, 6, None, Some([10, 5]))
-                .unwrap_err()
-                .to_string()
-                .contains("surface columns")
+            pixels(
+                &p,
+                &Expect {
+                    columns: Some([10, 5]),
+                    ..Expect::fit(6)
+                }
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("surface columns")
         );
     }
     #[test]
