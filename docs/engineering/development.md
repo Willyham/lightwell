@@ -72,7 +72,8 @@ Automated uploads must use synthetic fixtures and the designated evidence direct
 2. Run Doctor and the smallest checks appropriate to the change.
 3. For UI/image changes, run a reproducible smoke scenario and read the result/state/logs; inspect the capture as an image.
 4. Fix failures and rerun affected checks. Record native checks separately from headless evidence.
-5. Report exact commands, artifact paths, results and remaining unsupported cases; update task/feature state only when acceptance is met.
+5. For changes under `crates/`, answer the [performance rules](performance-rules.md) checklist and run `editor-performance` on a generated 24 MP input in release before claiming a performance result.
+6. Report exact commands, artifact paths, results and remaining unsupported cases; update task/feature state only when acceptance is met.
 
 No undocumented clicking or guessed screen coordinates should be required to determine whether an image loaded correctly. The S0 evidence harness is not the editor command API or MCP server. M1 provides a separate working JSONL owner/API and live loopback transport over the same production service; MCP remains planned.
 

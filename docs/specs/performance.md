@@ -1,6 +1,6 @@
 # Performance and correctness measurement plan
 
-Status: **provisional targets, not measured results**. The owner's M4 MacBook Pro is the first reference target. The initial native M4 configuration and measurements are recorded in [hardening results](../engineering/s0-hardening-results.md); each new run records its actual conditions. Minimum hardware, catalog scale and accepted budgets remain separate decisions. Fast interaction, background throughput, and output correctness must be evaluated separately.
+Status: **provisional targets, not measured results**. The owner's M4 MacBook Pro is the first reference target. The initial native M4 configuration and measurements are recorded in [hardening results](../engineering/s0-hardening-results.md); each new run records its actual conditions. Minimum hardware, catalog scale and accepted budgets remain separate decisions. Fast interaction, background throughput, and output correctness must be evaluated separately. The engineering rules every core and desktop change must follow, with a review checklist, are in [performance rules](../engineering/performance-rules.md).
 
 ## S0 first-build baseline
 

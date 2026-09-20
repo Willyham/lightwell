@@ -13,7 +13,7 @@
 - Follow the owner's history-first sequence: M1 implements ordered edit layers, a pixel-change proof, persistent history/undo/redo/restore/preview, catalog save/reopen, UI and live JSON/IPC API; M2 adds exact rotate/flip/mirror; M3 introduces tool/action/control modules; M4 implements the Lightroom-style crop module. See `docs/design/history-first-roadmap.md`.
 - Import references existing files; stable asset IDs and edits survive locator changes. Manual Locate, JPEG export/color/metadata, MCP and full-editor verification remain explicit editor follow-ups after those four milestones. Folder relinking and sync research follow later.
 - Crop controls in M4 include free handles, proportional Option scaling around the fixed center and composition-preserving straightening. M1 already needs zoom/pan with percentages, Fit and actual 100% detail for the pixel proof. Export strips optional metadata by default with a Keep metadata setting and correct output color/geometry.
-- Treat responsiveness, bounded memory, image correctness, and agent access as architectural requirements.
+- Treat responsiveness, bounded memory, image correctness, and agent access as architectural requirements. Every change under `crates/` follows `docs/engineering/performance-rules.md` and answers its review checklist; measure on 24/60 MP inputs before claiming a performance result.
 - Prefer a small, beautiful core with sensible defaults and deliberate extension points. Use Lightroom Library/Develop as a familiarity reference, not a feature checklist.
 - Consult the owner on consequential product tradeoffs. Record recommendations as proposals until decided; do not turn unanswered interview questions into accepted decisions.
 
@@ -33,7 +33,7 @@ All current work is v0. Avoid public API compatibility frameworks and release-ve
 
 - Framework widgets must not contain authoritative editing or catalog business logic.
 - Extend commands and their query/schema documentation whenever adding user-facing operations. Verify UI/programmatic parity.
-- Decode, render, import, and export work must not block the UI thread. Bound worker queues and memory; cancel stale preview work.
+- Decode, render, import, and export work must not block the UI thread or the catalog owner thread. Bound worker queues and memory; cancel stale preview work. Decode once through the cached verified source, compile recipes into one raster pass, and never rasterize to answer a point query; see `docs/engineering/performance-rules.md`.
 - Back numerical/image behavior with suitable fixtures; test source preservation and recovery, not just successful rendering.
 - Pin selected dependencies. Manual license/native/asset reviews are deferred by current owner instruction; retain existing notices and do not claim an audit is complete.
 - Establish reproducible setup, lint/build/package commands and agent evidence early. UI checks must inspect real rendered content with correlated state/logs, explicit capture provenance and truthful native-versus-headless results; see `docs/engineering/development.md`.

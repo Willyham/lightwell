@@ -1,6 +1,6 @@
 # Preview latency optimization
 
-Status: **implemented and locally verified on 2026-09-20**. This work optimizes the implemented M1/M2 editor without changing recipe, history, source-integrity or exact-transform semantics. The provisional interaction budgets remain defined in [the performance specification](../specs/performance.md).
+Status: **implemented and locally verified on 2026-09-20**. This work optimizes the implemented M1/M2 editor without changing recipe, history, source-integrity or exact-transform semantics. The provisional interaction budgets remain defined in [the performance specification](../specs/performance.md); the rules this work established for later changes are in [performance rules](../engineering/performance-rules.md).
 
 ## Problem
 

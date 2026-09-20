@@ -17,6 +17,7 @@ Run `cargo xtask develop`, or `cargo xtask check` for repository, formatting, li
 - [Editor specification](docs/specs/single-image.md): staged editing and retained export/recovery/agent follow-ups.
 - [Source recovery](docs/specs/source-recovery.md): referenced originals, stable identity, and verified recovery after files move.
 - [Performance plan](docs/specs/performance.md): workloads, provisional budgets, and measurement rules.
+- [Performance rules](docs/engineering/performance-rules.md): required rules, review checklist and known remaining costs for core and desktop changes.
 - [Feature status](docs/features.md): planned now, planned later, and excluded.
 - [Product decisions](docs/decisions.md): confirmed requirements and questions for the project owner.
 - [User guide](docs/user-guide.md): intended workflow, explicitly distinguished from available behavior.
