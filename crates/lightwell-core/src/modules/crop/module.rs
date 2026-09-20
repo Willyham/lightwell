@@ -565,7 +565,7 @@ impl ToolModule for CropModule {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{LayerId, PIXEL_EFFECT, TRANSFORM_EFFECT, modules::check_parameters};
+    use crate::{ORIENTATION_EFFECT, Orientation, PIXEL_EFFECT, modules::check_parameters};
     use serde_json::json;
 
     const INPUT: Stage = Stage {
@@ -1072,7 +1072,7 @@ mod tests {
         for (case, effect, format, kind) in [
             (
                 "wrong effect",
-                TRANSFORM_EFFECT,
+                ORIENTATION_EFFECT,
                 EFFECT_FORMAT,
                 ErrorKind::Incompatible,
             ),
@@ -1161,12 +1161,10 @@ mod tests {
                 width: 0.5,
                 height: 0.5,
             }),
-            Layer {
-                id: LayerId::new(),
-                effect_id: TRANSFORM_EFFECT.into(),
-                effect_format: EFFECT_FORMAT,
-                payload: json!("rotate-right"),
-            },
+            Layer::orientation(Orientation {
+                mirror: false,
+                turns: 1,
+            }),
         ];
         let payload =
             committed(planned(CROP_FIT_ACTION, json!({"aspect":"original"}), &layers).unwrap());

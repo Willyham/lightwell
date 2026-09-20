@@ -277,8 +277,8 @@ impl ModuleRegistry {
 pub(crate) mod tests {
     use super::*;
     use crate::{
-        AssetId, CROP_EFFECT, EFFECT_FORMAT, LayerId, PIXEL_EFFECT, SnapshotId, SourceImage,
-        TRANSFORM_EFFECT, Transform,
+        AssetId, CROP_EFFECT, EFFECT_FORMAT, LayerId, ORIENTATION_EFFECT, Orientation,
+        PIXEL_EFFECT, SnapshotId, SourceImage,
         modules::{
             ActionInput, ActionPlan, Availability, CropPayload, EffectStage, ModuleDescriptor,
             StageContext,
@@ -372,7 +372,7 @@ pub(crate) mod tests {
         assert!(registry.action("set-pixel").is_some());
         assert!(registry.action("transform").is_some());
         assert!(registry.effect(PIXEL_EFFECT).is_some());
-        assert!(registry.effect(TRANSFORM_EFFECT).is_some());
+        assert!(registry.effect(ORIENTATION_EFFECT).is_some());
         assert!(registry.action("crop").is_some());
         assert!(registry.effect(CROP_EFFECT).is_some());
         assert_eq!(registry.descriptors().len(), 3);
@@ -460,7 +460,10 @@ pub(crate) mod tests {
             format: RECIPE_FORMAT,
             layers: vec![
                 first.clone(),
-                Layer::transform(Transform::RotateRight),
+                Layer::orientation(Orientation {
+                    mirror: false,
+                    turns: 1,
+                }),
                 second.clone(),
             ],
         };
@@ -500,6 +503,39 @@ pub(crate) mod tests {
         let _ = AssetId::new();
     }
 
+    /// Current shapes only: the retired per-action transform effect has no provider, so a stack
+    /// holding it is refused exactly like any other unavailable effect. Nothing rewrites it, so
+    /// the data survives the refusal and the owner can open it with a build that provides it.
+    #[test]
+    fn a_stack_holding_the_retired_transform_effect_is_refused_without_being_rewritten() {
+        let registry = ModuleRegistry::builtin();
+        let retired = Layer {
+            id: LayerId::new(),
+            effect_id: "lightwell.geometry.transform".into(),
+            effect_format: EFFECT_FORMAT,
+            payload: json!("rotate-right"),
+        };
+        assert!(registry.effect("lightwell.geometry.transform").is_none());
+        let recipe = Recipe {
+            format: RECIPE_FORMAT,
+            layers: vec![retired.clone()],
+        };
+        let expected = format!(
+            "unavailable effect lightwell.geometry.transform (layers {})",
+            retired.id
+        );
+        for error in [
+            registry.validate_recipe(&recipe).unwrap_err(),
+            registry.validate_layer(&retired).unwrap_err(),
+            render(&registry, &source(), SnapshotId::new(), &recipe).unwrap_err(),
+            sample(&registry, &source(), &recipe, 0, 0).unwrap_err(),
+        ] {
+            assert_eq!(error.kind, ErrorKind::Incompatible);
+            assert_eq!(error.detail, expected);
+        }
+        assert_eq!(recipe.layers, vec![retired], "the refused stack is kept");
+    }
+
     #[test]
     fn payload_format_and_shape_are_validated_by_the_providing_module() {
         let registry = ModuleRegistry::builtin();
@@ -519,13 +555,25 @@ pub(crate) mod tests {
             registry.validate_layer(&wrong_payload).unwrap_err().kind,
             ErrorKind::Validation
         );
-        let wrong_transform = Layer {
-            payload: json!("rotate-sideways"),
-            ..Layer::transform(Transform::RotateLeft)
-        };
-        assert_eq!(
-            registry.validate_layer(&wrong_transform).unwrap_err().kind,
-            ErrorKind::Validation
+        for wrong_orientation in [
+            json!("rotate-sideways"),
+            json!({"mirror": false, "turns": 4}),
+            json!({"mirror": false, "turns": 0, "flip": true}),
+        ] {
+            let layer = Layer {
+                payload: wrong_orientation.clone(),
+                ..Layer::orientation(Orientation::NEUTRAL)
+            };
+            assert_eq!(
+                registry.validate_layer(&layer).unwrap_err().kind,
+                ErrorKind::Validation,
+                "{wrong_orientation}"
+            );
+        }
+        assert!(
+            registry
+                .validate_layer(&Layer::orientation(Orientation::NEUTRAL))
+                .is_ok()
         );
         assert!(
             registry
@@ -538,7 +586,12 @@ pub(crate) mod tests {
     fn a_pixel_layer_joins_the_stack_before_the_first_geometry_layer() {
         let registry = ModuleRegistry::builtin();
         let pixel = || Layer::pixel(0, 0, [1, 2, 3]);
-        let turn = || Layer::transform(Transform::RotateRight);
+        let turn = || {
+            Layer::orientation(Orientation {
+                mirror: false,
+                turns: 1,
+            })
+        };
         let crop = || {
             Layer::crop(CropPayload {
                 angle: 0.0,

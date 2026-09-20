@@ -1,7 +1,7 @@
 use crate::*;
 use lightwell_core::{
     CROP_EFFECT, CropPayload, CropStage, EditorService, ModuleRegistry, Mutation, MutationOutcome,
-    Transform,
+    ORIENTATION_EFFECT, Transform,
 };
 use std::time::Instant;
 
@@ -126,6 +126,25 @@ pub fn run(root: &Path, out: &Path) -> Result {
         ensure(
             listed == 208,
             format!("Expected 208 retained entries, found {listed}"),
+        )?;
+
+        // Two hundred and three transform actions are 203 history entries and one orientation
+        // layer: the stack describes the resulting orientation, not the gestures that reached it.
+        let orientations: Vec<Value> = service
+            .state(&asset)?
+            .current_entry
+            .snapshot
+            .recipe
+            .layers
+            .iter()
+            .filter(|layer| layer.effect_id == ORIENTATION_EFFECT)
+            .map(|layer| layer.payload.clone())
+            .collect();
+        ensure(
+            orientations == [json!({"mirror": false, "turns": 3})],
+            format!(
+                "Expected one orientation layer at three quarter turns, found {orientations:?}"
+            ),
         )?;
 
         // Crop: one angle-zero rectangle that must be an exact copy of its input stage, then a
@@ -294,6 +313,7 @@ pub fn run(root: &Path, out: &Path) -> Result {
         result["history_entries_after_crop"] = json!(retained);
         result["current_dimensions"] = json!([current.width, current.height]);
         result["current_layers"] = json!(reopened_layers.len());
+        result["orientation_layers"] = json!(orientations);
         result["source_pixel_before_edits"] = json!(source_pixel);
         result["crop_layer_id"] = json!(crop_layer);
         result["crop_entry_id"] = json!(cropped_entry);
@@ -330,7 +350,7 @@ pub fn run(root: &Path, out: &Path) -> Result {
             "Read-only historical preview",
             "Undo/redo and Restore A -> pixel C",
             "Exact rotate-right, mirror-horizontal and flip-vertical",
-            "Two hundred additional exact layers with bounded history paging",
+            "Two hundred and three transform actions compose into one orientation layer, with bounded history paging over their 203 entries",
             "Angle-zero crop is a byte-for-byte copy of its input stage with exact dimensions",
             "Straightened 16:9 crop-fit updates the one crop layer in place and renders its declared stage",
             "Catalog reopen retains revision, identities, snapshots, the crop layer and dimensions",

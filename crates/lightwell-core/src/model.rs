@@ -5,7 +5,7 @@ use std::collections::HashSet;
 
 pub const RECIPE_FORMAT: u32 = 1;
 pub const PIXEL_EFFECT: &str = "lightwell.pixel.replace";
-pub const TRANSFORM_EFFECT: &str = "lightwell.geometry.transform";
+pub const ORIENTATION_EFFECT: &str = "lightwell.geometry.orientation";
 pub const CROP_EFFECT: &str = "lightwell.geometry.crop";
 pub const EFFECT_FORMAT: u32 = 1;
 
@@ -90,12 +90,14 @@ impl Layer {
             payload: json!({"x": x, "y": y, "rgb": rgb}),
         }
     }
-    pub fn transform(transform: Transform) -> Self {
+    /// The one orientation layer of a stage: the composed quarter turns and reflections that every
+    /// exact transform action applied there reaches.
+    pub fn orientation(orientation: Orientation) -> Self {
         Self {
             id: LayerId::new(),
-            effect_id: TRANSFORM_EFFECT.into(),
+            effect_id: ORIENTATION_EFFECT.into(),
             effect_format: EFFECT_FORMAT,
-            payload: serde_json::to_value(transform).expect("transform is serializable"),
+            payload: serde_json::to_value(orientation).expect("orientation is serializable"),
         }
     }
     /// The one crop layer of a stack: straightening and a rectangle over its own input stage.
@@ -128,6 +130,8 @@ pub struct PixelReplace {
     pub rgb: [u8; 3],
 }
 
+/// The action vocabulary of the transform module: what a person or a client asks for. The stack
+/// stores the resulting [`Orientation`], not the gestures that reached it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Transform {
@@ -145,6 +149,31 @@ impl Transform {
             Self::MirrorHorizontal => "mirror-horizontal",
             Self::FlipVertical => "flip-vertical",
         }
+    }
+}
+
+/// The composed exact orientation one layer holds: mirror horizontally when `mirror` is set, then
+/// rotate clockwise by `turns` quarter turns. Each of the eight exact orientations is exactly one
+/// of these payloads, so any number of [`Transform`] actions applied to one stage stay one layer.
+/// [`Orientation::NEUTRAL`] maps every pixel to itself and leaves the stage unchanged.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Orientation {
+    pub mirror: bool,
+    pub turns: u8,
+}
+
+impl Orientation {
+    /// The identity mapping: no reflection and no quarter turn.
+    pub const NEUTRAL: Self = Self {
+        mirror: false,
+        turns: 0,
+    };
+}
+
+impl Default for Orientation {
+    fn default() -> Self {
+        Self::NEUTRAL
     }
 }
 
@@ -367,7 +396,7 @@ mod tests {
             format: RECIPE_FORMAT,
             layers: vec![Layer::pixel(0, 0, [1, 2, 3]), Layer::pixel(1, 1, [4, 5, 6])],
         };
-        let joined = Layer::transform(Transform::RotateRight);
+        let joined = Layer::orientation(Orientation::NEUTRAL);
         for index in 0..=recipe.layers.len() {
             let next = recipe.with_layer_inserted(index, joined.clone()).unwrap();
             assert_eq!(next.layers.len(), 3);

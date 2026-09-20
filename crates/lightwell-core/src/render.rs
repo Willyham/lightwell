@@ -684,8 +684,8 @@ pub fn render(
 mod tests {
     use super::*;
     use crate::{
-        AssetId, EFFECT_FORMAT, Layer, LayerId, PIXEL_EFFECT, PixelReplace, Recipe, Snapshot,
-        TRANSFORM_EFFECT, Transform,
+        AssetId, EFFECT_FORMAT, Layer, LayerId, ORIENTATION_EFFECT, Orientation, PIXEL_EFFECT,
+        PixelReplace, Recipe, Snapshot, Transform,
         modules::{
             ActionInput, ActionPlan, Availability, BoxRect, CropPayload, CropStage,
             EffectDescriptor, EffectStage, ModuleDescriptor, StageContext, ToolModule,
@@ -712,6 +712,26 @@ mod tests {
     fn red(raster: &Raster) -> Vec<u8> {
         raster.rgba.chunks_exact(4).map(|p| p[0]).collect()
     }
+    /// One single-action orientation layer: what a transform commits when the stack does not end
+    /// in an orientation layer. A sequence of these is the stepwise form every proof below uses.
+    fn turn(transform: Transform) -> Layer {
+        Layer::orientation(Orientation::of(transform))
+    }
+
+    /// The elementary steps one orientation payload means: the mirror, then the quarter turns. The
+    /// stepwise references apply these one at a time, independently of the composed mapping.
+    fn steps(payload: &Value) -> Vec<Transform> {
+        let orientation: Orientation = serde_json::from_value(payload.clone()).unwrap();
+        let mut steps = Vec::new();
+        if orientation.mirror {
+            steps.push(Transform::MirrorHorizontal);
+        }
+        for _ in 0..orientation.turns {
+            steps.push(Transform::RotateRight);
+        }
+        steps
+    }
+
     fn rendered(source: &SourceImage, layers: Vec<Layer>) -> Raster {
         render(
             &registry(),
@@ -734,30 +754,32 @@ mod tests {
                     let offset = ((pixel.y * width + pixel.x) * 4) as usize;
                     rgba[offset..offset + 3].copy_from_slice(&pixel.rgb);
                 }
-                TRANSFORM_EFFECT => {
-                    let transform: Transform =
-                        serde_json::from_value(layer.payload.clone()).unwrap();
-                    let (next_width, next_height) = match transform {
-                        Transform::RotateLeft | Transform::RotateRight => (height, width),
-                        Transform::MirrorHorizontal | Transform::FlipVertical => (width, height),
-                    };
-                    let mut next = vec![0; (next_width * next_height * 4) as usize];
-                    for y in 0..height {
-                        for x in 0..width {
-                            let (next_x, next_y) = match transform {
-                                Transform::RotateRight => (height - 1 - y, x),
-                                Transform::RotateLeft => (y, width - 1 - x),
-                                Transform::MirrorHorizontal => (width - 1 - x, y),
-                                Transform::FlipVertical => (x, height - 1 - y),
-                            };
-                            let from = ((y * width + x) * 4) as usize;
-                            let to = ((next_y * next_width + next_x) * 4) as usize;
-                            next[to..to + 4].copy_from_slice(&rgba[from..from + 4]);
+                ORIENTATION_EFFECT => {
+                    for transform in steps(&layer.payload) {
+                        let (next_width, next_height) = match transform {
+                            Transform::RotateLeft | Transform::RotateRight => (height, width),
+                            Transform::MirrorHorizontal | Transform::FlipVertical => {
+                                (width, height)
+                            }
+                        };
+                        let mut next = vec![0; (next_width * next_height * 4) as usize];
+                        for y in 0..height {
+                            for x in 0..width {
+                                let (next_x, next_y) = match transform {
+                                    Transform::RotateRight => (height - 1 - y, x),
+                                    Transform::RotateLeft => (y, width - 1 - x),
+                                    Transform::MirrorHorizontal => (width - 1 - x, y),
+                                    Transform::FlipVertical => (x, height - 1 - y),
+                                };
+                                let from = ((y * width + x) * 4) as usize;
+                                let to = ((next_y * next_width + next_x) * 4) as usize;
+                                next[to..to + 4].copy_from_slice(&rgba[from..from + 4]);
+                            }
                         }
+                        width = next_width;
+                        height = next_height;
+                        rgba = next;
                     }
-                    width = next_width;
-                    height = next_height;
-                    rgba = next;
                 }
                 TEST_CROP_EFFECT => {
                     let crop: CropPayload = serde_json::from_value(layer.payload.clone()).unwrap();
@@ -794,19 +816,21 @@ mod tests {
         for layer in layers {
             match layer.effect_id.as_str() {
                 PIXEL_EFFECT => {}
-                TRANSFORM_EFFECT => {
-                    let transform: Transform =
-                        serde_json::from_value(layer.payload.clone()).unwrap();
-                    (x, y) = match transform {
-                        Transform::RotateRight => (height - 1 - y, x),
-                        Transform::RotateLeft => (y, width - 1 - x),
-                        Transform::MirrorHorizontal => (width - 1 - x, y),
-                        Transform::FlipVertical => (x, height - 1 - y),
-                    };
-                    (width, height) = match transform {
-                        Transform::RotateLeft | Transform::RotateRight => (height, width),
-                        Transform::MirrorHorizontal | Transform::FlipVertical => (width, height),
-                    };
+                ORIENTATION_EFFECT => {
+                    for transform in steps(&layer.payload) {
+                        (x, y) = match transform {
+                            Transform::RotateRight => (height - 1 - y, x),
+                            Transform::RotateLeft => (y, width - 1 - x),
+                            Transform::MirrorHorizontal => (width - 1 - x, y),
+                            Transform::FlipVertical => (x, height - 1 - y),
+                        };
+                        (width, height) = match transform {
+                            Transform::RotateLeft | Transform::RotateRight => (height, width),
+                            Transform::MirrorHorizontal | Transform::FlipVertical => {
+                                (width, height)
+                            }
+                        };
+                    }
                 }
                 TEST_CROP_EFFECT => {
                     let crop: CropPayload = serde_json::from_value(layer.payload.clone()).unwrap();
@@ -1110,10 +1134,7 @@ mod tests {
         for (width, height) in [(6000_u32, 4000_u32), (9504, 6336)] {
             let source = gradient(width, height);
             for (label, layers) in [
-                (
-                    "exact rotate",
-                    vec![Layer::transform(Transform::RotateRight)],
-                ),
+                ("exact rotate", vec![turn(Transform::RotateRight)]),
                 (
                     "crop 0 deg",
                     vec![crop_layer(fitted_crop(
@@ -1136,7 +1157,7 @@ mod tests {
                     "crop 10 deg then rotate",
                     vec![
                         crop_layer(fitted_crop(width, height, 10.0, [0.1, 0.1, 0.8, 0.8])),
-                        Layer::transform(Transform::RotateRight),
+                        turn(Transform::RotateRight),
                     ],
                 ),
             ] {
@@ -1241,10 +1262,9 @@ mod tests {
                     vec![Transform::RotateLeft],
                     vec![Transform::FlipVertical],
                 ] {
-                    let mut layers: Vec<Layer> =
-                        stack.iter().copied().map(Layer::transform).collect();
+                    let mut layers: Vec<Layer> = stack.iter().copied().map(turn).collect();
                     layers.push(crop_layer(crop));
-                    layers.extend(after.iter().copied().map(Layer::transform));
+                    layers.extend(after.iter().copied().map(turn));
                     let recipe = Recipe {
                         format: 1,
                         layers: layers.clone(),
@@ -1320,10 +1340,9 @@ mod tests {
                     vec![Transform::FlipVertical],
                     vec![Transform::MirrorHorizontal, Transform::RotateRight],
                 ] {
-                    let mut layers: Vec<Layer> =
-                        before.iter().copied().map(Layer::transform).collect();
+                    let mut layers: Vec<Layer> = before.iter().copied().map(turn).collect();
                     layers.push(crop_layer(crop));
-                    layers.extend(after.iter().copied().map(Layer::transform));
+                    layers.extend(after.iter().copied().map(turn));
                     let recipe = Recipe {
                         format: 1,
                         layers: layers.clone(),
@@ -1408,7 +1427,7 @@ mod tests {
         ] {
             let source = gradient(width, height);
             let crop = fitted_crop(width, height, angle, rect);
-            let tail: Vec<Layer> = after.iter().copied().map(Layer::transform).collect();
+            let tail: Vec<Layer> = after.iter().copied().map(turn).collect();
             // A pixel layer before the crop moves nothing; the walk back is geometry only.
             let mut layers = vec![Layer::pixel(2, 3, [250, 1, 2]), crop_layer(crop)];
             layers.extend(tail.iter().cloned());
@@ -1448,7 +1467,7 @@ mod tests {
         // Two translations and a quarter turn compose into one mapping over the source.
         let layers = vec![
             offset_layer(1, 1, 5, 4),
-            Layer::transform(Transform::RotateRight),
+            turn(Transform::RotateRight),
             offset_layer(1, 2, 2, 3),
         ];
         let recipe = Recipe {
@@ -1514,12 +1533,12 @@ mod tests {
                 Layer::pixel(3, 4, [250, 1, 2]),
                 crop_layer(fitted_crop(40, 24, -20.0, [0.25, 0.25, 0.5, 0.5])),
                 Layer::pixel(1, 1, [3, 251, 4]),
-                Layer::transform(Transform::RotateRight),
+                turn(Transform::RotateRight),
                 Layer::pixel(0, 2, [5, 6, 252]),
             ],
             // Two resamples: a point query blends four recursively evaluated blends.
             vec![
-                Layer::transform(Transform::MirrorHorizontal),
+                turn(Transform::MirrorHorizontal),
                 crop_layer(fitted_crop(40, 24, 45.0, [0.3, 0.3, 0.4, 0.4])),
                 scale_layer(1.5),
                 Layer::pixel(0, 0, [7, 8, 253]),
@@ -1635,31 +1654,19 @@ mod tests {
     fn exact_transform_coordinate_tables_for_asymmetric_input() {
         let source = source(3, 2);
         assert_eq!(
-            red(&rendered(
-                &source,
-                vec![Layer::transform(Transform::RotateRight)]
-            )),
+            red(&rendered(&source, vec![turn(Transform::RotateRight)])),
             vec![3, 0, 4, 1, 5, 2]
         );
         assert_eq!(
-            red(&rendered(
-                &source,
-                vec![Layer::transform(Transform::RotateLeft)]
-            )),
+            red(&rendered(&source, vec![turn(Transform::RotateLeft)])),
             vec![2, 5, 1, 4, 0, 3]
         );
         assert_eq!(
-            red(&rendered(
-                &source,
-                vec![Layer::transform(Transform::MirrorHorizontal)]
-            )),
+            red(&rendered(&source, vec![turn(Transform::MirrorHorizontal)])),
             vec![2, 1, 0, 5, 4, 3]
         );
         assert_eq!(
-            red(&rendered(
-                &source,
-                vec![Layer::transform(Transform::FlipVertical)]
-            )),
+            red(&rendered(&source, vec![turn(Transform::FlipVertical)])),
             vec![3, 4, 5, 0, 1, 2]
         );
     }
@@ -1673,21 +1680,31 @@ mod tests {
             (Transform::MirrorHorizontal, 2),
             (Transform::FlipVertical, 2),
         ] {
-            let layers = (0..count).map(|_| Layer::transform(transform)).collect();
+            let layers = (0..count).map(|_| turn(transform)).collect();
             assert_eq!(rendered(&source, layers).rgba, source.rgba);
+            // The same actions composed into one layer reach the neutral orientation, whose
+            // identity mapping shares the source buffer instead of copying it.
+            let mut composed = Orientation::NEUTRAL;
+            for _ in 0..count {
+                composed = composed.then(transform);
+            }
+            assert_eq!(composed, Orientation::NEUTRAL, "{transform:?}");
+            let collapsed = rendered(&source, vec![Layer::orientation(composed)]);
+            assert_eq!(collapsed.rgba, source.rgba);
+            assert!(Arc::ptr_eq(&collapsed.rgba, &source.rgba));
         }
         let before = rendered(
             &source,
             vec![
                 Layer::pixel(0, 0, [250, 0, 0]),
-                Layer::transform(Transform::RotateRight),
+                turn(Transform::RotateRight),
             ],
         );
         assert_eq!(before.pixel(2, 0), Some([250, 0, 0, 255]));
         let after = rendered(
             &source,
             vec![
-                Layer::transform(Transform::RotateRight),
+                turn(Transform::RotateRight),
                 Layer::pixel(0, 0, [250, 0, 0]),
             ],
         );
@@ -1709,17 +1726,76 @@ mod tests {
                 for third in transforms {
                     let layers = vec![
                         Layer::pixel(1, 1, [201, 1, 2]),
-                        Layer::transform(first),
+                        turn(first),
                         Layer::pixel(0, 0, [3, 202, 4]),
-                        Layer::transform(second),
+                        turn(second),
                         Layer::pixel(1, 1, [5, 6, 203]),
-                        Layer::transform(third),
+                        turn(third),
                         Layer::pixel(0, 0, [204, 8, 9]),
                     ];
                     let expected = reference(&source, &layers);
                     let actual = rendered(&source, layers);
                     assert_eq!((actual.width, actual.height), (expected.0, expected.1));
                     assert_eq!(actual.rgba.as_ref(), expected.2);
+                }
+            }
+        }
+    }
+
+    /// One orientation layer holding the composed state renders exactly what the same actions
+    /// render as separate single-action layers, and both match the stepwise reference. Every one
+    /// of the eight orientations against every action, and every sequence of three actions, on a
+    /// non-square source so a wrongly composed quarter turn changes the dimensions.
+    #[test]
+    fn a_composed_orientation_renders_what_its_separate_action_layers_render() {
+        let source = source(5, 3);
+        let transforms = [
+            Transform::RotateLeft,
+            Transform::RotateRight,
+            Transform::MirrorHorizontal,
+            Transform::FlipVertical,
+        ];
+        let orientations = [false, true]
+            .into_iter()
+            .flat_map(|mirror| (0..4).map(move |turns| Orientation { mirror, turns }));
+        for state in orientations {
+            for transform in transforms {
+                let separate = vec![Layer::orientation(state), turn(transform)];
+                let expected = reference(&source, &separate);
+                let collapsed = rendered(&source, vec![Layer::orientation(state.then(transform))]);
+                let stepwise = rendered(&source, separate);
+                for raster in [&collapsed, &stepwise] {
+                    assert_eq!(
+                        (raster.width, raster.height),
+                        (expected.0, expected.1),
+                        "{state:?} then {transform:?}"
+                    );
+                    assert_eq!(
+                        raster.rgba.as_ref(),
+                        expected.2,
+                        "{state:?} then {transform:?}"
+                    );
+                }
+            }
+        }
+        for first in transforms {
+            for second in transforms {
+                for third in transforms {
+                    let separate = vec![turn(first), turn(second), turn(third)];
+                    let composed = Orientation::of(first).then(second).then(third);
+                    let expected = reference(&source, &separate);
+                    let collapsed = rendered(&source, vec![Layer::orientation(composed)]);
+                    assert_eq!(
+                        (collapsed.width, collapsed.height),
+                        (expected.0, expected.1),
+                        "{first:?} {second:?} {third:?}"
+                    );
+                    assert_eq!(
+                        collapsed.rgba.as_ref(),
+                        expected.2,
+                        "{first:?} {second:?} {third:?}"
+                    );
+                    assert_eq!(rendered(&source, separate).rgba, collapsed.rgba);
                 }
             }
         }
@@ -1740,9 +1816,9 @@ mod tests {
             format: 1,
             layers: vec![
                 Layer::pixel(1, 1, [201, 1, 2]),
-                Layer::transform(Transform::RotateLeft),
+                turn(Transform::RotateLeft),
                 Layer::pixel(0, 0, [3, 202, 4]),
-                Layer::transform(Transform::MirrorHorizontal),
+                turn(Transform::MirrorHorizontal),
                 Layer::pixel(0, 0, [204, 8, 9]),
                 Layer::pixel(0, 0, [205, 10, 11]),
             ],
